@@ -26,6 +26,7 @@
 9. [开发环境统一规范](docs/08-开发环境统一规范.md)
 10. [组长统筹与过程留痕](docs/09-组长统筹与过程留痕.md)
 11. [六个模块 Epic 创建清单](docs/10-模块Epic创建清单.md)
+12. [公共工程骨架与运行](docs/11-公共工程骨架与运行.md)
 
 项目最新推进情况见 [当前状态](docs/progress/CURRENT_STATUS.md) 和 [项目推进日志](docs/progress/PROJECT_LOG.md)。
 
@@ -41,6 +42,16 @@
 - 默认分支：`main`（应始终可编译、可演示）
 - 开发方式：Issue → 功能分支 → Pull Request → 评审 → 合并
 - 首个团队动作：为六个模块建立 GitHub Issue，由组长按已确认分工设置 Assignee，6 位成员按 [六人分工与任务分配](docs/02-六人分工.md) 各自主责一个模块
+
+## 公共工程快速验证
+
+在仓库根目录运行：
+
+```powershell
+mvn clean verify
+```
+
+构建成功后，在 IDEA 中先运行 `vcampus-server` 的 `ServerMain`，再运行 `vcampus-client` 的 `ClientMain`。客户端窗口点击“测试服务器连接”，显示 `连接成功：PONG` 即说明公共链路正常。完整步骤见 [公共工程骨架与运行](docs/11-公共工程骨架与运行.md)。
 
 ## 重要约束
 

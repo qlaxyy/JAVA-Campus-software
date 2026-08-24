@@ -1,12 +1,12 @@
 # 项目当前状态
 
 - 更新日期：2026-08-24
-- 当前阶段：项目启动、环境与协作基线
+- 当前阶段：公共工程骨架实现与验证
 - 总体状态：正常，但尚未进入业务开发
 
 ## 已完成
 
-- 仓库已创建并加入其余 5 位成员。
+- 仓库已创建；其余成员中 4 位已接受邀请，商店对应成员仍待接受邀请。
 - 两份课程原始材料已纳入共同阅读目录。
 - 已明确 5 个必做模块和医院选做模块，共 6 个业务模块。
 - 已建立需求基线、架构约定、四周计划、GitHub 协作规范和验收清单。
@@ -26,6 +26,7 @@
 - IDE 已决定统一使用 IntelliJ IDEA Community Edition，等待全员安装和 Maven 导入验证。
 - 六个模块中已有五个 Epic 完成分配；商店负责人尚未接受仓库邀请，可先建立不带 Assignee 的商店 Epic，待其加入后补设负责人。
 - 准备确定 Access 版本、JDBC 访问方案和机房环境。
+- `feature/project-skeleton` 已建立 common、server、client 三模块和最小 PING/PONG，等待 PR 评审合并。
 
 ## 下一检查点
 
@@ -34,8 +35,8 @@
 - [ ] 六个模块 Issue 均有且只有一位主 Assignee，Assignee 不重复。
 - [ ] 六位成员的环境检查脚本和 `mvn validate` 均通过。
 - [x] IDE 统一为 IntelliJ IDEA Community Edition；项目 SDK 和 Maven Runner 使用 JDK 25。
-- [ ] 建立 `vcampus-common`、`vcampus-client`、`vcampus-server` Maven 骨架。
-- [ ] 完成一次客户端—Socket—服务器端的最小请求/响应。
+- [x] 建立 `vcampus-common`、`vcampus-client`、`vcampus-server` Maven 骨架，并通过 Maven 构建。
+- [x] 完成客户端—Socket—服务器端 `COMMON.PING → PONG`，2 个自动化测试通过。
 - [ ] 明确 Access/JDBC 方案并形成 ADR。
 - [ ] 六模块分别提交第一版用例、表、DTO/action 和界面草图。
 
@@ -52,4 +53,4 @@
 - 商店模块 Epic 缺失且对应成员尚未接受邀请；不阻塞其他五位成员进行环境准备和初步设计，但不能遗漏后续补建与分配。
 - Access 版本与 JDBC 方案尚未确认，可能影响数据库设计。
 - 若各模块在公共协议确定前独立开发，后期集成成本会显著增加。
-- 目前尚无业务代码、自动测试和可运行系统骨架。
+- 公共骨架已在功能分支通过构建和通信测试，但尚未合并 `main`；目前仍无登录、数据库或业务模块实现。

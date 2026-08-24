@@ -25,6 +25,7 @@
 8. [会议与进度记录](docs/07-会议与进度记录.md)
 9. [开发环境统一规范](docs/08-开发环境统一规范.md)
 10. [组长统筹与过程留痕](docs/09-组长统筹与过程留痕.md)
+11. [六个模块 Epic 创建清单](docs/10-模块Epic创建清单.md)
 
 项目最新推进情况见 [当前状态](docs/progress/CURRENT_STATUS.md) 和 [项目推进日志](docs/progress/PROJECT_LOG.md)。
 

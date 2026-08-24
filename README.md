@@ -23,6 +23,7 @@
 6. [GitHub 协作规范](docs/05-GitHub协作规范.md)
 7. [验收与提交清单](docs/06-验收与提交清单.md)
 8. [会议与进度记录](docs/07-会议与进度记录.md)
+9. [开发环境统一规范](docs/08-开发环境统一规范.md)
 
 课程原始材料保存在 [`docs/课程原始材料`](docs/课程原始材料)，所有成员必须阅读，规划文档不能替代教师原文。
 
@@ -40,3 +41,4 @@
 - 跨模块调用只通过已评审的公共接口/消息契约，不能直接依赖其他模块的界面或 DAO。
 - 每个接口、类和公开方法应有 JavaDoc；单个 Java 文件原则上不超过 200 行。
 - 最终产物名称：`vCampusClient.jar`、`vCampusServer.jar`、`vCampus.accdb`。
+- 团队统一使用 Temurin JDK 8u502 和 Maven 3.9.16；首次开发前运行 `scripts/check-environment.ps1`。

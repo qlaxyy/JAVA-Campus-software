@@ -45,6 +45,10 @@
 - `docs/03-总体架构与接口约定.md`
 - `docs/08-开发环境统一规范.md`
 - 后续 ADR、模块 Issue、PR 和测试记录。
+- `docs/decisions/ADR-0001-JDK25与Maven版本.md`
+- `docs/decisions/ADR-0002-GitHub-Issue自主认领.md`
+- `docs/decisions/ADR-0003-CS三模块架构.md`
+- `docs/decisions/ADR-0004-Access与JDBC方案.md`
 
 # 2 程序系统的分析
 
@@ -53,6 +57,8 @@
 ### 技术可行性
 
 Java 25 提供 Swing、Socket、多线程、序列化和 JDBC 等项目所需能力。Maven 用于统一项目结构、依赖与打包，GitHub 用于任务、评审和版本管理。课程要求的 Access/JDBC 具体方案尚待最小连接验证和 ADR 确认。
+
+已通过环境与总体结构决策见 ADR-0001、ADR-0003；数据库方案仍处于 ADR-0004 提议状态。
 
 ### 操作可行性
 

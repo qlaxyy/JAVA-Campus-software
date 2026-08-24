@@ -31,6 +31,8 @@
 
 持续草稿：[软件设计说明书](docs/design/SOFTWARE_DESIGN_DRAFT.md) · [测试计划](docs/testing/TEST_PLAN_DRAFT.md) · [最终提交资料登记表](docs/delivery/DOCUMENT_REGISTER.md)
 
+决策与阶段记录：[ADR 索引](docs/decisions/README.md) · [第 0 周启动报告](docs/progress/2026-08-24-week-0.md)
+
 课程原始材料保存在 [`docs/课程原始材料`](docs/课程原始材料)，所有成员必须阅读，规划文档不能替代教师原文。
 
 ## 当前状态

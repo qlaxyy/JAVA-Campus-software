@@ -1,0 +1,26 @@
+# IDE
+.idea/
+.vscode/
+.classpath
+.project
+.settings/
+*.iml
+
+# Java / Maven / Gradle outputs
+target/
+build/
+out/
+*.class
+
+# Runtime data and logs
+logs/
+*.log
+*.laccdb
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Keep acceptance databases out of ad-hoc commits; release artifacts are added intentionally.
+*.accdb
+!release/**/*.accdb

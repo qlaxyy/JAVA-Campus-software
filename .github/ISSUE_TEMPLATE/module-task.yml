@@ -1,0 +1,53 @@
+name: 模块任务
+description: 创建可开发、可验收的模块任务
+title: "[模块] "
+labels: []
+body:
+  - type: dropdown
+    id: module
+    attributes:
+      label: 模块
+      options:
+        - 用户管理
+        - 学生学籍
+        - 选课系统
+        - 图书馆
+        - 商店
+        - 医院
+        - 公共/网络
+        - 数据库
+        - 文档/发布
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: 用户故事/目标
+      placeholder: 作为……我希望……以便……
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 范围内与范围外
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收条件
+      description: 至少覆盖正常、异常和权限场景。
+      placeholder: |
+        - [ ] 正常：
+        - [ ] 异常：
+        - [ ] 权限：
+    validations:
+      required: true
+  - type: textarea
+    id: contracts
+    attributes:
+      label: 页面、action、DTO、表
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: 依赖、风险与需要评审的人

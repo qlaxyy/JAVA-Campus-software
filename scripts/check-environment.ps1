@@ -30,23 +30,23 @@ function Get-ToolOutput {
 }
 
 Write-Host 'JAVA Virtual Campus - environment check'
-Write-Host 'Expected: Temurin JDK 8, Maven 3.9.16, Git, UTF-8'
+Write-Host 'Expected: JDK 25, Maven 3.9.16, Git, UTF-8'
 Write-Host ''
 
 $javaOutput = Get-ToolOutput -Command 'java' -Arguments @('-version')
 if ($null -eq $javaOutput) {
-    $failures.Add('java was not found. Install Temurin JDK 8 and configure JAVA_HOME/PATH.')
+    $failures.Add('java was not found. Install JDK 25 and configure JAVA_HOME/PATH.')
 }
-elseif ($javaOutput -notmatch 'version "1\.8\.0_') {
-    $failures.Add('java is not JDK 8. Actual: ' + ($javaOutput -split "`r?`n")[0])
+elseif ($javaOutput -notmatch 'version "25(?:\.|"|\s)') {
+    $failures.Add('java is not JDK 25. Actual: ' + ($javaOutput -split "`r?`n")[0])
 }
 else {
     Write-Host ('[OK] Java: ' + ($javaOutput -split "`r?`n")[0])
 }
 
 $javacOutput = Get-ToolOutput -Command 'javac' -Arguments @('-version')
-if ($null -eq $javacOutput -or $javacOutput -notmatch 'javac 1\.8\.0_') {
-    $failures.Add('javac is not JDK 8 or is missing from PATH.')
+if ($null -eq $javacOutput -or $javacOutput -notmatch 'javac 25(?:\.|$)') {
+    $failures.Add('javac is not JDK 25 or is missing from PATH.')
 }
 else {
     Write-Host ('[OK] Compiler: ' + $javacOutput)
@@ -71,10 +71,10 @@ else {
     if ($mavenOutput -notmatch 'Apache Maven 3\.9\.16') {
         $failures.Add('Maven is not version 3.9.16. Actual: ' + $mavenLines[0])
     }
-    if ($mavenOutput -notmatch 'Java version: 1\.8\.0_') {
-        $failures.Add('Maven is not using JDK 8. Check JAVA_HOME and the IDE Maven Runner.')
+    if ($mavenOutput -notmatch 'Java version: 25(?:\.|,|\s)') {
+        $failures.Add('Maven is not using JDK 25. Check JAVA_HOME and the IDE Maven Runner.')
     }
-    if ($mavenOutput -match 'Apache Maven 3\.9\.16' -and $mavenOutput -match 'Java version: 1\.8\.0_') {
+    if ($mavenOutput -match 'Apache Maven 3\.9\.16' -and $mavenOutput -match 'Java version: 25(?:\.|,|\s)') {
         Write-Host ('[OK] Maven: ' + $mavenLines[0])
     }
 }

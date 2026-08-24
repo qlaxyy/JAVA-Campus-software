@@ -10,14 +10,14 @@
   <packaging>pom</packaging>
 
   <name>JAVA Virtual Campus</name>
-  <description>Six-module Java 8 C/S virtual campus training project</description>
+  <description>Six-module Java 25 C/S virtual campus training project</description>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <maven.compiler.release>8</maven.compiler.release>
-    <maven.compiler.source>8</maven.compiler.source>
-    <maven.compiler.target>8</maven.compiler.target>
+    <maven.compiler.release>25</maven.compiler.release>
+    <maven.compiler.source>25</maven.compiler.source>
+    <maven.compiler.target>25</maven.compiler.target>
   </properties>
 
   <build>
@@ -28,9 +28,9 @@
           <artifactId>maven-compiler-plugin</artifactId>
           <version>3.15.0</version>
           <configuration>
-            <release>8</release>
-            <source>8</source>
-            <target>8</target>
+            <release>25</release>
+            <source>25</source>
+            <target>25</target>
             <encoding>UTF-8</encoding>
           </configuration>
         </plugin>
@@ -51,8 +51,8 @@
             <configuration>
               <rules>
                 <requireJavaVersion>
-                  <version>[1.8,1.9)</version>
-                  <message>本项目必须使用 JDK 8 运行 Maven。请在 IDE 和 JAVA_HOME 中选择团队统一的 Temurin 8。</message>
+                  <version>[25,26)</version>
+                  <message>本项目团队统一使用 JDK 25。请在 IDE 和 JAVA_HOME 中选择 JDK 25。</message>
                 </requireJavaVersion>
                 <requireMavenVersion>
                   <version>[3.9.16,3.9.17)</version>

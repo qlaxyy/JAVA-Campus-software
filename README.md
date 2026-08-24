@@ -9,7 +9,7 @@
 5. 商店
 6. 医院（选做）
 
-项目采用 Java C/S 架构，必须兼容 JDK 8；客户端使用 Swing，客户端与服务器端通过 Socket 通信，服务器端支持多客户端并发，验收数据库以课程要求的 Access 为准。
+项目采用 Java C/S 架构，团队统一使用 JDK 25；客户端使用 Swing，客户端与服务器端通过 Socket 通信，服务器端支持多客户端并发，验收数据库以课程要求的 Access 为准。
 
 ## 新成员从这里开始
 
@@ -41,4 +41,4 @@
 - 跨模块调用只通过已评审的公共接口/消息契约，不能直接依赖其他模块的界面或 DAO。
 - 每个接口、类和公开方法应有 JavaDoc；单个 Java 文件原则上不超过 200 行。
 - 最终产物名称：`vCampusClient.jar`、`vCampusServer.jar`、`vCampus.accdb`。
-- 团队统一使用 Temurin JDK 8u502 和 Maven 3.9.16；首次开发前运行 `scripts/check-environment.ps1`。
+- 团队统一使用 JDK 25 和 Maven 3.9.16；首次开发前运行 `scripts/check-environment.ps1`。

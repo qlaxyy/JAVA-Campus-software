@@ -23,7 +23,7 @@
 - 依赖和风险。
 - 负责人、评审人、里程碑、标签。
 
-六个模块 Epic Issue 由成员自主认领：认领者先评论再将自己设为 Assignee。模块负责人和公共职责均以 Issue Assignee 为准，不在仓库文档维护固定人员名单。
+六个模块 Epic Issue 由组长按小组已经确认的分工直接设置 Assignee。六人（包括组长）每人主责一个业务模块且不重复。模块负责人和公共职责均以 Issue Assignee 为准，不在公开仓库文档维护固定人员名单；后续公共任务可另行分配或自主认领。
 
 推荐标签：`module:user`、`module:student`、`module:course`、`module:library`、`module:shop`、`module:hospital`、`area:common`、`area:database`、`area:docs`、`priority:P0-P3`、`status:blocked`。
 

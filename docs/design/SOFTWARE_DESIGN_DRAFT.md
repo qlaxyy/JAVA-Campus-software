@@ -47,6 +47,7 @@
 - 后续 ADR、模块 Issue、PR 和测试记录。
 - `docs/decisions/ADR-0001-JDK25与Maven版本.md`
 - `docs/decisions/ADR-0002-GitHub-Issue自主认领.md`
+- `docs/decisions/ADR-0005-组长统一分配模块.md`（现行分配规则）
 - `docs/decisions/ADR-0003-CS三模块架构.md`
 - `docs/decisions/ADR-0004-Access与JDBC方案.md`
 

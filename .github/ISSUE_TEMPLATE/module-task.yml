@@ -5,7 +5,7 @@ labels: []
 body:
   - type: markdown
     attributes:
-      value: 创建模块 Epic 后，由认领者先留言“认领该模块”，再把自己设置为 Assignee；同一模块只设一位主负责人。
+      value: 六个业务模块由组长按已确认分工直接设置 Assignee；同一模块只设一位主负责人且六人不重复。公共/网络、数据库、文档/发布用于后续横向任务，不属于额外业务模块。
   - type: dropdown
     id: module
     attributes:

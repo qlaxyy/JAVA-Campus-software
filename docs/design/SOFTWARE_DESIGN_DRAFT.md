@@ -48,6 +48,7 @@
 - `docs/decisions/ADR-0001-JDK25与Maven版本.md`
 - `docs/decisions/ADR-0002-GitHub-Issue自主认领.md`
 - `docs/decisions/ADR-0005-组长统一分配模块.md`（现行分配规则）
+- `docs/decisions/ADR-0006-统一IntelliJ-IDEA-Community.md`
 - `docs/decisions/ADR-0003-CS三模块架构.md`
 - `docs/decisions/ADR-0004-Access与JDBC方案.md`
 
@@ -90,7 +91,7 @@ Java 25 提供 Swing、Socket、多线程、序列化和 JDBC 等项目所需能
 
 ### 2.3.1 集成开发环境
 
-IntelliJ IDEA 与 Eclipse 均可作为 IDE。最终提交版必须按团队实际主要使用的 IDE、版本和配置填写；当前尚未锁定单一 IDE。
+团队统一使用 IntelliJ IDEA Community Edition，通过仓库根目录 `pom.xml` 导入项目。Project SDK、语言级别、Maven Importer 和 Maven Runner 均设置为 JDK 25；最终提交版在全员安装完成后补充实际 IDEA 版本号。
 
 ### 2.3.2 JDK 25
 

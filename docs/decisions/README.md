@@ -11,6 +11,7 @@
 | ADR-0003 | 采用 Java C/S 与 Common-Client-Server 三模块架构 | 通过，待实现验证 |
 | ADR-0004 | Access 与 JDBC 访问方案 | 提议，待实验和教师确认 |
 | ADR-0005 | 组长按已确认分工统一设置模块负责人 | 通过，待创建 Issue 验证 |
+| ADR-0006 | 统一使用 IntelliJ IDEA Community Edition | 通过，待全员安装验证 |
 
 状态含义：提议、通过、废弃、被取代。决定变化时保留原 ADR，并新增或注明取代关系，不重写历史。
 

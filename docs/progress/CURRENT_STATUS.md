@@ -23,6 +23,7 @@
 ## 正在推进
 
 - 全员安装/配置 IDE、JDK 25、Maven 3.9.16 和 Git。
+- IDE 已决定统一使用 IntelliJ IDEA Community Edition，等待全员安装和 Maven 导入验证。
 - 六个模块中已有五个 Epic 完成分配；商店负责人尚未接受仓库邀请，可先建立不带 Assignee 的商店 Epic，待其加入后补设负责人。
 - 准备确定 Access 版本、JDBC 访问方案和机房环境。
 
@@ -32,7 +33,7 @@
 
 - [ ] 六个模块 Issue 均有且只有一位主 Assignee，Assignee 不重复。
 - [ ] 六位成员的环境检查脚本和 `mvn validate` 均通过。
-- [ ] 确认 IDE 使用方案；允许 IDEA/Eclipse，但项目 SDK 和 Maven 配置一致。
+- [x] IDE 统一为 IntelliJ IDEA Community Edition；项目 SDK 和 Maven Runner 使用 JDK 25。
 - [ ] 建立 `vcampus-common`、`vcampus-client`、`vcampus-server` Maven 骨架。
 - [ ] 完成一次客户端—Socket—服务器端的最小请求/响应。
 - [ ] 明确 Access/JDBC 方案并形成 ADR。

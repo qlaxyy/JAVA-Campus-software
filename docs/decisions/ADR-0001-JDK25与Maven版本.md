@@ -14,7 +14,7 @@
 - Maven 统一为 3.9.16。
 - Maven 编译 `release/source/target` 固定为 25，并通过 Enforcer 拒绝其他 Java/Maven 大版本组合。
 - 文本编码统一 UTF-8，Maven JVM 时区使用 Asia/Shanghai。
-- IDE 可以使用 IntelliJ IDEA 或 Eclipse，但 Project SDK、语言级别和 Maven Runner 必须指向 JDK 25。
+- 本 ADR 最初允许 IntelliJ IDEA 或 Eclipse；该 IDE 选择条款已由 ADR-0006 取代。Project SDK、语言级别和 Maven Runner 必须指向 JDK 25 的约束继续有效。
 
 ## 备选方案
 

@@ -9,7 +9,7 @@
 - 建立 GitHub 仓库首批规划文档、课程原件、Issue/PR 模板并推送，提交 `713d91c`。
 - 初步建立统一开发环境与自动检查，提交 `f8beffb`。
 - 根据教师“Java 版本不限”的最新说明，将团队环境统一调整为 JDK 25，提交 `9d305e6`。
-- 其余 5 位成员加入仓库。
+- 其余成员中 4 位已接受仓库邀请，商店对应成员的邀请仍待接受。
 - 将固定 M1-M6 分工改为 GitHub Issue 自主认领，以 Assignee 为负责人依据，提交 `4561a80`。
 - 明确 Eclipse 与 IntelliJ IDEA 都属于 IDE；团队可选择其一，最终软件设计说明书按实际环境填写。
 - 建立组长统筹、状态、风险与追踪记录体系，为最终提交材料持续留痕。
@@ -24,3 +24,5 @@
 - 组长创建并分配用户 #1、学籍 #2、选课 #3、医院 #4、图书馆 #6，五个 Epic 的 Assignee 不重复；只读核对发现原商店 #5 已删除，记录为待重新创建，未将六模块误记为全部完成。
 - 商店对应成员尚未接受仓库邀请，决定不阻塞其余成员推进：商店 Epic 可先不设 Assignee，成员加入后补设；环境版本只要求成员自行检查通过，不要求在群内集中发送版本输出。
 - 团队将 IDE 从 IDEA/Eclipse 二选一调整为统一使用 IntelliJ IDEA Community Edition，新增 ADR-0006；JDK 25 与 Maven 3.9.16 约束不变。
+- 在 `feature/project-skeleton` 建立 `vcampus-common`、`vcampus-server`、`vcampus-client` 三模块；实现 Swing 测试窗口、固定线程池 Socket 服务器及 `COMMON.PING → PONG`。
+- 首次执行 `mvn clean verify`，四个 Reactor 项目全部成功，`PingIntegrationTest` 的正常响应和未知 Action 两个场景均通过；数据库和业务功能仍未实现。

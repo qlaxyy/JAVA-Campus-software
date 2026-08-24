@@ -140,7 +140,7 @@ Access Database
 - `vcampus-client`：Swing 页面、客户端服务、网络连接。
 - `vcampus-server`：请求分发、业务服务、DAO、线程池和数据库连接。
 
-状态：待建立，尚无业务代码证据。
+状态：三模块骨架已在 `feature/project-skeleton` 实现并通过 Maven 构建，等待 PR 合并；尚无业务代码。
 
 ## 3.3 业务模块关系
 
@@ -166,7 +166,7 @@ Access Database
 - `USER.*` action、请求/响应 DTO、错误码。
 - Client/Server Service 接口及测试。
 
-状态：Epic 待创建、待认领、未实现。
+状态：Epic [#1](https://github.com/qlaxyy/JAVA-Campus-software/issues/1) 已分配，业务功能未实现。
 
 # 5 学生学籍模块设计
 
@@ -181,7 +181,7 @@ Access Database
 - Student/Department/Major/Class 实体、约束和表结构。
 - `STUDENT.*` action、DTO、错误码和跨模块查询接口。
 
-状态：Epic 待创建、待认领、未实现。
+状态：Epic [#2](https://github.com/qlaxyy/JAVA-Campus-software/issues/2) 已分配，业务功能未实现。
 
 # 6 选课系统模块设计
 
@@ -197,7 +197,7 @@ Access Database
 - `COURSE.*` action、DTO、错误码。
 - 最后名额的并发一致性测试。
 
-状态：Epic 待创建、待认领、未实现。
+状态：Epic [#3](https://github.com/qlaxyy/JAVA-Campus-software/issues/3) 已分配，业务功能未实现。
 
 # 7 图书馆模块设计
 
@@ -213,7 +213,7 @@ Access Database
 - `LIBRARY.*` action、DTO、错误码。
 - 最后一本书的并发测试。
 
-状态：Epic 待创建、待认领、未实现。
+状态：Epic [#6](https://github.com/qlaxyy/JAVA-Campus-software/issues/6) 已分配，业务功能未实现。
 
 # 8 商店模块设计
 
@@ -229,7 +229,7 @@ Access Database
 - `SHOP.*` action、DTO、错误码。
 - 库存原子扣减和失败回滚测试。
 
-状态：Epic 待创建、待认领、未实现。
+状态：原商店 Epic #5 已删除，等待重新创建并在成员加入后分配；业务功能未实现。
 
 # 9 医院模块设计
 
@@ -245,13 +245,13 @@ Access Database
 - `HOSPITAL.*` action、DTO、错误码。
 - 最后一个号源的并发测试和隐私检查。
 
-状态：Epic 待创建、待认领、未实现。
+状态：Epic [#4](https://github.com/qlaxyy/JAVA-Campus-software/issues/4) 已分配，业务功能未实现。
 
 # 10 公共模块设计
 
 ## 10.1 Message
 
-计划字段：`requestId`、`action`、`token`、`data`、`success`、`code`、`message`。最终类型、构造方式、序列化版本和协议兼容策略待公共契约 Issue/ADR 确认。
+最小骨架将消息分为 `Request` 与 `Response`：请求包含 `requestId`、`action`、`token`、`data`，响应包含 `requestId`、`success`、`code`、`message`、`data`。两者显式声明 `serialVersionUID`。当前已实现 `COMMON.PING`，完整类型、对象过滤、协议版本和兼容策略仍待公共契约 Issue/ADR 确认。
 
 ## 10.2 公共 DTO、枚举和错误码
 
@@ -263,13 +263,13 @@ Access Database
 
 # 11 网络模块设计
 
-客户端通过 Socket 向服务器发送统一 Message；服务器完成读取、校验、分发和响应。需要确定连接生命周期、Object Stream 创建顺序、超时、断线处理、重连策略和日志关联方式。
+客户端通过 Socket 向服务器发送统一 Request；服务器完成读取、分发并返回 Response。最小骨架已固定双方先创建并刷新 `ObjectOutputStream`、再创建 `ObjectInputStream`，网络超时为 5 秒，并采用一次连接处理一次请求的模型。
 
-状态：待最小原型和时序图验证。
+状态：`COMMON.PING → PONG` 已通过自动化集成测试；长连接、认证会话、对象过滤、重连策略和正式日志仍待设计。
 
 # 12 多线程模块设计
 
-服务器计划使用固定大小线程池处理多个客户端。共享容量、库存和号源的检查与更新必须在服务层临界区或数据库事务中原子完成。
+服务器骨架已使用固定大小线程池处理客户端连接。共享容量、库存和号源的检查与更新仍须在服务层临界区或数据库事务中原子完成。
 
 需要形成：线程模型 ADR、线程池配置依据、多客户端并发测试和异常连接恢复测试。
 

@@ -29,6 +29,8 @@
 
 项目最新推进情况见 [当前状态](docs/progress/CURRENT_STATUS.md) 和 [项目推进日志](docs/progress/PROJECT_LOG.md)。
 
+持续草稿：[软件设计说明书](docs/design/SOFTWARE_DESIGN_DRAFT.md) · [测试计划](docs/testing/TEST_PLAN_DRAFT.md) · [最终提交资料登记表](docs/delivery/DOCUMENT_REGISTER.md)
+
 课程原始材料保存在 [`docs/课程原始材料`](docs/课程原始材料)，所有成员必须阅读，规划文档不能替代教师原文。
 
 ## 当前状态

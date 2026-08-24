@@ -10,7 +10,7 @@
 - 必须通过构建/测试检查后才可合并。
 - 禁止 force push 和删除 `main`。
 
-邀请 5 位组员为 Collaborator。只有组长维护 Release 和仓库设置；组长同样通过 PR 提交业务代码。
+5 位组员均应接受邀请并成为 Collaborator。首次开发前在仓库设置中确认没有 `Pending Invite`；只有组长维护 Release 和仓库设置，组长同样通过 PR 提交业务代码。
 
 ## 2. Issue 规则
 
@@ -22,6 +22,8 @@
 - 涉及的页面、action、DTO、表。
 - 依赖和风险。
 - 负责人、评审人、里程碑、标签。
+
+六个模块 Epic Issue 由成员自主认领：认领者先评论再将自己设为 Assignee。模块负责人和公共职责均以 Issue Assignee 为准，不在仓库文档维护固定人员名单。
 
 推荐标签：`module:user`、`module:student`、`module:course`、`module:library`、`module:shop`、`module:hospital`、`area:common`、`area:database`、`area:docs`、`priority:P0-P3`、`status:blocked`。
 

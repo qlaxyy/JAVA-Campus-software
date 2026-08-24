@@ -3,6 +3,9 @@ description: 创建可开发、可验收的模块任务
 title: "[模块] "
 labels: []
 body:
+  - type: markdown
+    attributes:
+      value: 创建模块 Epic 后，由认领者先留言“认领该模块”，再把自己设置为 Assignee；同一模块只设一位主负责人。
   - type: dropdown
     id: module
     attributes:

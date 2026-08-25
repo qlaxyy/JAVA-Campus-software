@@ -1,6 +1,6 @@
 # 虚拟校园系统测试计划（持续草稿）
 
-> 当前尚无业务功能；公共三模块骨架、模块路由和导航入口已有真实构建与测试。业务结果必须来自后续自动测试和真实演示，不能预填“通过”。
+> 当前只有开发期基础登录/会话，不代表用户管理业务完成；公共三模块骨架、模块路由和导航入口已有真实构建与测试。其余业务结果必须来自后续自动测试和真实演示，不能预填“通过”。
 
 ## 1. 测试目标
 
@@ -25,7 +25,7 @@
 | JDK | JDK 25 | 组长本机 `java/javac 25` 已验证；全员待验证 |
 | Maven | 3.9.16 | 组长本机已完成 `mvn clean verify`；全员待验证 |
 | 数据库 | Access `.accdb` | 版本和 JDBC 方案待确认 |
-| 客户端/服务器端 | 三模块最小骨架 | PR #7 已合并；PING/PONG 2 个集成测试、路由 3 个和目录 2 个单元测试通过 |
+| 客户端/服务器端 | 三模块最小骨架 | PR #7 已合并；PING/PONG 2 个、认证 2 个集成测试，路由 3 个和目录 2 个单元测试通过 |
 
 ## 4. 测试层次
 
@@ -57,7 +57,7 @@
 
 | 编号前缀 | 范围 | 最低测试重点 | 当前状态 |
 |---|---|---|---|
-| AUTH | 用户管理 | 登录、会话、停用、权限绕过、密码安全 | 未开始 |
+| AUTH | 用户管理 | 登录、会话、停用、权限绕过、密码安全 | 开发期登录/会话 2 个场景通过；正式认证未开始 |
 | STU | 学籍 | CRUD、唯一性、关联、越权、停用 | 未开始 |
 | CRS | 选课 | 重复、容量、冲突、退课、成绩、并发 | 未开始 |
 | LIB | 图书馆 | 检索、借还、库存、上限、并发 | 未开始 |
@@ -107,5 +107,7 @@
 | NET-ROUTER-003 | handler 抛出运行时异常 | 返回 `COMMON_SERVER_ERROR` 且不泄露异常详情 | 通过 | `ActionRouterTest.handlerFailureReturnsSafeServerError` |
 | ARCH-MODULE-001 | 检查服务器模块目录 | 6 个 ServerModule 标识均存在且不重复 | 通过 | `ServerModulesTest.catalogContainsSixUniqueModules` |
 | ARCH-MODULE-002 | 检查客户端模块目录 | 6 个 ClientModule 标识均存在且不重复 | 通过 | `ClientModulesTest.catalogContainsSixUniqueModules` |
+| AUTH-DEV-001 | 演示学生登录、查询会话并登出 | token 生成、携带和注销均成功 | 通过 | `AuthenticationIntegrationTest.demoUserCanLoginUseSessionAndLogout` |
+| AUTH-DEV-002 | 演示学生输入错误密码 | 返回统一凭据错误，不建立会话并清空密码字符数组 | 通过 | `AuthenticationIntegrationTest.wrongPasswordDoesNotCreateSession` |
 
-执行命令：`mvn clean verify`；Reactor 中 parent、common、server、client 四项均为 `SUCCESS`，测试统计为 7/0/0（执行/失败/错误）。
+执行命令：`mvn clean verify`；Reactor 中 parent、common、server、client 四项均为 `SUCCESS`，测试统计为 9/0/0（执行/失败/错误）。

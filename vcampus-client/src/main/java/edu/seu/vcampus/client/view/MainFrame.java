@@ -1,6 +1,7 @@
 package edu.seu.vcampus.client.view;
 
 import edu.seu.vcampus.client.infrastructure.CampusClient;
+import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.module.ClientModule;
 import edu.seu.vcampus.client.module.ClientModules;
 import edu.seu.vcampus.common.protocol.Response;
@@ -27,6 +28,7 @@ import java.util.concurrent.ExecutionException;
 public final class MainFrame extends JFrame {
 
     private final CampusClient client;
+    private final ClientContext context;
     private final JLabel statusLabel = new JLabel("服务器尚未检测", SwingConstants.CENTER);
     private final JButton pingButton = new JButton("测试服务器连接");
 
@@ -38,6 +40,7 @@ public final class MainFrame extends JFrame {
     public MainFrame(CampusClient client) {
         super("虚拟校园系统");
         this.client = client;
+        this.context = new ClientContext(client);
         initializeWindow();
     }
 
@@ -84,7 +87,7 @@ public final class MainFrame extends JFrame {
             button.addActionListener(event -> cardLayout.show(contentPanel, module.id()));
             navigation.add(button);
             navigation.add(Box.createVerticalStrut(8));
-            contentPanel.add(module.createView(client), module.id());
+            contentPanel.add(module.createView(context), module.id());
         }
         if (!modules.isEmpty()) {
             cardLayout.show(contentPanel, modules.getFirst().id());

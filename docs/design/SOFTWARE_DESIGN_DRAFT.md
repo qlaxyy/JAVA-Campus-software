@@ -7,7 +7,7 @@
 | 日期 | 版本 | 变更 | 证据 |
 |---|---|---|---|
 | 2026-08-24 | V0.1 | 根据课程材料、需求基线和架构规划建立持续草稿 | `713d91c` 至 `8b8ba9d` |
-| 2026-08-25 | V0.2 | 同步三模块骨架、六模块扩展点、主导航、路由与测试实况 | PR #7、ADR-0007、7 个自动测试 |
+| 2026-08-25 | V0.2 | 同步三模块骨架、六模块扩展点、开发期会话、主导航、路由与测试实况 | PR #7、ADR-0007/0008、9 个自动测试 |
 
 # 1 引言
 
@@ -53,6 +53,7 @@
 - `docs/decisions/ADR-0003-CS三模块架构.md`
 - `docs/decisions/ADR-0004-Access与JDBC方案.md`
 - `docs/decisions/ADR-0007-六模块独立扩展点.md`
+- `docs/decisions/ADR-0008-开发期内存认证基线.md`
 
 # 2 程序系统的分析
 
@@ -160,7 +161,7 @@ Access Database
 
 ## 4.1 已确认需求
 
-注册、注销、登录、登出、账户启停、角色/权限、会话校验和登录审计。密码不得明文存储，所有受保护请求在服务器端授权。
+注册、注销、登录、登出、账户启停、角色/权限、会话校验和登录审计。密码不得明文存储，所有受保护请求在服务器端授权。当前仅实现可替换的开发期虚构账号、随机 token、会话查询和登出，以解除其他模块的开发阻塞。
 
 ## 4.2 待形成设计证据
 
@@ -170,7 +171,7 @@ Access Database
 - `USER.*` action、请求/响应 DTO、错误码。
 - Client/Server Service 接口及测试。
 
-状态：Epic [#1](https://github.com/qlaxyy/JAVA-Campus-software/issues/1) 已分配，业务功能未实现。
+状态：Epic [#1](https://github.com/qlaxyy/JAVA-Campus-software/issues/1) 已分配；开发期基础登录已实现并通过 2 个 Socket 测试，但 Access 用户 DAO、正式密码策略、账户/权限管理、过期和审计均未实现，不能判定用户模块完成。
 
 # 5 学生学籍模块设计
 
@@ -255,7 +256,7 @@ Access Database
 
 ## 10.1 Message
 
-最小骨架将消息分为 `Request` 与 `Response`：请求包含 `requestId`、`action`、`token`、`data`，响应包含 `requestId`、`success`、`code`、`message`、`data`。两者显式声明 `serialVersionUID`。当前已实现 `COMMON.PING`、模块名校验和线程安全 `ActionRouter`；重复 action 被拒绝，handler 异常转换为安全错误码。对象过滤、协议版本和兼容策略仍待公共契约 Issue/ADR 确认。
+最小骨架将消息分为 `Request` 与 `Response`：请求包含 `requestId`、`action`、`token`、`data`，响应包含 `requestId`、`success`、`code`、`message`、`data`。两者显式声明 `serialVersionUID`。当前已实现 `COMMON.PING`、`USER.LOGIN/CURRENT_SESSION/LOGOUT`、模块名校验和线程安全 `ActionRouter`；重复 action 被拒绝，handler 异常转换为安全错误码。对象过滤、协议版本和兼容策略仍待公共契约 Issue/ADR 确认。
 
 ## 10.2 公共 DTO、枚举和错误码
 

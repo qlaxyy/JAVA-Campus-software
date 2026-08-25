@@ -1,6 +1,6 @@
 package edu.seu.vcampus.client.module.hospital;
 
-import edu.seu.vcampus.client.infrastructure.CampusClient;
+import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.module.ClientModule;
 import edu.seu.vcampus.client.module.PlaceholderModuleView;
 import edu.seu.vcampus.common.protocol.ModuleNames;
@@ -21,7 +21,7 @@ public final class HospitalClientModule implements ClientModule {
     }
 
     @Override
-    public JComponent createView(CampusClient client) {
+    public JComponent createView(ClientContext context) {
         return PlaceholderModuleView.create(displayName(), "完成排班查询界面和预约数据设计");
     }
 }

@@ -21,7 +21,8 @@
 - 已形成第 0 周项目启动与基线报告。
 - 公共工程骨架已通过 PR #7 合并到 `main`；组长本机再次验证服务器、客户端与 PING/PONG 正常。
 - 已在 `feature/team-development-baseline` 建立六个固定 client/server/common 扩展位置、统一六模块导航、线程安全 action 路由和模块设计/数据字典模板。
-- 新增 3 个 action 路由测试和 2 个六模块目录完整性测试；连同原 2 个 Socket 集成测试共 7 个测试全部通过，4 个 Maven Reactor 项目均为 `SUCCESS`。
+- 已建立可替换的开发期基础登录：3 个虚构角色账号、随机会话 token、当前会话、登出、共享 ClientContext/ServerContext 和 Swing 登录页。
+- 新增 2 个认证集成测试；连同路由、目录和 PING/PONG 共 9 个测试全部通过，4 个 Maven Reactor 项目均为 `SUCCESS`。
 - PR 模板中的旧 JDK 8 检查已修正为 JDK 25 和 Maven 3.9.16。
 
 ## 正在推进
@@ -29,6 +30,7 @@
 - 全员安装/配置 IntelliJ IDEA Community、JDK 25、Maven 3.9.16 和 Git，并在各自电脑运行构建。
 - 六个模块中已有五个 Epic 完成分配；商店负责人尚未接受仓库邀请，可先建立不带 Assignee 的商店 Epic，待其加入后补设负责人。
 - 评审并合并 `feature/team-development-baseline`；合并后已有权限的五位负责人可按开工指南建自己的功能分支。
+- 用户模块继续设计 Access 用户 DAO、带盐慢哈希、账户状态、权限、会话过期与审计，以替换内存认证；其他模块只依赖稳定会话接口并可先行开发。
 - 并行准备 Access 版本、JDBC 访问方案和机房环境；该实验不阻塞第一条内存数据端到端功能。
 
 ## 下一检查点
@@ -42,6 +44,7 @@
 - [x] 完成客户端—Socket—服务器端 `COMMON.PING → PONG`，2 个自动化测试通过。
 - [x] 六模块具有互不冲突的 client/server/common、数据字典和设计文档入口。
 - [x] action 可由模块独立注册，统一主导航已有六个占位入口。
+- [x] 开发期基础登录、随机 token 和共享客户端/服务器会话查询已通过真实 Socket 测试。
 - [ ] 开发基线 PR 评审并合并 `main`。
 - [ ] 六模块分别在 Epic 确认并提交一条范围内、低依赖的端到端功能；推荐优先查询型流程，但具体功能由负责人提出。Access/JDBC 方案同时推进。
 

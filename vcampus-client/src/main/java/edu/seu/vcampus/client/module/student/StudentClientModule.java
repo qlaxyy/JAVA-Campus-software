@@ -1,6 +1,6 @@
 package edu.seu.vcampus.client.module.student;
 
-import edu.seu.vcampus.client.infrastructure.CampusClient;
+import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.module.ClientModule;
 import edu.seu.vcampus.client.module.PlaceholderModuleView;
 import edu.seu.vcampus.common.protocol.ModuleNames;
@@ -21,7 +21,7 @@ public final class StudentClientModule implements ClientModule {
     }
 
     @Override
-    public JComponent createView(CampusClient client) {
+    public JComponent createView(ClientContext context) {
         return PlaceholderModuleView.create(displayName(), "完成学籍查询界面和字段设计");
     }
 }

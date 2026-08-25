@@ -3,6 +3,7 @@ package edu.seu.vcampus.server.module.hospital;
 import edu.seu.vcampus.common.protocol.ModuleNames;
 import edu.seu.vcampus.server.infrastructure.ActionRouter;
 import edu.seu.vcampus.server.module.ServerModule;
+import edu.seu.vcampus.server.module.ServerContext;
 
 /** Server entry point owned by the hospital-appointment module. */
 public final class HospitalServerModule implements ServerModule {
@@ -13,7 +14,7 @@ public final class HospitalServerModule implements ServerModule {
     }
 
     @Override
-    public void registerHandlers(ActionRouter router) {
+    public void registerHandlers(ActionRouter router, ServerContext context) {
         // The module owner registers HOSPITAL.* handlers here after contract review.
     }
 }

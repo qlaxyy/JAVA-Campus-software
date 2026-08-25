@@ -9,6 +9,7 @@ import edu.seu.vcampus.server.module.library.LibraryServerModule;
 import edu.seu.vcampus.server.module.shop.ShopServerModule;
 import edu.seu.vcampus.server.module.student.StudentServerModule;
 import edu.seu.vcampus.server.module.user.UserServerModule;
+import edu.seu.vcampus.server.module.user.InMemoryAuthenticationService;
 
 import java.util.List;
 
@@ -27,9 +28,11 @@ public final class ServerModules {
      */
     public static ActionRouter createRouter() {
         ActionRouter router = new ActionRouter();
+        InMemoryAuthenticationService authentication = new InMemoryAuthenticationService();
+        ServerContext context = new ServerContext(authentication);
         router.register(Actions.PING, request ->
                 Response.success(request, "Server is reachable.", "PONG"));
-        modules().forEach(module -> module.registerHandlers(router));
+        modules(authentication).forEach(module -> module.registerHandlers(router, context));
         return router;
     }
 
@@ -39,8 +42,12 @@ public final class ServerModules {
      * @return immutable six-module list
      */
     public static List<ServerModule> modules() {
+        return modules(new InMemoryAuthenticationService());
+    }
+
+    private static List<ServerModule> modules(InMemoryAuthenticationService authentication) {
         return List.of(
-                new UserServerModule(),
+                new UserServerModule(authentication),
                 new StudentServerModule(),
                 new CourseServerModule(),
                 new LibraryServerModule(),

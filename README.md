@@ -28,6 +28,7 @@
 11. [六个模块 Epic 创建清单](docs/10-模块Epic创建清单.md)
 12. [公共工程骨架与运行](docs/11-公共工程骨架与运行.md)
 13. [成员并行开发开工指南](docs/12-成员并行开发开工指南.md)
+14. [开发期基础登录与会话](docs/13-开发期基础登录与会话.md)
 
 项目最新推进情况见 [当前状态](docs/progress/CURRENT_STATUS.md) 和 [项目推进日志](docs/progress/PROJECT_LOG.md)。
 

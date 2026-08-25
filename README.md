@@ -11,11 +11,82 @@
 
 项目采用 Java C/S 架构，团队统一使用 JDK 25；客户端使用 Swing，客户端与服务器端通过 Socket 通信，服务器端支持多客户端并发，验收数据库以课程要求的 Access 为准。
 
-## 新成员从这里开始
+## 开发入口：先看这里
 
-**每次开工先看：[团队开发通知（固定入口）](docs/团队开发通知.md)。** 今后的轮次目标、截止时间和统一通知都更新在该页面，群内只需转发这一链接。
+无论手写还是使用 AI 生成代码，开始开发前都必须先确认以下内容：
 
-请按顺序阅读：
+1. **[团队开发通知（固定入口）](docs/团队开发通知.md)**：当前轮次、时间、完成标准和最新通知。
+2. **[需求基线](docs/01-需求基线.md)**：必须实现什么、哪些内容不做。
+3. **[总体架构与接口约定](docs/03-总体架构与接口约定.md)**：分层、Action、DTO、错误码、数据库和并发规则。
+4. **[GitHub 协作规范](docs/05-GitHub协作规范.md)**：Issue、分支、Pull Request 和评审规则。
+5. **[成员并行开发开工指南](docs/12-成员并行开发开工指南.md)**：每个人能改哪些目录、第一轮怎样交付。
+6. **[开发期基础登录与会话](docs/13-开发期基础登录与会话.md)**：其他模块怎样复用登录状态和服务器权限校验。
+
+今后的轮次通知统一更新在“团队开发通知”页面，群内只需转发该固定链接。
+
+## 项目结构（已确定，未经评审不要改变）
+
+```text
+JAVA-Campus-software/
+├─ pom.xml                 Maven 父工程和统一版本约束
+├─ vcampus-common/         客户端/服务器共享的协议、Action、DTO、角色和错误码
+├─ vcampus-client/         Swing 页面、ClientContext、网络客户端
+├─ vcampus-server/         Socket、线程池、业务服务、权限校验和未来 DAO
+├─ database/
+│  ├─ schema/              六模块数据字典和表归属
+│  └─ seed/                虚构演示数据与初始化说明
+├─ docs/
+│  ├─ modules/             六模块设计文档
+│  ├─ decisions/           架构决策 ADR
+│  ├─ progress/            当前状态、推进日志、风险和追踪记录
+│  ├─ design/              软件设计说明书持续草稿
+│  ├─ testing/             测试计划持续草稿
+│  └─ 课程原始材料/        教师原始要求
+├─ scripts/                环境检查和公共脚本
+└─ .github/                Issue 与 Pull Request 模板
+```
+
+依赖方向固定为：`vcampus-client → vcampus-common ← vcampus-server`。`vcampus-common` 不能依赖 Swing、Socket 实现、DAO 或数据库连接；客户端不能直接访问数据库。
+
+## 六个模块的固定开发区域
+
+每位负责人原则上只修改自己模块对应的五个位置。点击下表可直接查看当前设计和数据字典：
+
+| 模块 | 模块设计 | 数据字典 | 包名 `<module>` |
+|---|---|---|---|
+| 用户管理 | [user.md](docs/modules/user.md) | [user.md](database/schema/user.md) | `user` |
+| 学生学籍 | [student.md](docs/modules/student.md) | [student.md](database/schema/student.md) | `student` |
+| 选课系统 | [course.md](docs/modules/course.md) | [course.md](database/schema/course.md) | `course` |
+| 图书馆 | [library.md](docs/modules/library.md) | [library.md](database/schema/library.md) | `library` |
+| 商店 | [shop.md](docs/modules/shop.md) | [shop.md](database/schema/shop.md) | `shop` |
+| 医院 | [hospital.md](docs/modules/hospital.md) | [hospital.md](database/schema/hospital.md) | `hospital` |
+
+把 `<module>` 替换为上表包名后，五个可开发区域为：
+
+```text
+vcampus-common/src/main/java/edu/seu/vcampus/common/<module>/
+vcampus-client/src/main/java/edu/seu/vcampus/client/module/<module>/
+vcampus-server/src/main/java/edu/seu/vcampus/server/module/<module>/
+docs/modules/<module>.md
+database/schema/<module>.md
+```
+
+以下属于共享核心，不能由成员或 AI 擅自改动：根 `pom.xml`、公共 `Request/Response`、`CampusClient`、`CampusServer`、`MainFrame`、模块注册表、会话框架、公共错误码和数据库公共结构。确需修改时，先在 Epic 说明原因并单独建立公共契约 Issue/PR。
+
+## 最短开发流程
+
+```powershell
+git switch main
+git pull origin main
+mvn clean verify
+git switch -c feat/<module>-<issue编号>-<功能简述>
+```
+
+开发完成后必须同步模块设计、数据字典和自动测试，执行 `mvn clean verify`，再创建关联 Issue 的 Pull Request。禁止直接向 `main` 推送业务代码。完整流程见 [贡献指南](CONTRIBUTING.md)。
+
+## 完整文档索引
+
+除上面的开工必读文档外，项目规划和交付资料按以下顺序维护：
 
 1. [共同阅读与首次行动](docs/00-共同阅读与首次行动.md)
 2. [需求基线](docs/01-需求基线.md)

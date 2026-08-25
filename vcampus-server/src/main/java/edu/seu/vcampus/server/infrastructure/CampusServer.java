@@ -1,9 +1,9 @@
 package edu.seu.vcampus.server.infrastructure;
 
-import edu.seu.vcampus.common.protocol.Actions;
 import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.Request;
 import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.server.module.ServerModules;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -29,6 +29,7 @@ public final class CampusServer implements AutoCloseable {
 
     private final int configuredPort;
     private final ExecutorService workerPool;
+    private final ActionRouter actionRouter;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final CountDownLatch stopped = new CountDownLatch(1);
 
@@ -51,6 +52,17 @@ public final class CampusServer implements AutoCloseable {
      * @param workerThreads fixed number of request worker threads
      */
     public CampusServer(int port, int workerThreads) {
+        this(port, workerThreads, ServerModules.createRouter());
+    }
+
+    /**
+     * Creates a server with an explicitly supplied action router.
+     *
+     * @param port listening port, or 0 to select a free port
+     * @param workerThreads fixed number of request worker threads
+     * @param actionRouter initialized request router
+     */
+    public CampusServer(int port, int workerThreads, ActionRouter actionRouter) {
         if (port < 0 || port > 65_535) {
             throw new IllegalArgumentException("port must be between 0 and 65535");
         }
@@ -58,6 +70,8 @@ public final class CampusServer implements AutoCloseable {
             throw new IllegalArgumentException("workerThreads must be positive");
         }
         this.configuredPort = port;
+        this.actionRouter = java.util.Objects.requireNonNull(
+                actionRouter, "actionRouter must not be null");
         this.workerPool = Executors.newFixedThreadPool(
                 workerThreads,
                 new NamedThreadFactory("vcampus-worker-"));
@@ -150,14 +164,7 @@ public final class CampusServer implements AutoCloseable {
                     "Request format is invalid.");
         }
 
-        if (Actions.PING.equals(request.getAction())) {
-            return Response.success(request, "Server is reachable.", "PONG");
-        }
-
-        return Response.failure(
-                request.getRequestId(),
-                ErrorCodes.COMMON_UNKNOWN_ACTION,
-                "Unknown action: " + request.getAction());
+        return actionRouter.dispatch(request);
     }
 
     private void logServerError(String summary, Exception exception) {

@@ -39,7 +39,7 @@
 - 必须优先建立 Maven 骨架和最小 Socket 请求，再开始六模块并行开发。
 - `vcampus-common` 的破坏性变更需要跨模块评审和同步迁移。
 - GUI 不直接写 SQL，DAO 不包含界面/网络逻辑。
-- 最小代码骨架已在 `feature/project-skeleton` 实现并通过 Maven 构建和 PING/PONG 集成测试；仍需 PR 评审合并，并在业务扩展后继续验证。
+- 最小代码骨架已通过 PR #7 合并到 `main`，并通过 Maven 构建和 PING/PONG 集成测试；业务扩展继续按 ADR-0007 的固定六模块入口实现。
 
 ## 验证证据
 

@@ -5,7 +5,7 @@ package edu.seu.vcampus.common.protocol;
  */
 public final class Actions {
 
-    public static final String PING = "COMMON.PING";
+    public static final String PING = ActionNames.of(ModuleNames.COMMON, "PING");
 
     private Actions() {
     }

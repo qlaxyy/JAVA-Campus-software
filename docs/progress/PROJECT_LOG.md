@@ -26,3 +26,13 @@
 - 团队将 IDE 从 IDEA/Eclipse 二选一调整为统一使用 IntelliJ IDEA Community Edition，新增 ADR-0006；JDK 25 与 Maven 3.9.16 约束不变。
 - 在 `feature/project-skeleton` 建立 `vcampus-common`、`vcampus-server`、`vcampus-client` 三模块；实现 Swing 测试窗口、固定线程池 Socket 服务器及 `COMMON.PING → PONG`。
 - 首次执行 `mvn clean verify`，四个 Reactor 项目全部成功，`PingIntegrationTest` 的正常响应和未知 Action 两个场景均通过；数据库和业务功能仍未实现。
+
+## 2026-08-25
+
+- 公共工程骨架通过 PR #7 合并到 `main`；组长在 IDEA 中完成服务器、客户端启动与停止，并再次确认 PING/PONG 链路。
+- 建立 `feature/team-development-baseline`，将服务器硬编码分发改为线程安全 `ActionRouter`，为六模块固定独立 `ServerModule` 注册入口。
+- 建立六个 `ClientModule` 与统一主导航占位页；各负责人后续只替换自己的页面，不需要共同修改 `MainFrame`。
+- common、client、server、模块设计文档和数据字典均按 user/student/course/library/shop/hospital 划分稳定目录。
+- 新增成员并行开发开工指南、模块设计模板、数据表归属表和 ADR-0007；明确第一轮先完成一条查询型端到端功能，数据库实验并行推进。
+- 修正 PR 模板中遗留的 JDK 8 检查项，统一为 JDK 25、Maven 3.9.16 下执行 `mvn clean verify`。
+- 再次执行全量构建：四个 Reactor 项目全部成功；3 个路由测试、2 个六模块目录完整性测试与 2 个 Socket 集成测试全部通过，失败和错误均为 0。

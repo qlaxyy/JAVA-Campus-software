@@ -1,6 +1,6 @@
 # 虚拟校园系统测试计划（持续草稿）
 
-> 当前尚无业务模块代码；公共三模块骨架已有真实构建和网络测试。业务结果必须来自后续自动测试和真实演示，不能预填“通过”。
+> 当前尚无业务功能；公共三模块骨架、模块路由和导航入口已有真实构建与测试。业务结果必须来自后续自动测试和真实演示，不能预填“通过”。
 
 ## 1. 测试目标
 
@@ -25,7 +25,7 @@
 | JDK | JDK 25 | 组长本机 `java/javac 25` 已验证；全员待验证 |
 | Maven | 3.9.16 | 组长本机已完成 `mvn clean verify`；全员待验证 |
 | 数据库 | Access `.accdb` | 版本和 JDBC 方案待确认 |
-| 客户端/服务器端 | 三模块最小骨架 | `COMMON.PING → PONG` 已通过 2 个测试，待 PR 合并 |
+| 客户端/服务器端 | 三模块最小骨架 | PR #7 已合并；PING/PONG 2 个集成测试、路由 3 个和目录 2 个单元测试通过 |
 
 ## 4. 测试层次
 
@@ -63,7 +63,7 @@
 | LIB | 图书馆 | 检索、借还、库存、上限、并发 | 未开始 |
 | SHOP | 商店 | 购物车、下单、取消、价格库存复核、并发 | 未开始 |
 | HOS | 医院 | 查询、预约、取消、重复、号源、隐私、并发 | 未开始 |
-| NET | 网络 | 消息、超时、断线、非法对象、服务器持续运行 | PING 与未知 Action 2 个场景通过 |
+| NET | 网络 | 消息、路由、超时、断线、非法对象、服务器持续运行 | PING/未知 Action 2 个集成场景和路由 3 个单元场景通过 |
 | DEP | 部署 | 构建、JAR、数据库、JavaDoc、全新环境 | 未开始 |
 
 ## 8. 单个测试用例格式
@@ -102,5 +102,10 @@
 |---|---|---|---|---|
 | NET-PING-001 | 启动随机端口服务器，客户端发送 `COMMON.PING` | 返回 `SUCCESS` 和 `PONG` | 通过 | `PingIntegrationTest.clientReceivesPongFromRunningServer` |
 | NET-ACTION-001 | 客户端发送未知 Action | 返回 `COMMON_UNKNOWN_ACTION`，服务器保持运行 | 通过 | `PingIntegrationTest.serverRejectsUnknownAction` |
+| NET-ROUTER-001 | 注册模块 action 并分发 | handler 收到请求并返回成功数据 | 通过 | `ActionRouterTest.registeredModuleHandlerReceivesRequest` |
+| NET-ROUTER-002 | 重复注册同一 action | 启动注册阶段拒绝重复 action | 通过 | `ActionRouterTest.duplicateActionRegistrationIsRejected` |
+| NET-ROUTER-003 | handler 抛出运行时异常 | 返回 `COMMON_SERVER_ERROR` 且不泄露异常详情 | 通过 | `ActionRouterTest.handlerFailureReturnsSafeServerError` |
+| ARCH-MODULE-001 | 检查服务器模块目录 | 6 个 ServerModule 标识均存在且不重复 | 通过 | `ServerModulesTest.catalogContainsSixUniqueModules` |
+| ARCH-MODULE-002 | 检查客户端模块目录 | 6 个 ClientModule 标识均存在且不重复 | 通过 | `ClientModulesTest.catalogContainsSixUniqueModules` |
 
-执行命令：`mvn clean verify`；Reactor 中 parent、common、server、client 四项均为 `SUCCESS`，测试统计为 2/0/0（执行/失败/错误）。
+执行命令：`mvn clean verify`；Reactor 中 parent、common、server、client 四项均为 `SUCCESS`，测试统计为 7/0/0（执行/失败/错误）。

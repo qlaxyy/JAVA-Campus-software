@@ -1,6 +1,6 @@
 # 虚拟校园系统测试计划（持续草稿）
 
-> 当前尚无业务模块代码；公共三模块骨架已有真实构建和网络测试。业务结果必须来自后续自动测试和真实演示，不能预填“通过”。
+> 当前只有开发期基础登录/会话，不代表用户管理业务完成；公共三模块骨架、模块路由和导航入口已有真实构建与测试。其余业务结果必须来自后续自动测试和真实演示，不能预填“通过”。
 
 ## 1. 测试目标
 
@@ -25,7 +25,7 @@
 | JDK | JDK 25 | 组长本机 `java/javac 25` 已验证；全员待验证 |
 | Maven | 3.9.16 | 组长本机已完成 `mvn clean verify`；全员待验证 |
 | 数据库 | Access `.accdb` | 版本和 JDBC 方案待确认 |
-| 客户端/服务器端 | 三模块最小骨架 | `COMMON.PING → PONG` 已通过 2 个测试，待 PR 合并 |
+| 客户端/服务器端 | 三模块最小骨架 | PR #7 已合并；PING/PONG 2 个、认证 2 个集成测试，路由 3 个和目录 2 个单元测试通过 |
 
 ## 4. 测试层次
 
@@ -57,13 +57,13 @@
 
 | 编号前缀 | 范围 | 最低测试重点 | 当前状态 |
 |---|---|---|---|
-| AUTH | 用户管理 | 登录、会话、停用、权限绕过、密码安全 | 未开始 |
+| AUTH | 用户管理 | 登录、会话、停用、权限绕过、密码安全 | 开发期登录/会话 2 个场景通过；正式认证未开始 |
 | STU | 学籍 | CRUD、唯一性、关联、越权、停用 | 未开始 |
 | CRS | 选课 | 重复、容量、冲突、退课、成绩、并发 | 未开始 |
 | LIB | 图书馆 | 检索、借还、库存、上限、并发 | 未开始 |
 | SHOP | 商店 | 购物车、下单、取消、价格库存复核、并发 | 未开始 |
 | HOS | 医院 | 查询、预约、取消、重复、号源、隐私、并发 | 未开始 |
-| NET | 网络 | 消息、超时、断线、非法对象、服务器持续运行 | PING 与未知 Action 2 个场景通过 |
+| NET | 网络 | 消息、路由、超时、断线、非法对象、服务器持续运行 | PING/未知 Action 2 个集成场景和路由 3 个单元场景通过 |
 | DEP | 部署 | 构建、JAR、数据库、JavaDoc、全新环境 | 未开始 |
 
 ## 8. 单个测试用例格式
@@ -102,5 +102,12 @@
 |---|---|---|---|---|
 | NET-PING-001 | 启动随机端口服务器，客户端发送 `COMMON.PING` | 返回 `SUCCESS` 和 `PONG` | 通过 | `PingIntegrationTest.clientReceivesPongFromRunningServer` |
 | NET-ACTION-001 | 客户端发送未知 Action | 返回 `COMMON_UNKNOWN_ACTION`，服务器保持运行 | 通过 | `PingIntegrationTest.serverRejectsUnknownAction` |
+| NET-ROUTER-001 | 注册模块 action 并分发 | handler 收到请求并返回成功数据 | 通过 | `ActionRouterTest.registeredModuleHandlerReceivesRequest` |
+| NET-ROUTER-002 | 重复注册同一 action | 启动注册阶段拒绝重复 action | 通过 | `ActionRouterTest.duplicateActionRegistrationIsRejected` |
+| NET-ROUTER-003 | handler 抛出运行时异常 | 返回 `COMMON_SERVER_ERROR` 且不泄露异常详情 | 通过 | `ActionRouterTest.handlerFailureReturnsSafeServerError` |
+| ARCH-MODULE-001 | 检查服务器模块目录 | 6 个 ServerModule 标识均存在且不重复 | 通过 | `ServerModulesTest.catalogContainsSixUniqueModules` |
+| ARCH-MODULE-002 | 检查客户端模块目录 | 6 个 ClientModule 标识均存在且不重复 | 通过 | `ClientModulesTest.catalogContainsSixUniqueModules` |
+| AUTH-DEV-001 | 演示学生登录、查询会话并登出 | token 生成、携带和注销均成功 | 通过 | `AuthenticationIntegrationTest.demoUserCanLoginUseSessionAndLogout` |
+| AUTH-DEV-002 | 演示学生输入错误密码 | 返回统一凭据错误，不建立会话并清空密码字符数组 | 通过 | `AuthenticationIntegrationTest.wrongPasswordDoesNotCreateSession` |
 
-执行命令：`mvn clean verify`；Reactor 中 parent、common、server、client 四项均为 `SUCCESS`，测试统计为 2/0/0（执行/失败/错误）。
+执行命令：`mvn clean verify`；Reactor 中 parent、common、server、client 四项均为 `SUCCESS`，测试统计为 9/0/0（执行/失败/错误）。

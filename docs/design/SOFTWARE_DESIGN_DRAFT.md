@@ -7,6 +7,7 @@
 | 日期 | 版本 | 变更 | 证据 |
 |---|---|---|---|
 | 2026-08-24 | V0.1 | 根据课程材料、需求基线和架构规划建立持续草稿 | `713d91c` 至 `8b8ba9d` |
+| 2026-08-25 | V0.2 | 同步三模块骨架、六模块扩展点、开发期会话、主导航、路由与测试实况 | PR #7、ADR-0007/0008、9 个自动测试 |
 
 # 1 引言
 
@@ -51,6 +52,8 @@
 - `docs/decisions/ADR-0006-统一IntelliJ-IDEA-Community.md`
 - `docs/decisions/ADR-0003-CS三模块架构.md`
 - `docs/decisions/ADR-0004-Access与JDBC方案.md`
+- `docs/decisions/ADR-0007-六模块独立扩展点.md`
+- `docs/decisions/ADR-0008-开发期内存认证基线.md`
 
 # 2 程序系统的分析
 
@@ -72,7 +75,7 @@ Java 25 提供 Swing、Socket、多线程、序列化和 JDBC 等项目所需能
 
 ### 主要风险
 
-当前主要风险为模块 Issue 尚未创建、Access/JDBC 未确认、公共协议未冻结以及业务代码尚未开始。详见 `docs/progress/RISK_REGISTER.md`。
+当前主要风险为商店成员/Issue 尚未落地、Access/JDBC 未确认、业务 action/DTO 尚待各模块评审以及业务功能尚未开始。公共骨架和六模块扩展位置降低了并行集成风险。详见 `docs/progress/RISK_REGISTER.md`。
 
 ## 2.2 需求分析
 
@@ -134,13 +137,13 @@ Access Database
 
 ## 3.2 Maven 模块
 
-计划建立：
+已建立：
 
 - `vcampus-common`：Message、DTO/VO、枚举、错误码。
 - `vcampus-client`：Swing 页面、客户端服务、网络连接。
 - `vcampus-server`：请求分发、业务服务、DAO、线程池和数据库连接。
 
-状态：三模块骨架已在 `feature/project-skeleton` 实现并通过 Maven 构建，等待 PR 合并；尚无业务代码。
+状态：三模块骨架已通过 PR #7 合并到 `main`。`feature/team-development-baseline` 进一步加入固定六模块 client/server/common 扩展位置；当前仍无业务功能。
 
 ## 3.3 业务模块关系
 
@@ -152,11 +155,13 @@ Access Database
 
 模块之间通过公共接口或经评审的只读查询协作，不直接更新其他模块的数据表。
 
+客户端由固定 `ClientModules` 目录生成六个主导航入口，服务器由固定 `ServerModules` 目录把六个模块注册到 `ActionRouter`。每位负责人只修改本模块目录，避免共同修改主窗口和 Socket 分发核心；共享清单变更按 ADR-0007 评审。
+
 # 4 用户管理模块设计
 
 ## 4.1 已确认需求
 
-注册、注销、登录、登出、账户启停、角色/权限、会话校验和登录审计。密码不得明文存储，所有受保护请求在服务器端授权。
+注册、注销、登录、登出、账户启停、角色/权限、会话校验和登录审计。密码不得明文存储，所有受保护请求在服务器端授权。当前仅实现可替换的开发期虚构账号、随机 token、会话查询和登出，以解除其他模块的开发阻塞。
 
 ## 4.2 待形成设计证据
 
@@ -166,7 +171,7 @@ Access Database
 - `USER.*` action、请求/响应 DTO、错误码。
 - Client/Server Service 接口及测试。
 
-状态：Epic [#1](https://github.com/qlaxyy/JAVA-Campus-software/issues/1) 已分配，业务功能未实现。
+状态：Epic [#1](https://github.com/qlaxyy/JAVA-Campus-software/issues/1) 已分配；开发期基础登录已实现并通过 2 个 Socket 测试，但 Access 用户 DAO、正式密码策略、账户/权限管理、过期和审计均未实现，不能判定用户模块完成。
 
 # 5 学生学籍模块设计
 
@@ -251,7 +256,7 @@ Access Database
 
 ## 10.1 Message
 
-最小骨架将消息分为 `Request` 与 `Response`：请求包含 `requestId`、`action`、`token`、`data`，响应包含 `requestId`、`success`、`code`、`message`、`data`。两者显式声明 `serialVersionUID`。当前已实现 `COMMON.PING`，完整类型、对象过滤、协议版本和兼容策略仍待公共契约 Issue/ADR 确认。
+最小骨架将消息分为 `Request` 与 `Response`：请求包含 `requestId`、`action`、`token`、`data`，响应包含 `requestId`、`success`、`code`、`message`、`data`。两者显式声明 `serialVersionUID`。当前已实现 `COMMON.PING`、`USER.LOGIN/CURRENT_SESSION/LOGOUT`、模块名校验和线程安全 `ActionRouter`；重复 action 被拒绝，handler 异常转换为安全错误码。对象过滤、协议版本和兼容策略仍待公共契约 Issue/ADR 确认。
 
 ## 10.2 公共 DTO、枚举和错误码
 
@@ -281,7 +286,7 @@ Access Database
 
 ## 13.2 表设计
 
-当前仅有候选表，尚未评审：用户/权限、学生/院系/专业/班级、课程/开课/选课/成绩、图书/馆藏/借阅、商品/购物车/订单、科室/医生/排班/预约。
+当前已建立 `database/schema/TABLE_OWNERSHIP.md` 和六个模块数据字典入口；具体表和字段仍是待负责人补充、待评审的候选设计。用户/权限、学生/院系/专业/班级、课程/开课/选课/成绩、图书/馆藏/借阅、商品/购物车/订单、科室/医生/排班/预约分别归对应模块维护。
 
 每张表最终必须记录：字段、类型、主键/外键、默认值、是否为空、唯一性、检查约束、索引和业务说明。
 

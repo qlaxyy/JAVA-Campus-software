@@ -33,6 +33,6 @@
 - 建立 `feature/team-development-baseline`，将服务器硬编码分发改为线程安全 `ActionRouter`，为六模块固定独立 `ServerModule` 注册入口。
 - 建立六个 `ClientModule` 与统一主导航占位页；各负责人后续只替换自己的页面，不需要共同修改 `MainFrame`。
 - common、client、server、模块设计文档和数据字典均按 user/student/course/library/shop/hospital 划分稳定目录。
-- 新增成员并行开发开工指南、模块设计模板、数据表归属表和 ADR-0007；明确第一轮先完成一条查询型端到端功能，数据库实验并行推进。
+- 新增成员并行开发开工指南、模块设计模板、数据表归属表和 ADR-0007；第一轮固定交付一条端到端链路，但具体功能由模块负责人在 Epic 提出，查询型流程仅作低依赖候选，数据库实验并行推进。
 - 修正 PR 模板中遗留的 JDK 8 检查项，统一为 JDK 25、Maven 3.9.16 下执行 `mvn clean verify`。
 - 再次执行全量构建：四个 Reactor 项目全部成功；3 个路由测试、2 个六模块目录完整性测试与 2 个 Socket 集成测试全部通过，失败和错误均为 0。

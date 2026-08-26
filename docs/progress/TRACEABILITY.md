@@ -10,7 +10,7 @@
 | 学生学籍 | `01-需求基线.md` 4.2 | 学生学籍模块设计 | [#2](https://github.com/qlaxyy/JAVA-Campus-software/issues/2) | 待补充 | 待补充 | 待补充 | 已分配，待设计 |
 | 选课系统 | `01-需求基线.md` 4.3 | 选课模块设计 | [#3](https://github.com/qlaxyy/JAVA-Campus-software/issues/3) | 待补充 | 待补充 | 待补充 | 已分配，待设计 |
 | 图书馆 | `01-需求基线.md` 4.4 | 图书馆模块设计 | [#6](https://github.com/qlaxyy/JAVA-Campus-software/issues/6) | 待补充 | 待补充 | 待补充 | 已分配，待设计 |
-| 商店 | `01-需求基线.md` 4.5 | 商店模块设计 | 待重新创建（原 #5 已删除） | 待补充 | 待补充 | 待补充 | 分配未落地 |
+| 商店 | `01-需求基线.md` 4.5 | 商店模块设计 | [#11](https://github.com/qlaxyy/JAVA-Campus-software/issues/11) | 待补充 | 待补充 | 待补充 | 已建立，待实现 |
 | 医院 | `01-需求基线.md` 4.6 | 医院模块设计 | [#4](https://github.com/qlaxyy/JAVA-Campus-software/issues/4) | 待补充 | 待补充 | 待补充 | 已分配，待设计 |
 
 ## 公共设计与交付
@@ -32,7 +32,7 @@
 |---|---|---|---|
 | ADR-0001 JDK 25/Maven 3.9.16 | 通过，部分验证 | `pom.xml`、环境检查脚本、`mvn clean verify` 成功 | 其余成员环境与构建结果 |
 | ADR-0002 Issue 自主认领 | 被 ADR-0005 取代 | 保留历史决定 | 不再实施 |
-| ADR-0005 组长统一分配模块 | 通过，部分验证 | 分工规范、Epic 创建清单、Issue 模板、#1/#2/#3/#4/#6 | 已有 5 个 Epic 和 5 位不重复 Assignee；商店待重建 |
+| ADR-0005 组长统一分配模块 | 通过，已验证 | 分工规范、Epic 创建清单、Issue 模板、#1/#2/#3/#4/#6/#11 | 六个业务模块 Epic 已全部建立 |
 | ADR-0003 C/S 三模块架构 | 通过，最小实现已验证 | PR #7、三模块 POM、Socket PING/PONG、2 个集成测试 | 业务扩展和完整并发验证 |
 | ADR-0007 六模块独立扩展点 | 通过，已实现待合并 | ActionRouter、六个 ClientModule/ServerModule、5 个路由/目录测试 | 六模块首个 handler 和页面 |
 | ADR-0008 开发期内存认证 | 通过（临时），已实现待合并 | USER 三个 action、ClientContext/ServerContext、2 个认证集成测试 | Access DAO、慢哈希、过期、细粒度权限与审计 |

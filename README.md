@@ -25,7 +25,7 @@ vcampus-client  →  vcampus-common  ←  vcampus-server
 | 学生学籍 | [#2](https://github.com/qlaxyy/JAVA-Campus-software/issues/2) | [数据](database/schema/student.md) | `student` |
 | 选课系统 | [#3](https://github.com/qlaxyy/JAVA-Campus-software/issues/3) | [数据](database/schema/course.md) | `course` |
 | 图书馆 | [#6](https://github.com/qlaxyy/JAVA-Campus-software/issues/6) | [数据](database/schema/library.md) | `library` |
-| 商店 | 待补建 | [数据](database/schema/shop.md) | `shop` |
+| 商店 | [#11](https://github.com/qlaxyy/JAVA-Campus-software/issues/11) | [数据](database/schema/shop.md) | `shop` |
 | 医院 | [#4](https://github.com/qlaxyy/JAVA-Campus-software/issues/4) | [数据](database/schema/hospital.md) | `hospital` |
 
 其余文件主要供组长统筹、架构查阅和最终报告留痕，统一从 **[文档导航](docs/README.md)** 进入，不要求组员每天全部阅读。

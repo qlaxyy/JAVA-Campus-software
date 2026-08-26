@@ -17,11 +17,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LoginPanelTest {
 
     @Test
-    void initialViewOnlyOffersCredentialFieldsAndLoginAction() throws Exception {
+    void initialViewOffersCredentialFieldsLoginActionAndTestAccounts() throws Exception {
         AtomicReference<LoginPanel> panelReference = new AtomicReference<>();
         SwingUtilities.invokeAndWait(() -> panelReference.set(new LoginPanel(
                 new ClientContext(new CampusClient("127.0.0.1", 1)))));
@@ -41,7 +42,9 @@ class LoginPanelTest {
         assertEquals(List.of("登录"), buttons);
         assertFalse(labels.contains("用户登录"));
         assertFalse(labels.contains("开发期基础登录"));
-        assertFalse(labels.stream().anyMatch(label -> label.contains("演示账号")));
+        assertTrue(labels.contains("学生：student001 / Student@123"));
+        assertTrue(labels.contains("教师：teacher001 / Teacher@123"));
+        assertTrue(labels.contains("管理员：admin / Admin@123"));
     }
 
     @Test

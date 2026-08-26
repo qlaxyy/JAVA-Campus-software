@@ -14,6 +14,7 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingWorker;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.GridLayout;
 import java.awt.Insets;
 import java.util.Arrays;
 import java.util.Objects;
@@ -85,11 +86,24 @@ public final class LoginPanel extends JPanel {
         constraints.gridy = 3;
         formPanel.add(statusLabel, constraints);
 
+        constraints.gridy = 4;
+        formPanel.add(createTestAccountsPanel(), constraints);
+
         add(formPanel, new GridBagConstraints());
 
         loginButton.addActionListener(event -> login());
         passwordField.addActionListener(event -> login());
         updateButtons();
+    }
+
+    private JPanel createTestAccountsPanel() {
+        JPanel accountsPanel = new JPanel(new GridLayout(0, 1, 0, 4));
+        accountsPanel.setName("login.testAccounts");
+        accountsPanel.setBorder(BorderFactory.createTitledBorder("测试账号（开发阶段）"));
+        accountsPanel.add(new JLabel("学生：student001 / Student@123"));
+        accountsPanel.add(new JLabel("教师：teacher001 / Teacher@123"));
+        accountsPanel.add(new JLabel("管理员：admin / Admin@123"));
+        return accountsPanel;
     }
 
     private void addField(

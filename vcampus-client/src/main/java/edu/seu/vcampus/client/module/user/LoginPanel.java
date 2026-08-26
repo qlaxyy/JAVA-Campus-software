@@ -14,6 +14,7 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingWorker;
 import java.awt.GridLayout;
 import java.util.concurrent.ExecutionException;
+import java.util.function.Consumer;
 
 /**
  * Minimal development login view shared by all module developers.
@@ -21,11 +22,11 @@ import java.util.concurrent.ExecutionException;
 public final class LoginPanel extends JPanel {
 
     private final ClientContext context;
-    private final JTextField usernameField = new JTextField("student001");
+    private final Consumer<SessionInfo> loginSucceeded;
+    private final JTextField usernameField = new JTextField();
     private final JPasswordField passwordField = new JPasswordField();
     private final JButton loginButton = new JButton("登录");
-    private final JButton logoutButton = new JButton("退出登录");
-    private final JLabel statusLabel = new JLabel("尚未登录", SwingConstants.CENTER);
+    private final JLabel statusLabel = new JLabel(" ", SwingConstants.CENTER);
 
     /**
      * Creates the temporary demo login page.
@@ -33,26 +34,33 @@ public final class LoginPanel extends JPanel {
      * @param context shared client context
      */
     public LoginPanel(ClientContext context) {
+        this(context, session -> {
+        });
+    }
+
+    /**
+     * Creates the login page and notifies the main window after authentication.
+     *
+     * @param context shared client context
+     * @param loginSucceeded callback receiving the authenticated session
+     */
+    public LoginPanel(ClientContext context, Consumer<SessionInfo> loginSucceeded) {
         this.context = context;
+        this.loginSucceeded = loginSucceeded;
         initializeView();
     }
 
     private void initializeView() {
-        setLayout(new GridLayout(7, 1, 0, 10));
-        setBorder(BorderFactory.createEmptyBorder(36, 160, 36, 160));
+        setLayout(new GridLayout(4, 1, 0, 12));
+        setBorder(BorderFactory.createEmptyBorder(150, 260, 150, 260));
 
-        add(new JLabel("开发期基础登录", SwingConstants.CENTER));
-        add(labeledPanel("用户名", usernameField));
+        add(labeledPanel("账户名", usernameField));
         add(labeledPanel("密码", passwordField));
         add(loginButton);
-        add(logoutButton);
         add(statusLabel);
-        add(new JLabel(
-                "演示账号：student001 / Student@123",
-                SwingConstants.CENTER));
 
         loginButton.addActionListener(event -> login());
-        logoutButton.addActionListener(event -> logout());
+        passwordField.addActionListener(event -> login());
         updateButtons();
     }
 
@@ -79,8 +87,8 @@ public final class LoginPanel extends JPanel {
                 try {
                     Response response = get();
                     if (response.isSuccess() && response.getData() instanceof SessionInfo session) {
-                        statusLabel.setText(
-                                "已登录：" + session.getDisplayName() + "（" + session.getRole() + "）");
+                        statusLabel.setText("登录成功");
+                        loginSucceeded.accept(session);
                     } else {
                         statusLabel.setText("登录失败：" + response.getMessage());
                     }
@@ -97,38 +105,26 @@ public final class LoginPanel extends JPanel {
         }.execute();
     }
 
-    private void logout() {
-        setWorking(true, "正在退出……");
-        new SwingWorker<Response, Void>() {
-            @Override
-            protected Response doInBackground() throws Exception {
-                return context.logout();
-            }
-
-            @Override
-            protected void done() {
-                try {
-                    Response response = get();
-                    statusLabel.setText(response.isSuccess() ? "已退出登录" : response.getMessage());
-                } catch (InterruptedException exception) {
-                    Thread.currentThread().interrupt();
-                    statusLabel.setText("退出操作已中断");
-                } catch (ExecutionException exception) {
-                    statusLabel.setText("服务器不可用，本地会话已清除");
-                } finally {
-                    setWorking(false, statusLabel.getText());
-                }
-            }
-        }.execute();
-    }
-
     private void setWorking(boolean working, String message) {
         statusLabel.setText(message);
-        loginButton.setEnabled(!working && context.currentSession().isEmpty());
-        logoutButton.setEnabled(!working && context.currentSession().isPresent());
+        usernameField.setEnabled(!working);
+        passwordField.setEnabled(!working);
+        loginButton.setEnabled(!working);
     }
 
     private void updateButtons() {
         setWorking(false, statusLabel.getText());
+    }
+
+    /**
+     * Clears sensitive input and prepares the form for another login.
+     *
+     * @param message optional result shown below the login button
+     */
+    public void prepareForLogin(String message) {
+        passwordField.setText("");
+        statusLabel.setText(message == null || message.isBlank() ? " " : message);
+        setWorking(false, statusLabel.getText());
+        usernameField.requestFocusInWindow();
     }
 }

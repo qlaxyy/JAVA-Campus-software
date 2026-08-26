@@ -4,7 +4,10 @@ import edu.seu.vcampus.client.infrastructure.CampusClient;
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.module.ClientModule;
 import edu.seu.vcampus.client.module.ClientModules;
+import edu.seu.vcampus.client.module.user.LoginPanel;
+import edu.seu.vcampus.common.protocol.ModuleNames;
 import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.common.user.SessionInfo;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -27,10 +30,18 @@ import java.util.concurrent.ExecutionException;
  */
 public final class MainFrame extends JFrame {
 
+    private static final String LOGIN_CARD = "login";
+    private static final String WORKSPACE_CARD = "workspace";
+
     private final CampusClient client;
     private final ClientContext context;
+    private final CardLayout applicationLayout = new CardLayout();
+    private final JPanel applicationPanel = new JPanel(applicationLayout);
     private final JLabel statusLabel = new JLabel("服务器尚未检测", SwingConstants.CENTER);
+    private final JLabel sessionLabel = new JLabel();
     private final JButton pingButton = new JButton("测试服务器连接");
+    private final JButton logoutButton = new JButton("退出登录");
+    private LoginPanel loginPanel;
 
     /**
      * Creates the first shared client window.
@@ -49,9 +60,32 @@ public final class MainFrame extends JFrame {
         setMinimumSize(new Dimension(900, 560));
         setLocationByPlatform(true);
 
+        loginPanel = new LoginPanel(context, this::showWorkspace);
+        applicationPanel.add(loginPanel, LOGIN_CARD);
+        applicationPanel.add(createWorkspace(), WORKSPACE_CARD);
+        setContentPane(applicationPanel);
+        applicationLayout.show(applicationPanel, LOGIN_CARD);
+
+        pack();
+        setLocationRelativeTo(null);
+    }
+
+    private JPanel createWorkspace() {
+        JPanel workspace = new JPanel(new BorderLayout());
+
         JLabel titleLabel = new JLabel("虚拟校园系统", SwingConstants.CENTER);
         titleLabel.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 24F));
+
+        logoutButton.addActionListener(event -> logout());
+        JPanel accountPanel = new JPanel(new BorderLayout(12, 0));
+        accountPanel.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
+        accountPanel.add(sessionLabel, BorderLayout.CENTER);
+        accountPanel.add(logoutButton, BorderLayout.EAST);
+
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.add(titleLabel, BorderLayout.CENTER);
+        headerPanel.add(accountPanel, BorderLayout.EAST);
 
         pingButton.addActionListener(event -> pingServer());
         JPanel statusPanel = new JPanel(new BorderLayout(16, 0));
@@ -59,17 +93,18 @@ public final class MainFrame extends JFrame {
         statusPanel.add(statusLabel, BorderLayout.CENTER);
         statusPanel.add(pingButton, BorderLayout.EAST);
 
-        List<ClientModule> modules = ClientModules.all();
+        List<ClientModule> modules = ClientModules.all().stream()
+                .filter(module -> !ModuleNames.USER.equals(module.id()))
+                .toList();
         CardLayout cardLayout = new CardLayout();
         JPanel contentPanel = new JPanel(cardLayout);
         JPanel navigationPanel = createNavigation(modules, contentPanel, cardLayout);
 
-        add(titleLabel, BorderLayout.NORTH);
-        add(navigationPanel, BorderLayout.WEST);
-        add(contentPanel, BorderLayout.CENTER);
-        add(statusPanel, BorderLayout.SOUTH);
-        pack();
-        setLocationRelativeTo(null);
+        workspace.add(headerPanel, BorderLayout.NORTH);
+        workspace.add(navigationPanel, BorderLayout.WEST);
+        workspace.add(contentPanel, BorderLayout.CENTER);
+        workspace.add(statusPanel, BorderLayout.SOUTH);
+        return workspace;
     }
 
     private JPanel createNavigation(
@@ -121,6 +156,45 @@ public final class MainFrame extends JFrame {
                     statusLabel.setText("连接失败，请确认服务器已经启动");
                 } finally {
                     pingButton.setEnabled(true);
+                }
+            }
+        }.execute();
+    }
+
+    private void showWorkspace(SessionInfo session) {
+        sessionLabel.setText(session.getDisplayName() + "（" + session.getRole() + "）");
+        statusLabel.setText("登录成功");
+        applicationLayout.show(applicationPanel, WORKSPACE_CARD);
+    }
+
+    private void logout() {
+        logoutButton.setEnabled(false);
+        statusLabel.setText("正在退出……");
+
+        new SwingWorker<Response, Void>() {
+            private String resultMessage = "已退出登录";
+
+            @Override
+            protected Response doInBackground() throws Exception {
+                return context.logout();
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    Response response = get();
+                    if (!response.isSuccess()) {
+                        resultMessage = "已清除本地登录状态：" + response.getMessage();
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    resultMessage = "退出操作已中断，本地登录状态已清除";
+                } catch (ExecutionException exception) {
+                    resultMessage = "服务器不可用，本地登录状态已清除";
+                } finally {
+                    logoutButton.setEnabled(true);
+                    loginPanel.prepareForLogin(resultMessage);
+                    applicationLayout.show(applicationPanel, LOGIN_CARD);
                 }
             }
         }.execute();

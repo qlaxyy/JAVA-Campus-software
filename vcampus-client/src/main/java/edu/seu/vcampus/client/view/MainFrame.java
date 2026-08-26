@@ -10,8 +10,6 @@ import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.user.SessionInfo;
 
 import javax.swing.BorderFactory;
-import javax.swing.Box;
-import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -22,6 +20,10 @@ import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
+import java.awt.Insets;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
@@ -32,6 +34,7 @@ public final class MainFrame extends JFrame {
 
     private static final String LOGIN_CARD = "login";
     private static final String WORKSPACE_CARD = "workspace";
+    private static final String MODULE_HOME_CARD = "module-home";
 
     private final CampusClient client;
     private final ClientContext context;
@@ -96,38 +99,58 @@ public final class MainFrame extends JFrame {
         List<ClientModule> modules = ClientModules.all().stream()
                 .filter(module -> !ModuleNames.USER.equals(module.id()))
                 .toList();
-        CardLayout cardLayout = new CardLayout();
-        JPanel contentPanel = new JPanel(cardLayout);
-        JPanel navigationPanel = createNavigation(modules, contentPanel, cardLayout);
+        CardLayout moduleLayout = new CardLayout();
+        JPanel modulePanel = new JPanel(moduleLayout);
+        modulePanel.add(createModuleHome(modules, modulePanel, moduleLayout), MODULE_HOME_CARD);
+        for (ClientModule module : modules) {
+            modulePanel.add(createModulePage(module, modulePanel, moduleLayout), module.id());
+        }
+        moduleLayout.show(modulePanel, MODULE_HOME_CARD);
 
         workspace.add(headerPanel, BorderLayout.NORTH);
-        workspace.add(navigationPanel, BorderLayout.WEST);
-        workspace.add(contentPanel, BorderLayout.CENTER);
+        workspace.add(modulePanel, BorderLayout.CENTER);
         workspace.add(statusPanel, BorderLayout.SOUTH);
         return workspace;
     }
 
-    private JPanel createNavigation(
+    private JPanel createModuleHome(
             List<ClientModule> modules,
-            JPanel contentPanel,
-            CardLayout cardLayout) {
-        JPanel navigation = new JPanel();
-        navigation.setLayout(new BoxLayout(navigation, BoxLayout.Y_AXIS));
-        navigation.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
-        navigation.setPreferredSize(new Dimension(180, 0));
+            JPanel modulePanel,
+            CardLayout moduleLayout) {
+        JPanel home = new JPanel(new GridBagLayout());
+        JPanel tiles = new JPanel(new GridLayout(0, 3, 18, 18));
 
         for (ClientModule module : modules) {
             JButton button = new JButton(module.displayName());
-            button.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
-            button.addActionListener(event -> cardLayout.show(contentPanel, module.id()));
-            navigation.add(button);
-            navigation.add(Box.createVerticalStrut(8));
-            contentPanel.add(module.createView(context), module.id());
+            button.setName("module.home." + module.id());
+            button.setPreferredSize(new Dimension(180, 84));
+            button.setFont(button.getFont().deriveFont(Font.PLAIN, 17F));
+            button.addActionListener(event -> moduleLayout.show(modulePanel, module.id()));
+            tiles.add(button);
         }
-        if (!modules.isEmpty()) {
-            cardLayout.show(contentPanel, modules.getFirst().id());
-        }
-        return navigation;
+
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.insets = new Insets(24, 24, 24, 24);
+        home.add(tiles, constraints);
+        return home;
+    }
+
+    private JPanel createModulePage(
+            ClientModule module,
+            JPanel modulePanel,
+            CardLayout moduleLayout) {
+        JPanel page = new JPanel(new BorderLayout());
+        JButton backButton = new JButton("返回模块首页");
+        backButton.setName("module.back." + module.id());
+        backButton.addActionListener(event -> moduleLayout.show(modulePanel, MODULE_HOME_CARD));
+
+        JPanel toolbar = new JPanel(new BorderLayout());
+        toolbar.setBorder(BorderFactory.createEmptyBorder(8, 16, 8, 16));
+        toolbar.add(backButton, BorderLayout.WEST);
+
+        page.add(toolbar, BorderLayout.NORTH);
+        page.add(module.createView(context), BorderLayout.CENTER);
+        return page;
     }
 
     private void pingServer() {

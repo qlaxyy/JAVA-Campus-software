@@ -22,3 +22,31 @@
 - `chore`：其他维护
 
 示例：`feat(course): 完成学生退选和容量回滚`
+
+## 如何帮助审查 Pull Request
+
+审查前先提交并推送自己的改动，确保 `git status` 没有未保存内容。然后在项目根目录执行（把两处 `<目标分支>` 换成 PR 页面顶部 `from` 后面的分支名）：
+
+```powershell
+git fetch origin
+git switch <目标分支>
+git pull --ff-only origin <目标分支>
+
+mvn clean verify
+```
+
+出现 `BUILD SUCCESS` 后，分别打开两个 PowerShell，在项目根目录依次运行：
+
+服务器端：
+
+```powershell
+java -cp "vcampus-common\target\classes;vcampus-server\target\classes" edu.seu.vcampus.server.ServerMain
+```
+
+客户端：
+
+```powershell
+java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.vcampus.client.ClientMain
+```
+
+按照 PR 的验收条件检查正常流程、异常流程和界面。确认无误后，在 GitHub PR 页面进入 `Files changed`，点击 `Review changes`，选择 `Approve` 并提交评审；发现问题则选择 `Request changes` 并写明复现步骤。审查结束后切回自己的功能分支。

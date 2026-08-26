@@ -4,11 +4,11 @@
 
 最短工作流：
 
-1. 领取或创建一个 Issue，写清验收条件。
+1. 在本人负责的模块 Epic 评论区写清本轮功能，不修改 Issue 正文；留言后即可开工。
 2. 从最新 `main` 创建分支：`feat/<module>-<issue>-<summary>`。
 3. 完成代码、测试、JavaDoc 和必要文档。
 4. 本地执行构建与测试，并进行一次基本手工验证。
-5. 创建 Pull Request，关联 Issue，邀请至少 1 名组员评审。
+5. 创建 Pull Request，使用 `Part of #Epic编号` 关联模块 Epic，并邀请至少 1 名组员评审。
 6. 处理所有阻塞意见后使用 Squash merge；合并后删除分支。
 
 提交信息格式：`<type>(<scope>): <中文简述>`。
@@ -22,3 +22,5 @@
 - `chore`：其他维护
 
 示例：`feat(course): 完成学生退选和容量回滚`
+
+只有一个独立 Issue 的全部验收条件都完成时才使用 `Closes #编号`。模块 Epic 在整个模块完成前保持 Open。涉及共享核心或其他模块的修改，编码前先在 Issue 说明并协调。

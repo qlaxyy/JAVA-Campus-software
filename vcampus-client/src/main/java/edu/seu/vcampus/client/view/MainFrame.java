@@ -42,6 +42,7 @@ public final class MainFrame extends JFrame {
     private final JButton pingButton = new JButton("测试服务器连接");
     private final JButton logoutButton = new JButton("退出登录");
     private LoginPanel loginPanel;
+    private boolean workspaceInitialized;
 
     /**
      * Creates the first shared client window.
@@ -62,7 +63,6 @@ public final class MainFrame extends JFrame {
 
         loginPanel = new LoginPanel(context, this::showWorkspace);
         applicationPanel.add(loginPanel, LOGIN_CARD);
-        applicationPanel.add(createWorkspace(), WORKSPACE_CARD);
         setContentPane(applicationPanel);
         applicationLayout.show(applicationPanel, LOGIN_CARD);
 
@@ -162,9 +162,20 @@ public final class MainFrame extends JFrame {
     }
 
     private void showWorkspace(SessionInfo session) {
+        initializeWorkspaceIfNeeded();
         sessionLabel.setText(session.getDisplayName() + "（" + session.getRole() + "）");
         statusLabel.setText("登录成功");
         applicationLayout.show(applicationPanel, WORKSPACE_CARD);
+    }
+
+    private void initializeWorkspaceIfNeeded() {
+        if (workspaceInitialized) {
+            return;
+        }
+        applicationPanel.add(createWorkspace(), WORKSPACE_CARD);
+        workspaceInitialized = true;
+        applicationPanel.revalidate();
+        applicationPanel.repaint();
     }
 
     private void logout() {

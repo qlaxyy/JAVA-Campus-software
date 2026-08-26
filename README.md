@@ -111,7 +111,14 @@ git push -u origin <自己的分支名>
 
 若合并 `origin/main` 时出现冲突，不要删除别人的代码或强制覆盖，把冲突文件和终端输出发给组长。
 
-推送后在 GitHub 创建 **自己的分支 → `main`** 的 Pull Request：
+第一次执行 `git push -u origin <自己的分支名>` 时，Git 会在 GitHub 自动创建同名的远程分支，不需要在网页上再次创建分支。
+
+推送完成后，进入 GitHub 仓库的 **Pull requests** 页面，点击 **New pull request**，选择：
+
+- `base: main`：准备合入的目标分支；
+- `compare: 自己的分支名`：包含本次改动的来源分支。
+
+确认方向是 **自己的功能分支 → `main`** 后创建 Pull Request，并填写：
 
 - 写清实现内容、验证方法、测试结果和暂未完成部分；
 - 使用 `Part of #Epic编号` 关联模块 Epic；

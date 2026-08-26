@@ -17,16 +17,16 @@ vcampus-client  →  vcampus-common  ←  vcampus-server
 
 1. **[当前开发通知](docs/团队开发通知.md)**：这一轮要做什么、完成标准和截止安排。
 2. **[贡献指南](CONTRIBUTING.md)**：分支、提交、Pull Request 的最短流程。
-3. **自己的模块文档**：确认功能、Action、DTO 和数据字段。
+3. **自己负责的模块 Epic**：维护模块设计、验收清单和已完成进度。
 
-| 模块 | 设计 | 数据字典 | 包名 |
+| 模块 | 模块 Epic | 数据字典 | 包名 |
 |---|---|---|---|
-| 用户管理 | [设计](docs/modules/user.md) | [数据](database/schema/user.md) | `user` |
-| 学生学籍 | [设计](docs/modules/student.md) | [数据](database/schema/student.md) | `student` |
-| 选课系统 | [设计](docs/modules/course.md) | [数据](database/schema/course.md) | `course` |
-| 图书馆 | [设计](docs/modules/library.md) | [数据](database/schema/library.md) | `library` |
-| 商店 | [设计](docs/modules/shop.md) | [数据](database/schema/shop.md) | `shop` |
-| 医院 | [设计](docs/modules/hospital.md) | [数据](database/schema/hospital.md) | `hospital` |
+| 用户管理 | [#1](https://github.com/qlaxyy/JAVA-Campus-software/issues/1) | [数据](database/schema/user.md) | `user` |
+| 学生学籍 | [#2](https://github.com/qlaxyy/JAVA-Campus-software/issues/2) | [数据](database/schema/student.md) | `student` |
+| 选课系统 | [#3](https://github.com/qlaxyy/JAVA-Campus-software/issues/3) | [数据](database/schema/course.md) | `course` |
+| 图书馆 | [#6](https://github.com/qlaxyy/JAVA-Campus-software/issues/6) | [数据](database/schema/library.md) | `library` |
+| 商店 | 待补建 | [数据](database/schema/shop.md) | `shop` |
+| 医院 | [#4](https://github.com/qlaxyy/JAVA-Campus-software/issues/4) | [数据](database/schema/hospital.md) | `hospital` |
 
 其余文件主要供组长统筹、架构查阅和最终报告留痕，统一从 **[文档导航](docs/README.md)** 进入，不要求组员每天全部阅读。
 
@@ -64,7 +64,6 @@ git push -u origin <分支名>
 vcampus-common/src/main/java/edu/seu/vcampus/common/<module>/
 vcampus-client/src/main/java/edu/seu/vcampus/client/module/<module>/
 vcampus-server/src/main/java/edu/seu/vcampus/server/module/<module>/
-docs/modules/<module>.md
 database/schema/<module>.md
 ```
 

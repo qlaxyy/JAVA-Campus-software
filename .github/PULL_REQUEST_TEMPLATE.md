@@ -1,6 +1,8 @@
 ## 关联 Issue
 
-Closes #
+Part of #
+
+<!-- 模块 Epic 在整个模块完成前保持 Open；只有本 PR 完成独立 Issue 的全部验收条件时才改为 Closes。 -->
 
 ## 改动内容
 

@@ -4,11 +4,11 @@
 
 最短工作流：
 
-1. 领取或创建一个 Issue，写清验收条件。
+1. 开工前把本人模块 Epic 正文中的范围、验收条件和接口概要补充到足以指导开发；无需发表评论或等待确认。
 2. 从最新 `main` 创建分支：`feat/<module>-<issue>-<summary>`。
 3. 完成代码、测试、JavaDoc 和必要文档。
 4. 本地执行构建与测试，并进行一次基本手工验证。
-5. 创建 Pull Request，关联 Issue，邀请至少 1 名组员评审。
+5. 创建 Pull Request，使用 `Part of #Epic编号` 关联模块 Epic，并邀请至少 1 名组员评审。
 6. 处理所有阻塞意见后使用 Squash merge；合并后删除分支。
 
 提交信息格式：`<type>(<scope>): <中文简述>`。
@@ -50,3 +50,9 @@ java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.v
 ```
 
 按照 PR 的验收条件检查正常流程、异常流程和界面。确认无误后，在 GitHub PR 页面进入 `Files changed`，点击 `Review changes`，选择 `Approve` 并提交评审；发现问题则选择 `Request changes` 并写明复现步骤。审查结束后切回自己的功能分支。
+
+## Issue 与模块 Epic
+
+只有一个独立 Issue 的全部验收条件都完成时才使用 `Closes #编号`。模块 Epic 在整个模块完成前保持 Open。涉及共享核心或其他模块的修改，编码前先在 Issue 说明并协调。
+
+模块 Epic 正文是本模块唯一的功能设计入口，由模块负责人持续维护；评论区只汇报已经实现并验证的阶段结果。表与字段写 `database/schema/<module>.md`，测试证据与截图写在 PR。

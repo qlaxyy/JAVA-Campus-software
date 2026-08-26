@@ -5,7 +5,7 @@ labels: []
 body:
   - type: markdown
     attributes:
-      value: 六个业务模块由组长按已确认分工直接设置 Assignee；同一模块只设一位主负责人且六人不重复。公共/网络、数据库、文档/发布用于后续横向任务，不属于额外业务模块。
+      value: 六个业务模块由组长按已确认分工设置 Assignee。模块负责人持续维护 Issue 正文作为唯一功能设计；评论区只汇报已经实现并验证的阶段进度。
   - type: dropdown
     id: module
     attributes:
@@ -50,7 +50,13 @@ body:
     id: contracts
     attributes:
       label: 页面、action、DTO、表
+      description: 填写概要即可；表的详细字段另写入本模块数据字典。
+    validations:
+      required: true
   - type: textarea
     id: dependencies
     attributes:
       label: 依赖、风险与需要评审的人
+      description: 没有时填写“无”；涉及共享核心或其他模块时必须写明。
+    validations:
+      required: true

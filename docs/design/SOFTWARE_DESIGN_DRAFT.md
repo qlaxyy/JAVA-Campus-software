@@ -44,7 +44,7 @@
 - `docs/课程原始材料/软件设计说明书DEMO(20250825).docx`
 - `docs/01-需求基线.md`
 - `docs/03-总体架构与接口约定.md`
-- `docs/08-开发环境统一规范.md`
+- 根目录 `README.md` 中的统一环境与运行教程
 - 后续 ADR、模块 Issue、PR 和测试记录。
 - `docs/decisions/ADR-0001-JDK25与Maven版本.md`
 - `docs/decisions/ADR-0002-GitHub-Issue自主认领.md`

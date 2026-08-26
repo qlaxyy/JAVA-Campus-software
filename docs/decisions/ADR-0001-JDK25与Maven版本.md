@@ -42,4 +42,4 @@
 - `pom.xml`
 - `.mvn/jvm.config`
 - `scripts/check-environment.ps1`
-- `docs/08-开发环境统一规范.md`
+- 根目录 `README.md`

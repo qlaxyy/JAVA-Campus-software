@@ -2,11 +2,14 @@ package edu.seu.vcampus.server.module.hospital;
 
 import edu.seu.vcampus.common.hospital.DepartmentListResponse;
 import edu.seu.vcampus.common.hospital.DepartmentView;
+import edu.seu.vcampus.common.hospital.HospitalModeAccessView;
 import edu.seu.vcampus.common.hospital.SearchSlotsRequest;
 import edu.seu.vcampus.common.hospital.SlotAvailability;
 import edu.seu.vcampus.common.hospital.SlotListResponse;
 import edu.seu.vcampus.common.hospital.SlotView;
 import edu.seu.vcampus.common.hospital.VisitType;
+import edu.seu.vcampus.common.protocol.ModuleNames;
+import edu.seu.vcampus.common.user.SessionInfo;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -25,6 +28,14 @@ final class HospitalService {
     HospitalService(HospitalRepository repository, Clock clock) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+    }
+
+    HospitalModeAccessView getModeAccess(SessionInfo session) {
+        Objects.requireNonNull(session, "session must not be null");
+        return new HospitalModeAccessView(
+                true,
+                repository.isActiveDoctorUser(session.getUserId()),
+                session.canAdminister(ModuleNames.HOSPITAL));
     }
 
     DepartmentListResponse listDepartments() {

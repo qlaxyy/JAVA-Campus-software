@@ -100,9 +100,14 @@ public final class LoginPanel extends JPanel {
         JPanel accountsPanel = new JPanel(new GridLayout(0, 1, 0, 4));
         accountsPanel.setName("login.testAccounts");
         accountsPanel.setBorder(BorderFactory.createTitledBorder("测试账号（开发阶段）"));
-        accountsPanel.add(new JLabel("学生：student001 / Student@123"));
-        accountsPanel.add(new JLabel("教师：teacher001 / Teacher@123"));
-        accountsPanel.add(new JLabel("管理员：admin / Admin@123"));
+        accountsPanel.add(new JLabel("学生：student001 / 123456"));
+        accountsPanel.add(new JLabel("教师：teacher001 / 123456"));
+        accountsPanel.add(new JLabel("超级管理员：admin / 123456"));
+        accountsPanel.add(new JLabel("学籍管理员（学生）：studentadmin / 123456"));
+        accountsPanel.add(new JLabel("选课管理员（学生）：courseadmin / 123456"));
+        accountsPanel.add(new JLabel("图书管理员（学生）：libraryadmin / 123456"));
+        accountsPanel.add(new JLabel("商店管理员（学生）：shopadmin / 123456"));
+        accountsPanel.add(new JLabel("医院管理员（患者）：hospitaladmin / 123456"));
         return accountsPanel;
     }
 

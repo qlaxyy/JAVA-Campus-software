@@ -2,10 +2,10 @@ package edu.seu.vcampus.client.view;
 
 import edu.seu.vcampus.client.infrastructure.CampusClient;
 import edu.seu.vcampus.client.application.ClientContext;
+import edu.seu.vcampus.client.application.ModuleAccessPolicy;
 import edu.seu.vcampus.client.module.ClientModule;
 import edu.seu.vcampus.client.module.ClientModules;
 import edu.seu.vcampus.client.module.user.LoginPanel;
-import edu.seu.vcampus.common.protocol.ModuleNames;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.user.SessionInfo;
 
@@ -45,7 +45,7 @@ public final class MainFrame extends JFrame {
     private final JButton pingButton = new JButton("测试服务器连接");
     private final JButton logoutButton = new JButton("退出登录");
     private LoginPanel loginPanel;
-    private boolean workspaceInitialized;
+    private JPanel workspacePanel;
 
     /**
      * Creates the first shared client window.
@@ -65,6 +65,8 @@ public final class MainFrame extends JFrame {
         setLocationByPlatform(true);
 
         loginPanel = new LoginPanel(context, this::showWorkspace);
+        logoutButton.addActionListener(event -> logout());
+        pingButton.addActionListener(event -> pingServer());
         applicationPanel.add(loginPanel, LOGIN_CARD);
         setContentPane(applicationPanel);
         applicationLayout.show(applicationPanel, LOGIN_CARD);
@@ -73,14 +75,13 @@ public final class MainFrame extends JFrame {
         setLocationRelativeTo(null);
     }
 
-    private JPanel createWorkspace() {
+    private JPanel createWorkspace(SessionInfo session) {
         JPanel workspace = new JPanel(new BorderLayout());
 
         JLabel titleLabel = new JLabel("虚拟校园系统", SwingConstants.CENTER);
         titleLabel.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 24F));
 
-        logoutButton.addActionListener(event -> logout());
         JPanel accountPanel = new JPanel(new BorderLayout(12, 0));
         accountPanel.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
         accountPanel.add(sessionLabel, BorderLayout.CENTER);
@@ -90,14 +91,13 @@ public final class MainFrame extends JFrame {
         headerPanel.add(titleLabel, BorderLayout.CENTER);
         headerPanel.add(accountPanel, BorderLayout.EAST);
 
-        pingButton.addActionListener(event -> pingServer());
         JPanel statusPanel = new JPanel(new BorderLayout(16, 0));
         statusPanel.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
         statusPanel.add(statusLabel, BorderLayout.CENTER);
         statusPanel.add(pingButton, BorderLayout.EAST);
 
         List<ClientModule> modules = ClientModules.all().stream()
-                .filter(module -> !ModuleNames.USER.equals(module.id()))
+                .filter(module -> ModuleAccessPolicy.isVisible(session, module.id()))
                 .toList();
         CardLayout moduleLayout = new CardLayout();
         JPanel modulePanel = new JPanel(moduleLayout);
@@ -147,6 +147,7 @@ public final class MainFrame extends JFrame {
         JPanel toolbar = new JPanel(new BorderLayout());
         toolbar.setBorder(BorderFactory.createEmptyBorder(8, 16, 8, 16));
         toolbar.add(backButton, BorderLayout.WEST);
+        toolbar.add(new JLabel(module.displayName()), BorderLayout.EAST);
 
         page.add(toolbar, BorderLayout.NORTH);
         page.add(module.createView(context), BorderLayout.CENTER);
@@ -185,18 +186,18 @@ public final class MainFrame extends JFrame {
     }
 
     private void showWorkspace(SessionInfo session) {
-        initializeWorkspaceIfNeeded();
+        rebuildWorkspace(session);
         sessionLabel.setText(session.getDisplayName() + "（" + session.getRole() + "）");
         statusLabel.setText("登录成功");
         applicationLayout.show(applicationPanel, WORKSPACE_CARD);
     }
 
-    private void initializeWorkspaceIfNeeded() {
-        if (workspaceInitialized) {
-            return;
+    private void rebuildWorkspace(SessionInfo session) {
+        if (workspacePanel != null) {
+            applicationPanel.remove(workspacePanel);
         }
-        applicationPanel.add(createWorkspace(), WORKSPACE_CARD);
-        workspaceInitialized = true;
+        workspacePanel = createWorkspace(session);
+        applicationPanel.add(workspacePanel, WORKSPACE_CARD);
         applicationPanel.revalidate();
         applicationPanel.repaint();
     }

@@ -113,7 +113,7 @@ final class HospitalModePanel extends JPanel {
                 patientButton));
         modes.add(modeCard(
                 "医生模式",
-                "需要有效的医院医生绑定",
+                "账号需要登记在医院医生名单中",
                 "我的排班<br>待接诊患者<br>患者就诊背景信息<br>诊断与处置",
                 doctorButton));
         modes.add(modeCard(
@@ -172,6 +172,7 @@ final class HospitalModePanel extends JPanel {
     }
 
     private static String accountText(SessionInfo session) {
-        return "当前账号：" + session.getDisplayName() + "（" + session.getRole() + "）";
+        String accountType = session.canManageUsers() ? "超级管理员" : "普通账号";
+        return "当前账号：" + session.getDisplayName() + "（" + accountType + "）";
     }
 }

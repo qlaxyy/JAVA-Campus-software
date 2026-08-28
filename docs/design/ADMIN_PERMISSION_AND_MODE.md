@@ -60,8 +60,7 @@ classDiagram
     }
     class Role {
         <<enumeration>>
-        STUDENT
-        TEACHER
+        USER
         SUPER_ADMIN
     }
     class AdminScope {

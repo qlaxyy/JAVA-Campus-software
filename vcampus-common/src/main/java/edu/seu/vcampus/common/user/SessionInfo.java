@@ -29,7 +29,7 @@ public final class SessionInfo implements Serializable {
      * @param userId stable user identifier
      * @param username login name
      * @param displayName safe display name
-     * @param role current baseline role
+     * @param role account-level authority
      */
     public SessionInfo(
             String token,
@@ -47,7 +47,7 @@ public final class SessionInfo implements Serializable {
      * @param userId stable user identifier
      * @param username login name
      * @param displayName safe display name
-     * @param role current role
+     * @param role account-level authority
      * @param adminScopes modules managed by a subsystem administrator
      */
     public SessionInfo(
@@ -85,7 +85,7 @@ public final class SessionInfo implements Serializable {
         return displayName;
     }
 
-    /** @return baseline role */
+    /** @return account-level authority */
     public Role getRole() {
         return role;
     }

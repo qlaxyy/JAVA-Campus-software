@@ -187,7 +187,8 @@ public final class MainFrame extends JFrame {
 
     private void showWorkspace(SessionInfo session) {
         rebuildWorkspace(session);
-        sessionLabel.setText(session.getDisplayName() + "（" + session.getRole() + "）");
+        sessionLabel.setText(session.getDisplayName() + "（"
+                + accountTypeText(session) + "）");
         statusLabel.setText("登录成功");
         applicationLayout.show(applicationPanel, WORKSPACE_CARD);
     }
@@ -200,6 +201,10 @@ public final class MainFrame extends JFrame {
         applicationPanel.add(workspacePanel, WORKSPACE_CARD);
         applicationPanel.revalidate();
         applicationPanel.repaint();
+    }
+
+    private static String accountTypeText(SessionInfo session) {
+        return session.canManageUsers() ? "超级管理员" : "普通账号";
     }
 
     private void logout() {

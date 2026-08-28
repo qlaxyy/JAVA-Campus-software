@@ -252,7 +252,7 @@ if (!context.sessions().canAdminister(
 }
 ```
 
-不能因为账号的 `Role` 是 `TEACHER`，就直接认定这个人是医生。医院服务器必须用 `userId` 查询医院自己的医生名单；名单中没有这个账号，即使它是教师或医院管理员，也不能进入医生模式。
+全局 `Role.USER` 不表示学生、教师或医生。医院服务器必须用 `userId` 查询医院自己的医生名单；名单中没有这个账号，即使它有医院管理权限，也不能进入医生模式。
 
 ### 模块有多个模式时怎么做
 
@@ -298,7 +298,7 @@ Repository / DAO：查询和写入数据，不决定界面与网络行为
 
 最容易混淆的是“服务器怎么知道我是谁”。答案分成两步：
 
-1. **第一次登录时看账号记录。** 服务器根据用户名找到账号，验证密码，并从账号记录中读取 `userId`、基础身份 `Role` 和管理范围 `AdminScope`。
+1. **第一次登录时看账号记录。** 服务器根据用户名找到账号，验证密码，并从账号记录中读取 `userId`、账号级 `Role` 和管理范围 `AdminScope`。
 2. **登录后的请求看 token。** 服务器生成一个随机 token，把它和上述身份信息组成 Session。客户端以后只带 token，服务器通过 token 找回 Session。
 
 身份不是用户在登录页选择的，也不是客户端猜出来的。客户端即使伪造“我是管理员”，服务器也不会相信。
@@ -316,14 +316,14 @@ Repository / DAO：查询和写入数据，不决定界面与网络行为
 
 ```text
 userId      = U-HOSPITAL-ADMIN-001
-Role        = STUDENT
+Role        = USER
 AdminScope  = HOSPITAL
 ```
 
 这三项分别表示：
 
 - `userId`：这是哪一个具体的人；
-- `Role.STUDENT`：这个人的校园基础身份是学生，所以可以作为患者使用医院；
+- `Role.USER`：这是普通账号，不是超级管理员；它不表示这个人是学生、教师或医生；
 - `AdminScope.HOSPITAL`：这个账号额外获得了医院数据管理权。
 
 密码验证成功后，服务器创建 Session：
@@ -348,7 +348,7 @@ Session(userId, Role, AdminScope)
 
 | 对象 | 谁产生 | 主要作用 | 什么时候使用 |
 |---|---|---|---|
-| 账号记录 | 超级管理员/用户数据库 | 保存这个人的基础身份和授权 | 登录验证时读取 |
+| 账号记录 | 超级管理员/用户数据库 | 保存账号级角色和管理授权 | 登录验证时读取 |
 | Session | 服务器 | 保存这一次登录对应的人和权限 | 登录成功后创建 |
 | token | 服务器 | 找到某一条 Session 的随机通行证 | 每个后续请求携带 |
 | 子系统业务资料 | 对应子系统 | 例如医院医生名单、课程任课记录 | 进入相应工作台或执行业务时查询 |
@@ -377,8 +377,8 @@ sequenceDiagram
 ## 2. 核心设计原则
 
 1. **一人一个账号。** 登录时只输入账号和密码，不选择“学生、教师、医生或管理员”。
-2. **基础身份与附加能力分离。** `Role` 表示基础身份，当前为 `STUDENT`、`TEACHER`、`SUPER_ADMIN`；`AdminScope` 表示可管理的业务模块。
-3. **管理员不是第二个账号，也不是覆盖基础身份的新身份。** 例如医院管理员可以是 `STUDENT + HOSPITAL`，所以同一账号既能作为患者使用医院，也能进入医院管理工作台。
+2. **全局账号角色保持最小。** `Role` 只表示普通账号 `USER` 或超级管理员 `SUPER_ADMIN`；学生、教师、医生等业务资格不放入全局 `Role`。
+3. **子系统管理员不是新的登录身份。** 例如医院管理员是 `USER + AdminScope.HOSPITAL`；同一账号仍可按各子系统自己的规则进入其他工作台。
 4. **业务资格由各子系统自己的数据决定。** 能否当医生，要看医院医生名单；不能只看全局 `Role` 或管理权限。其他模块也应查询自己的业务资料。
 5. **模式属于子系统界面，不属于全局账号。** 系统不设置全局 `USER / MANAGEMENT` 模式。每个子系统分别判断当前账号能进入哪些工作台。
 6. **服务器是权限边界。** 客户端隐藏按钮只用于改善体验；每个管理请求都必须在对应 `ServerModule / Service` 中再次校验会话和 `AdminScope`。
@@ -396,8 +396,7 @@ classDiagram
     }
     class Role {
         <<enumeration>>
-        STUDENT
-        TEACHER
+        USER
         SUPER_ADMIN
     }
     class AdminScope {
@@ -408,10 +407,10 @@ classDiagram
         SHOP
         HOSPITAL
     }
-    class ModuleBinding {
+    class ModuleBusinessRecord {
         <<module-owned>>
-        doctorBinding
-        otherProfessionalBinding
+        hospitalDoctorRecord
+        courseTeacherRecord
     }
     class SessionInfo {
         +Role role
@@ -420,9 +419,9 @@ classDiagram
         +canAdminister(moduleId) boolean
     }
 
-    UserAccount --> Role : 基础身份
+    UserAccount --> Role : 账号级角色
     UserAccount "1" --> "0..*" AdminScope : 附加管理授权
-    UserAccount "1" --> "0..*" ModuleBinding : 子系统专业身份
+    UserAccount "1" --> "0..*" ModuleBusinessRecord : 子系统按 userId 保存业务资料
     UserAccount --> SessionInfo : 登录后由服务器签发
 ```
 
@@ -438,12 +437,12 @@ classDiagram
 
 | 服务器中保存的账号资料 | 患者模式 | 医生模式 | 管理员模式 |
 |---|---:|---:|---:|
-| 只要已经登录 | 是 | 否 | 否 |
-| 医院医生名单中登记了该账号 | 是 | 是 | 否 |
-| 该账号有医院管理权限 | 是 | 否 | 是 |
+| 已登录，不在医生名单中，也没有医院管理权限 | 是 | 否 | 否 |
+| 在医院医生名单中，但没有医院管理权限 | 是 | 是 | 否 |
+| 不在医院医生名单中，但有医院管理权限 | 是 | 否 | 是 |
 | 既在医生名单中，又有医院管理权限 | 是 | 是 | 是 |
 
-当前开发数据为了少建一个账号，把 `teacher001` 同时登记在了教师账号数据和医院医生名单中。因此它能进入医生模式；这不表示“教师就是医生”，也不表示其他教师账号自动拥有医生权限。
+当前开发数据为了少建一个账号，复用了名为 `teacher001` 的普通账号。它的全局角色是 `USER`，医院医生名单中登记了它的 `userId`，因此它能进入医生模式。账号名称不决定权限，其他普通账号不会自动获得医生资格。
 
 进入某个模式不会改变账号资料或权限，只会切换当前工作台。医生模式查询医院医生名单，管理员模式检查 `session.canAdminister(HOSPITAL)`。
 

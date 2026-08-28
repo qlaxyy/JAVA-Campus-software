@@ -1,10 +1,7 @@
 package edu.seu.vcampus.common.user;
 
-/**
- * Baseline application roles shared by the client and server.
- */
+/** Account-level authority shared by the client and server. */
 public enum Role {
-    STUDENT,
-    TEACHER,
+    USER,
     SUPER_ADMIN
 }

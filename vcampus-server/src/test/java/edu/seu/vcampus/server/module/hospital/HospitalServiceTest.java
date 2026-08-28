@@ -31,13 +31,13 @@ class HospitalServiceTest {
             new InMemoryHospitalRepository(FIXED_CLOCK), FIXED_CLOCK);
 
     @Test
-    void calculatesModesFromDoctorBindingAndAdministratorRole() {
+    void calculatesModesFromDoctorListAndHospitalAdminScope() {
         HospitalModeAccessView student = service.getModeAccess(
-                session("U-STUDENT-001", Role.STUDENT));
+                session("U-STUDENT-001", Role.USER));
         HospitalModeAccessView doctor = service.getModeAccess(
-                session("U-TEACHER-001", Role.TEACHER));
+                session("U-TEACHER-001", Role.USER));
         HospitalModeAccessView administrator = service.getModeAccess(
-                session("U-HOSPITAL-ADMIN-001", Role.STUDENT, Set.of(AdminScope.HOSPITAL)));
+                session("U-HOSPITAL-ADMIN-001", Role.USER, Set.of(AdminScope.HOSPITAL)));
 
         assertTrue(student.canAccess(HospitalMode.PATIENT));
         assertFalse(student.canAccess(HospitalMode.DOCTOR));

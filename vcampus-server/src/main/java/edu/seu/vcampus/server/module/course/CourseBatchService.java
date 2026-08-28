@@ -41,7 +41,20 @@ final class CourseBatchService {
             .map(batch -> toInfo(batch, now))
             .toList();
     }
+    /**
+     * 根据 ID 查找当前学期批次。
+     */
+    SelectionBatchInfo findBatch(
+        long batchId) {
 
+        return listBatches()
+            .stream()
+            .filter(batch ->
+                batch.getBatchId()
+                    == batchId)
+            .findFirst()
+            .orElse(null);
+    }
     private SelectionBatchInfo toInfo(
         CourseBatchRecord batch,
         LocalDateTime now) {

@@ -26,6 +26,6 @@ public final class CourseClientModule
     public JComponent createView(
         ClientContext context) {
 
-        return new CourseCenterPanel(context);
+        return new CourseSelectionView(context);
     }
 }

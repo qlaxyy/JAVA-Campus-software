@@ -18,12 +18,12 @@ final class HospitalHomePanel extends JPanel {
 
     private final JLabel messageLabel = new JLabel(" ", SwingConstants.CENTER);
 
-    HospitalHomePanel(Runnable openSlotSearch) {
+    HospitalHomePanel(Runnable openSlotSearch, Runnable switchMode) {
         setLayout(new BorderLayout(0, 18));
         setBackground(HospitalTheme.BACKGROUND);
         setBorder(BorderFactory.createEmptyBorder(22, 26, 22, 26));
 
-        add(createHeader(), BorderLayout.NORTH);
+        add(createHeader(switchMode), BorderLayout.NORTH);
         add(createContent(openSlotSearch), BorderLayout.CENTER);
 
         messageLabel.setForeground(HospitalTheme.WARNING);
@@ -35,10 +35,14 @@ final class HospitalHomePanel extends JPanel {
         messageLabel.setText(message);
     }
 
-    private JPanel createHeader() {
+    private JPanel createHeader(Runnable switchMode) {
         JPanel header = new JPanel();
+        header.setLayout(new BorderLayout(16, 0));
         header.setOpaque(false);
-        header.setLayout(new BoxLayout(header, BoxLayout.Y_AXIS));
+
+        JPanel copy = new JPanel();
+        copy.setOpaque(false);
+        copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
 
         JLabel title = new JLabel("校医院");
         title.setFont(title.getFont().deriveFont(Font.BOLD, 26F));
@@ -46,9 +50,14 @@ final class HospitalHomePanel extends JPanel {
         JLabel subtitle = new JLabel("校园医疗服务 · 先完成查询，再逐步扩展完整就诊流程");
         subtitle.setForeground(HospitalTheme.MUTED);
 
-        header.add(title);
-        header.add(Box.createVerticalStrut(5));
-        header.add(subtitle);
+        copy.add(title);
+        copy.add(Box.createVerticalStrut(5));
+        copy.add(subtitle);
+
+        JButton switchButton = HospitalTheme.quietButton("切换使用模式");
+        switchButton.addActionListener(event -> switchMode.run());
+        header.add(copy, BorderLayout.CENTER);
+        header.add(switchButton, BorderLayout.EAST);
         return header;
     }
 

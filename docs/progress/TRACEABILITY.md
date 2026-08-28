@@ -6,12 +6,12 @@
 
 | 模块 | 需求基线 | 设计说明书章节 | 模块 Epic | 主要 PR | 测试证据 | 界面/演示证据 | 状态 |
 |---|---|---|---|---|---|---|---|
-| 用户管理 | `01-需求基线.md` 4.1 | 用户管理模块设计 | [#1](https://github.com/qlaxyy/JAVA-Campus-software/issues/1) | 待补充 | 待补充 | 待补充 | 已分配，待设计 |
-| 学生学籍 | `01-需求基线.md` 4.2 | 学生学籍模块设计 | [#2](https://github.com/qlaxyy/JAVA-Campus-software/issues/2) | 待补充 | 待补充 | 待补充 | 已分配，待设计 |
+| 用户管理 | `01-需求基线.md` 4.1 | 用户管理模块设计、ADR-0009 | [#1](https://github.com/qlaxyy/JAVA-Campus-software/issues/1) | `feat/admin-role-model` 待 PR | `AuthorizationModelTest`、`ModuleAccessPolicyTest`、认证集成测试 | 待补充 | 管理员权限基础已实现待合并，账号管理链路待开发 |
+| 学生学籍 | `01-需求基线.md` 4.2 | 学生学籍模块设计 | [#2](https://github.com/qlaxyy/JAVA-Campus-software/issues/2) | PR #19 | 学籍查询集成测试 | 待补充 | 第一条查询链路已合并 |
 | 选课系统 | `01-需求基线.md` 4.3 | 选课模块设计 | [#3](https://github.com/qlaxyy/JAVA-Campus-software/issues/3) | 待补充 | 待补充 | 待补充 | 已分配，待设计 |
 | 图书馆 | `01-需求基线.md` 4.4 | 图书馆模块设计 | [#6](https://github.com/qlaxyy/JAVA-Campus-software/issues/6) | 待补充 | 待补充 | 待补充 | 已分配，待设计 |
 | 商店 | `01-需求基线.md` 4.5 | 商店模块设计 | [#11](https://github.com/qlaxyy/JAVA-Campus-software/issues/11) | 待补充 | 待补充 | 待补充 | 已建立，待实现 |
-| 医院 | `01-需求基线.md` 4.6 | 医院模块设计 | [#4](https://github.com/qlaxyy/JAVA-Campus-software/issues/4) | 待补充 | 待补充 | 待补充 | 已分配，待设计 |
+| 医院 | `01-需求基线.md` 4.6 | 医院模块设计、`database/schema/hospital.md` | [#4](https://github.com/qlaxyy/JAVA-Campus-software/issues/4) | PR #23 | `HospitalServiceTest`、`HospitalSearchIntegrationTest` | 待补充 | 患者端号源查询链路已合并 |
 
 ## 公共设计与交付
 
@@ -35,7 +35,8 @@
 | ADR-0005 组长统一分配模块 | 通过，已验证 | 分工规范、Epic 创建清单、Issue 模板、#1/#2/#3/#4/#6/#11 | 六个业务模块 Epic 已全部建立 |
 | ADR-0003 C/S 三模块架构 | 通过，最小实现已验证 | PR #7、三模块 POM、Socket PING/PONG、2 个集成测试 | 业务扩展和完整并发验证 |
 | ADR-0007 六模块独立扩展点 | 通过，已实现待合并 | ActionRouter、六个 ClientModule/ServerModule、5 个路由/目录测试 | 六模块首个 handler 和页面 |
-| ADR-0008 开发期内存认证 | 通过（临时），已实现待合并 | USER 三个 action、ClientContext/ServerContext、2 个认证集成测试 | Access DAO、慢哈希、过期、细粒度权限与审计 |
+| ADR-0008 开发期内存认证 | 通过（临时），已合并 | USER 三个 action、ClientContext/ServerContext、认证集成测试 | Access DAO、慢哈希、会话过期与审计 |
+| ADR-0009 管理员权限模型 | 通过，基础实现待合并 | 四角色、AdminScope、SessionInfo、导航策略和 6 项相关测试 | 超级管理员账号管理页面、管理 Action、DAO 与业务模块管理端鉴权 |
 | ADR-0004 Access/JDBC | 提议 | 决策问题和实验门禁 | 教师确认、驱动选型、最小原型和部署验证 |
 
 ## 最终材料草稿

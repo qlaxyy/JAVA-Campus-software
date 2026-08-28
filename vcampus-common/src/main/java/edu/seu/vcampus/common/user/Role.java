@@ -6,5 +6,6 @@ package edu.seu.vcampus.common.user;
 public enum Role {
     STUDENT,
     TEACHER,
-    ADMIN
+    MODULE_ADMIN,
+    SUPER_ADMIN
 }

@@ -5,6 +5,7 @@ import edu.seu.vcampus.client.infrastructure.CampusClient;
 import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.user.Role;
+import edu.seu.vcampus.common.user.AdminScope;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.common.user.UserActions;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
@@ -63,6 +64,23 @@ class AuthenticationIntegrationTest {
             for (char value : password) {
                 assertEquals('\0', value);
             }
+        }
+    }
+
+    @Test
+    void subsystemAdministratorReceivesServerAssignedScope() throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext context = new ClientContext(
+                    new CampusClient("127.0.0.1", server.getPort()));
+
+            Response login = context.login(
+                    "hospitaladmin", "HospitalAdmin@123".toCharArray());
+
+            assertTrue(login.isSuccess());
+            SessionInfo session = assertInstanceOf(SessionInfo.class, login.getData());
+            assertEquals(Role.MODULE_ADMIN, session.getRole());
+            assertEquals(java.util.Set.of(AdminScope.HOSPITAL), session.getAdminScopes());
         }
     }
 }

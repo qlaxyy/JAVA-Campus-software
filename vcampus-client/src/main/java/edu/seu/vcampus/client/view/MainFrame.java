@@ -5,6 +5,7 @@ import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.application.ModuleAccessPolicy;
 import edu.seu.vcampus.client.module.ClientModule;
 import edu.seu.vcampus.client.module.ClientModules;
+import edu.seu.vcampus.client.module.ModuleViewMode;
 import edu.seu.vcampus.client.module.user.LoginPanel;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.user.SessionInfo;
@@ -103,7 +104,8 @@ public final class MainFrame extends JFrame {
         JPanel modulePanel = new JPanel(moduleLayout);
         modulePanel.add(createModuleHome(modules, modulePanel, moduleLayout), MODULE_HOME_CARD);
         for (ClientModule module : modules) {
-            modulePanel.add(createModulePage(module, modulePanel, moduleLayout), module.id());
+            ModuleViewMode mode = ModuleAccessPolicy.modeFor(session, module.id()).orElseThrow();
+            modulePanel.add(createModulePage(module, mode, modulePanel, moduleLayout), module.id());
         }
         moduleLayout.show(modulePanel, MODULE_HOME_CARD);
 
@@ -137,6 +139,7 @@ public final class MainFrame extends JFrame {
 
     private JPanel createModulePage(
             ClientModule module,
+            ModuleViewMode mode,
             JPanel modulePanel,
             CardLayout moduleLayout) {
         JPanel page = new JPanel(new BorderLayout());
@@ -147,9 +150,10 @@ public final class MainFrame extends JFrame {
         JPanel toolbar = new JPanel(new BorderLayout());
         toolbar.setBorder(BorderFactory.createEmptyBorder(8, 16, 8, 16));
         toolbar.add(backButton, BorderLayout.WEST);
+        toolbar.add(new JLabel(module.displayName() + " · " + mode.displayName()), BorderLayout.EAST);
 
         page.add(toolbar, BorderLayout.NORTH);
-        page.add(module.createView(context), BorderLayout.CENTER);
+        page.add(module.createView(context, mode), BorderLayout.CENTER);
         return page;
     }
 

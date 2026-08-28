@@ -44,11 +44,17 @@ java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.v
 | 学生 | `student001` | `Student@123` |
 | 教师 | `teacher001` | `Teacher@123` |
 | 超级管理员 | `admin` | `Admin@123` |
+| 学籍子系统管理员 | `studentadmin` | `StudentAdmin@123` |
+| 选课子系统管理员 | `courseadmin` | `CourseAdmin@123` |
+| 图书馆子系统管理员 | `libraryadmin` | `LibraryAdmin@123` |
+| 商店子系统管理员 | `shopadmin` | `ShopAdmin@123` |
 | 医院子系统管理员 | `hospitaladmin` | `HospitalAdmin@123` |
 
 这些是公开的虚构测试账号，不得用于真实系统或复用个人密码。
 
 登录页只输入账号和密码，不让用户自行选择身份。角色和子系统管理范围由服务器根据账号加载：超级管理员可管理账号、分配子系统管理员并进入所有管理模块；子系统管理员只能进入获授权模块。客户端隐藏无权入口，服务器仍会对每个管理请求独立鉴权。
+
+子系统管理员打开本人负责的模块时，顶部显示“管理模式”。模块负责人应在该模式提供本模块的数据维护页面；客户端只能发送管理 Action，实际校验和数据库读写必须经过服务器 Service 与 DAO，禁止 Swing 客户端直接连接 Access。
 
 当前可复现：登录门禁、模块大厅、登出、PING/PONG，以及用 `student001` 查询张三的学籍信息。停止服务器时在服务器终端按 `Ctrl + C`。
 

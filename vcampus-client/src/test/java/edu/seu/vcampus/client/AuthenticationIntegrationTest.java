@@ -11,6 +11,9 @@ import edu.seu.vcampus.common.user.UserActions;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -82,5 +85,33 @@ class AuthenticationIntegrationTest {
             assertEquals(Role.MODULE_ADMIN, session.getRole());
             assertEquals(java.util.Set.of(AdminScope.HOSPITAL), session.getAdminScopes());
         }
+    }
+
+    @Test
+    void everySubsystemAdministratorReceivesItsOwnScope() throws Exception {
+        Map<String, AdminLogin> accounts = Map.of(
+                "studentadmin", new AdminLogin("StudentAdmin@123", AdminScope.STUDENT),
+                "courseadmin", new AdminLogin("CourseAdmin@123", AdminScope.COURSE),
+                "libraryadmin", new AdminLogin("LibraryAdmin@123", AdminScope.LIBRARY),
+                "shopadmin", new AdminLogin("ShopAdmin@123", AdminScope.SHOP),
+                "hospitaladmin", new AdminLogin("HospitalAdmin@123", AdminScope.HOSPITAL));
+
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext context = new ClientContext(
+                    new CampusClient("127.0.0.1", server.getPort()));
+
+            for (Map.Entry<String, AdminLogin> entry : accounts.entrySet()) {
+                Response login = context.login(
+                        entry.getKey(), entry.getValue().password().toCharArray());
+                assertTrue(login.isSuccess(), entry.getKey());
+                SessionInfo session = assertInstanceOf(SessionInfo.class, login.getData());
+                assertEquals(Role.MODULE_ADMIN, session.getRole());
+                assertEquals(Set.of(entry.getValue().scope()), session.getAdminScopes());
+            }
+        }
+    }
+
+    private record AdminLogin(String password, AdminScope scope) {
     }
 }

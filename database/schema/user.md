@@ -73,6 +73,10 @@
 | `student001` | `STUDENT` | 无 | 学生端流程 |
 | `teacher001` | `TEACHER` | 无 | 教师端流程 |
 | `admin` | `SUPER_ADMIN` | 隐式全部 | 用户管理与全局管理流程 |
+| `studentadmin` | `MODULE_ADMIN` | `STUDENT` | 学籍管理模式开发与越权测试 |
+| `courseadmin` | `MODULE_ADMIN` | `COURSE` | 选课管理模式开发与越权测试 |
+| `libraryadmin` | `MODULE_ADMIN` | `LIBRARY` | 图书馆管理模式开发与越权测试 |
+| `shopadmin` | `MODULE_ADMIN` | `SHOP` | 商店管理模式开发与越权测试 |
 | `hospitaladmin` | `MODULE_ADMIN` | `HOSPITAL` | 子系统越权边界测试 |
 
 这些账号当前由 `InMemoryAuthenticationService` 提供，接入 Access 时用虚构数据替换，不能提交真实个人信息或密码。

@@ -89,19 +89,31 @@ public final class InMemoryAuthenticationService implements SessionLookup {
     }
 
     private static Map<String, DemoUser> createDemoUsers() {
-        return Map.of(
-                "student001", demoUser(
+        return Map.ofEntries(
+                Map.entry("student001", demoUser(
                         "U-STUDENT-001", "student001", "演示学生",
-                        Role.STUDENT, Set.of(), "Student@123"),
-                "teacher001", demoUser(
+                        Role.STUDENT, Set.of(), "Student@123")),
+                Map.entry("teacher001", demoUser(
                         "U-TEACHER-001", "teacher001", "演示教师",
-                        Role.TEACHER, Set.of(), "Teacher@123"),
-                "admin", demoUser(
+                        Role.TEACHER, Set.of(), "Teacher@123")),
+                Map.entry("admin", demoUser(
                         "U-ADMIN-001", "admin", "演示超级管理员",
-                        Role.SUPER_ADMIN, Set.of(AdminScope.values()), "Admin@123"),
-                "hospitaladmin", demoUser(
+                        Role.SUPER_ADMIN, Set.of(AdminScope.values()), "Admin@123")),
+                Map.entry("studentadmin", demoUser(
+                        "U-STUDENT-ADMIN-001", "studentadmin", "演示学籍管理员",
+                        Role.MODULE_ADMIN, Set.of(AdminScope.STUDENT), "StudentAdmin@123")),
+                Map.entry("courseadmin", demoUser(
+                        "U-COURSE-ADMIN-001", "courseadmin", "演示选课管理员",
+                        Role.MODULE_ADMIN, Set.of(AdminScope.COURSE), "CourseAdmin@123")),
+                Map.entry("libraryadmin", demoUser(
+                        "U-LIBRARY-ADMIN-001", "libraryadmin", "演示图书馆管理员",
+                        Role.MODULE_ADMIN, Set.of(AdminScope.LIBRARY), "LibraryAdmin@123")),
+                Map.entry("shopadmin", demoUser(
+                        "U-SHOP-ADMIN-001", "shopadmin", "演示商店管理员",
+                        Role.MODULE_ADMIN, Set.of(AdminScope.SHOP), "ShopAdmin@123")),
+                Map.entry("hospitaladmin", demoUser(
                         "U-HOSPITAL-ADMIN-001", "hospitaladmin", "演示医院管理员",
-                        Role.MODULE_ADMIN, Set.of(AdminScope.HOSPITAL), "HospitalAdmin@123"));
+                        Role.MODULE_ADMIN, Set.of(AdminScope.HOSPITAL), "HospitalAdmin@123")));
     }
 
     private static DemoUser demoUser(

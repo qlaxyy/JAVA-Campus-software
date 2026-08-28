@@ -36,7 +36,7 @@
 | ADR-0003 C/S 三模块架构 | 通过，最小实现已验证 | PR #7、三模块 POM、Socket PING/PONG、2 个集成测试 | 业务扩展和完整并发验证 |
 | ADR-0007 六模块独立扩展点 | 通过，已实现待合并 | ActionRouter、六个 ClientModule/ServerModule、5 个路由/目录测试 | 六模块首个 handler 和页面 |
 | ADR-0008 开发期内存认证 | 通过（临时），已合并 | USER 三个 action、ClientContext/ServerContext、认证集成测试 | Access DAO、慢哈希、会话过期与审计 |
-| ADR-0009 管理员权限模型 | 通过，基础实现待合并 | 四角色、AdminScope、SessionInfo、导航策略和 6 项相关测试 | 超级管理员账号管理页面、管理 Action、DAO 与业务模块管理端鉴权 |
+| ADR-0009 管理员权限模型 | 通过，基础实现待合并 | 四角色、AdminScope、SessionInfo、五个子系统管理员、用户/管理模式、UML/流程图和相关测试 | 超级管理员账号管理页面、各模块管理 Action、DAO 与真实数据维护界面 |
 | ADR-0004 Access/JDBC | 提议 | 决策问题和实验门禁 | 教师确认、驱动选型、最小原型和部署验证 |
 
 ## 最终材料草稿

@@ -103,6 +103,10 @@ public final class LoginPanel extends JPanel {
         accountsPanel.add(new JLabel("学生：student001 / Student@123"));
         accountsPanel.add(new JLabel("教师：teacher001 / Teacher@123"));
         accountsPanel.add(new JLabel("超级管理员：admin / Admin@123"));
+        accountsPanel.add(new JLabel("学籍管理员：studentadmin / StudentAdmin@123"));
+        accountsPanel.add(new JLabel("选课管理员：courseadmin / CourseAdmin@123"));
+        accountsPanel.add(new JLabel("图书管理员：libraryadmin / LibraryAdmin@123"));
+        accountsPanel.add(new JLabel("商店管理员：shopadmin / ShopAdmin@123"));
         accountsPanel.add(new JLabel("医院管理员：hospitaladmin / HospitalAdmin@123"));
         return accountsPanel;
     }

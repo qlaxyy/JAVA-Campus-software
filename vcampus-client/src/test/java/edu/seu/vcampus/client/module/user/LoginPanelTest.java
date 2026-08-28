@@ -45,6 +45,10 @@ class LoginPanelTest {
         assertTrue(labels.contains("学生：student001 / Student@123"));
         assertTrue(labels.contains("教师：teacher001 / Teacher@123"));
         assertTrue(labels.contains("超级管理员：admin / Admin@123"));
+        assertTrue(labels.contains("学籍管理员：studentadmin / StudentAdmin@123"));
+        assertTrue(labels.contains("选课管理员：courseadmin / CourseAdmin@123"));
+        assertTrue(labels.contains("图书管理员：libraryadmin / LibraryAdmin@123"));
+        assertTrue(labels.contains("商店管理员：shopadmin / ShopAdmin@123"));
         assertTrue(labels.contains("医院管理员：hospitaladmin / HospitalAdmin@123"));
     }
 

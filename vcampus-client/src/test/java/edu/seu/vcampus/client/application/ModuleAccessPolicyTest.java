@@ -19,14 +19,14 @@ class ModuleAccessPolicyTest {
                 "token-value", "user-id", "username", "display name", Role.SUPER_ADMIN);
         assertTrue(ModuleAccessPolicy.isVisible(superAdmin, ModuleNames.USER));
         assertFalse(ModuleAccessPolicy.isVisible(
-                session(Role.STUDENT, Set.of(AdminScope.HOSPITAL)), ModuleNames.USER));
+                session(Role.USER, Set.of(AdminScope.HOSPITAL)), ModuleNames.USER));
         assertFalse(ModuleAccessPolicy.isVisible(
-                session(Role.STUDENT, Set.of()), ModuleNames.USER));
+                session(Role.USER, Set.of()), ModuleNames.USER));
     }
 
     @Test
     void subsystemAdminStillSeesOrdinaryBusinessModules() {
-        SessionInfo session = session(Role.STUDENT, Set.of(AdminScope.HOSPITAL));
+        SessionInfo session = session(Role.USER, Set.of(AdminScope.HOSPITAL));
 
         assertTrue(ModuleAccessPolicy.isVisible(session, ModuleNames.HOSPITAL));
         assertTrue(ModuleAccessPolicy.isVisible(session, ModuleNames.SHOP));
@@ -35,11 +35,11 @@ class ModuleAccessPolicyTest {
     }
 
     @Test
-    void studentsAndTeachersSeeBusinessModules() {
+    void regularUsersSeeBusinessModules() {
         assertTrue(ModuleAccessPolicy.isVisible(
-                session(Role.STUDENT, Set.of()), ModuleNames.HOSPITAL));
+                session(Role.USER, Set.of()), ModuleNames.HOSPITAL));
         assertTrue(ModuleAccessPolicy.isVisible(
-                session(Role.TEACHER, Set.of()), ModuleNames.COURSE));
+                session(Role.USER, Set.of()), ModuleNames.COURSE));
     }
 
     private static SessionInfo session(Role role, Set<AdminScope> scopes) {

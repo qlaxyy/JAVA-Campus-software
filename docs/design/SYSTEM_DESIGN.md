@@ -227,7 +227,7 @@ router.register(
 |---|---|---|
 | 普通登录功能 | `findSession(token)` 存在 | 查看选课批次、查询医院科室 |
 | 查询“我”的数据 | 从 `session.getUserId()` 取当前用户 | 我的学籍、我的预约、我的订单 |
-| 专业身份功能 | 用 `session.getUserId()` 查询本模块绑定 | 医生工作台、任课教师工作台 |
+| 需要本模块业务资格的功能 | 用 `session.getUserId()` 查询本模块保存的名单或资料 | 医院医生工作台、课程教师工作台 |
 | 子系统管理功能 | `sessions().canAdminister(token, ModuleNames.X)` | 医院排班管理、课程维护 |
 | 用户和授权管理 | `sessions().canManageUsers(token)` | 启停账号、授予 AdminScope |
 
@@ -252,7 +252,7 @@ if (!context.sessions().canAdminister(
 }
 ```
 
-专业身份不能用 `Role.TEACHER` 或管理权限代替。例如医院医生必须用 `userId` 查询有效医生绑定；医院管理员没有医生绑定时不能进入医生模式。
+全局 `Role.USER` 不表示学生、教师或医生。医院服务器必须用 `userId` 查询医院自己的医生名单；名单中没有这个账号，即使它有医院管理权限，也不能进入医生模式。
 
 ### 模块有多个模式时怎么做
 
@@ -298,7 +298,7 @@ Repository / DAO：查询和写入数据，不决定界面与网络行为
 
 最容易混淆的是“服务器怎么知道我是谁”。答案分成两步：
 
-1. **第一次登录时看账号记录。** 服务器根据用户名找到账号，验证密码，并从账号记录中读取 `userId`、基础身份 `Role` 和管理范围 `AdminScope`。
+1. **第一次登录时看账号记录。** 服务器根据用户名找到账号，验证密码，并从账号记录中读取 `userId`、账号级 `Role` 和管理范围 `AdminScope`。
 2. **登录后的请求看 token。** 服务器生成一个随机 token，把它和上述身份信息组成 Session。客户端以后只带 token，服务器通过 token 找回 Session。
 
 身份不是用户在登录页选择的，也不是客户端猜出来的。客户端即使伪造“我是管理员”，服务器也不会相信。
@@ -316,14 +316,14 @@ Repository / DAO：查询和写入数据，不决定界面与网络行为
 
 ```text
 userId      = U-HOSPITAL-ADMIN-001
-Role        = STUDENT
+Role        = USER
 AdminScope  = HOSPITAL
 ```
 
 这三项分别表示：
 
 - `userId`：这是哪一个具体的人；
-- `Role.STUDENT`：这个人的校园基础身份是学生，所以可以作为患者使用医院；
+- `Role.USER`：这是普通账号，不是超级管理员；它不表示这个人是学生、教师或医生；
 - `AdminScope.HOSPITAL`：这个账号额外获得了医院数据管理权。
 
 密码验证成功后，服务器创建 Session：
@@ -338,7 +338,7 @@ Session(userId, Role, AdminScope)
 
 ```text
 患者模式：已经登录                         → 可以进入
-医生模式：userId 是否存在有效医生绑定       → 不可以进入
+医生模式：医院医生名单中是否有这个 userId    → 不可以进入
 管理模式：是否具有 AdminScope.HOSPITAL      → 可以进入
 ```
 
@@ -348,10 +348,10 @@ Session(userId, Role, AdminScope)
 
 | 对象 | 谁产生 | 主要作用 | 什么时候使用 |
 |---|---|---|---|
-| 账号记录 | 超级管理员/用户数据库 | 保存这个人的基础身份和授权 | 登录验证时读取 |
+| 账号记录 | 超级管理员/用户数据库 | 保存账号级角色和管理授权 | 登录验证时读取 |
 | Session | 服务器 | 保存这一次登录对应的人和权限 | 登录成功后创建 |
 | token | 服务器 | 找到某一条 Session 的随机通行证 | 每个后续请求携带 |
-| 模块绑定 | 对应子系统 | 判断医生、任课教师等专业身份 | 进入专业模式或执行业务时查询 |
+| 子系统业务资料 | 对应子系统 | 例如医院医生名单、课程任课记录 | 进入相应工作台或执行业务时查询 |
 
 ```mermaid
 sequenceDiagram
@@ -368,7 +368,7 @@ sequenceDiagram
     Auth-->>Login: 返回 SessionInfo 和 token
     Login->>Hospital: HOSPITAL.GET_MODE_ACCESS(token)
     Hospital->>Session: 用 token 查 SessionInfo
-    Hospital->>Hospital: 用 userId 查医生绑定，用 AdminScope 查管理权
+    Hospital->>Hospital: 用 userId 查医院医生名单，用 AdminScope 查管理权
     Hospital-->>Login: 患者=是，医生=否，管理员=是
 ```
 
@@ -377,10 +377,10 @@ sequenceDiagram
 ## 2. 核心设计原则
 
 1. **一人一个账号。** 登录时只输入账号和密码，不选择“学生、教师、医生或管理员”。
-2. **基础身份与附加能力分离。** `Role` 表示基础身份，当前为 `STUDENT`、`TEACHER`、`SUPER_ADMIN`；`AdminScope` 表示可管理的业务模块。
-3. **管理员不是第二个账号，也不是覆盖基础身份的新身份。** 例如医院管理员可以是 `STUDENT + HOSPITAL`，所以同一账号既能作为患者使用医院，也能进入医院管理工作台。
-4. **专业身份由子系统维护。** 医生资格由医院的有效医生绑定决定，不由全局 `Role` 或 `AdminScope` 推断；其他模块的专业身份也采用相同原则。
-5. **模式属于子系统界面，不属于全局账号。** 系统不设置全局 `USER / MANAGEMENT` 模式。每个子系统根据当前账号的普通身份、专业绑定和管理范围显示自己的模式入口。
+2. **全局账号角色保持最小。** `Role` 只表示普通账号 `USER` 或超级管理员 `SUPER_ADMIN`；学生、教师、医生等业务资格不放入全局 `Role`。
+3. **子系统管理员不是新的登录身份。** 例如医院管理员是 `USER + AdminScope.HOSPITAL`；同一账号仍可按各子系统自己的规则进入其他工作台。
+4. **业务资格由各子系统自己的数据决定。** 能否当医生，要看医院医生名单；不能只看全局 `Role` 或管理权限。其他模块也应查询自己的业务资料。
+5. **模式属于子系统界面，不属于全局账号。** 系统不设置全局 `USER / MANAGEMENT` 模式。每个子系统分别判断当前账号能进入哪些工作台。
 6. **服务器是权限边界。** 客户端隐藏按钮只用于改善体验；每个管理请求都必须在对应 `ServerModule / Service` 中再次校验会话和 `AdminScope`。
 7. **客户端不访问数据库。** 数据链路固定为 `Swing → ClientContext → Action/DTO → ServerModule → Service → Repository/DAO → Access`。
 
@@ -396,8 +396,7 @@ classDiagram
     }
     class Role {
         <<enumeration>>
-        STUDENT
-        TEACHER
+        USER
         SUPER_ADMIN
     }
     class AdminScope {
@@ -408,10 +407,10 @@ classDiagram
         SHOP
         HOSPITAL
     }
-    class ModuleBinding {
+    class ModuleBusinessRecord {
         <<module-owned>>
-        doctorBinding
-        otherProfessionalBinding
+        hospitalDoctorRecord
+        courseTeacherRecord
     }
     class SessionInfo {
         +Role role
@@ -420,31 +419,32 @@ classDiagram
         +canAdminister(moduleId) boolean
     }
 
-    UserAccount --> Role : 基础身份
+    UserAccount --> Role : 账号级角色
     UserAccount "1" --> "0..*" AdminScope : 附加管理授权
-    UserAccount "1" --> "0..*" ModuleBinding : 子系统专业身份
+    UserAccount "1" --> "0..*" ModuleBusinessRecord : 子系统按 userId 保存业务资料
     UserAccount --> SessionInfo : 登录后由服务器签发
 ```
 
-三类概念不能混用：
+不要试图用一个字段同时表示“教师、医生、管理员”。进入医院后，服务器会分别回答三个简单问题：
 
-| 概念 | 回答的问题 | 示例 |
+| 要判断什么 | 服务器查什么 | `hospitaladmin` 的结果 |
 |---|---|---|
-| `Role` | 这个人在校园中的基础身份是什么 | 学生、教师、超级管理员 |
-| `AdminScope` | 这个账号可以维护哪些模块的数据 | `HOSPITAL`、`COURSE` |
-| 模块绑定 | 这个人在某模块是否具有专业业务身份 | 有效医生、任课教师 |
-| 当前模式 | 用户这一次准备使用哪个工作台 | 患者、医生、医院管理员 |
+| 账号是否已经登录 | token 能否找到 Session | 是，所以能进入患者模式 |
+| 账号是不是医院登记的医生 | 医院医生名单中是否有当前 `userId` | 否，所以不能进入医生模式 |
+| 账号能否维护医院数据 | Session 中是否有 `AdminScope.HOSPITAL` | 是，所以能进入管理员模式 |
 
-### 医院模式是标准示例
+### 不同账号能进入哪些医院工作台
 
-| 账号能力 | 患者模式 | 医生模式 | 管理员模式 |
+| 服务器中保存的账号资料 | 患者模式 | 医生模式 | 管理员模式 |
 |---|---:|---:|---:|
-| 普通学生 | 是 | 否 | 否 |
-| 有效医生绑定的教师 | 是 | 是 | 否 |
-| `STUDENT + HOSPITAL` | 是 | 否 | 是 |
-| `SUPER_ADMIN`、无医生绑定 | 是 | 否 | 是 |
+| 已登录，不在医生名单中，也没有医院管理权限 | 是 | 否 | 否 |
+| 在医院医生名单中，但没有医院管理权限 | 是 | 是 | 否 |
+| 不在医院医生名单中，但有医院管理权限 | 是 | 否 | 是 |
+| 既在医生名单中，又有医院管理权限 | 是 | 是 | 是 |
 
-进入某个模式不会改变账号权限，只会切换当前工作台。医生模式检查医院绑定，管理员模式检查 `session.canAdminister(HOSPITAL)`。
+当前开发数据为了少建一个账号，复用了名为 `teacher001` 的普通账号。它的全局角色是 `USER`，医院医生名单中登记了它的 `userId`，因此它能进入医生模式。账号名称不决定权限，其他普通账号不会自动获得医生资格。
+
+进入某个模式不会改变账号资料或权限，只会切换当前工作台。医生模式查询医院医生名单，管理员模式检查 `session.canAdminister(HOSPITAL)`。
 
 ## 4. 登录、导航和服务器鉴权
 
@@ -460,7 +460,7 @@ flowchart TD
     G --> I[专业模式]
     G --> J[管理员模式]
     H --> K[发送普通 Action]
-    I --> L[校验模块专业绑定]
+    I --> L[查询本模块的业务名单或资料]
     J --> M[校验对应 AdminScope]
     K --> N[Service 业务校验]
     L --> N
@@ -475,7 +475,7 @@ flowchart TD
 - 所有已登录账号都能看到学籍、选课、图书馆、商店和医院等普通业务模块。
 - 用户管理入口只对 `SUPER_ADMIN` 显示。
 - 子系统管理员仍能使用其他模块的普通功能，但只能管理 `AdminScope` 中的模块。
-- 超级管理员隐式拥有全部 `AdminScope`，但不会因此自动获得医生等专业绑定。
+- 超级管理员隐式拥有全部 `AdminScope`，但如果医院医生名单中没有它，也不能进入医生模式。
 
 ## 5. 各子系统的模式边界
 
@@ -486,7 +486,7 @@ flowchart TD
 | 选课系统 | 学生查看选课批次、后续选退课 | `AdminScope.COURSE` | 批次列表已实现；具体选退课待开发 |
 | 图书馆 | 读者检索、借阅和归还 | `AdminScope.LIBRARY` | 待开发 |
 | 商店 | 顾客浏览、购物车和订单 | `AdminScope.SHOP` | 待开发 |
-| 医院 | 患者模式；有效医生绑定可进入医生模式 | `AdminScope.HOSPITAL` | 三模式入口及患者号源查询已实现 |
+| 医院 | 患者模式；医院医生名单中的账号可进入医生模式 | `AdminScope.HOSPITAL` | 三模式入口及患者号源查询已实现 |
 
 每个模块负责人需要在自己的 Epic 和 PR 中明确：
 

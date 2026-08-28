@@ -10,7 +10,7 @@
 
 | 表名 | 业务含义 | 主键 | 重要约束 |
 |---|---|---|---|
-| `tblUser` | 登录账号和基础身份 | `userId` | `username` 唯一；密码只存带盐慢哈希；状态控制登录 |
+| `tblUser` | 登录账号和账号级权限 | `userId` | `username` 唯一；密码只存带盐慢哈希；状态控制登录 |
 | `tblUserAdminScope` | 账号附加的业务管理范围 | `userAdminScopeId` | `(userId, moduleCode)` 唯一 |
 | `tblUserAuditLog` | 用户与授权管理审计 | `auditLogId` | 只追加；不记录密码、盐或完整 token |
 
@@ -27,7 +27,7 @@
 | `passwordHash` | Short Text(255) | 是 | 无 | 慢哈希结果；算法和参数随记录保存或统一版本化 |
 | `passwordSalt` | Short Text(255) | 是 | 无 | 每个账号独立的密码盐 |
 | `displayName` | Short Text(100) | 是 | 无 | 界面显示名，不用于鉴权 |
-| `roleCode` | Short Text(20) | 是 | 无 | `STUDENT`、`TEACHER`、`SUPER_ADMIN` |
+| `roleCode` | Short Text(20) | 是 | `USER` | `USER`、`SUPER_ADMIN`；不保存学生、教师、医生等子系统业务身份 |
 | `status` | Short Text(20) | 是 | `ACTIVE` | `ACTIVE`、`DISABLED`、`LOCKED` |
 | `passwordChangedAt` | Date/Time | 是 | 当前时间 | 支持密码策略和会话失效判断 |
 | `createdAt` | Date/Time | 是 | 当前时间 | 创建时间 |
@@ -59,7 +59,7 @@
 
 - `tblUser.username` 建唯一索引。
 - `tblUserAdminScope.userId + moduleCode` 建联合唯一索引。
-- `STUDENT`、`TEACHER` 可以存在零到多条范围记录；`SUPER_ADMIN` 不写范围记录时也由角色隐式覆盖所有业务模块。
+- `USER` 可以存在零到多条范围记录；`SUPER_ADMIN` 不写范围记录时也由角色隐式覆盖所有业务模块。
 - 只有 `SUPER_ADMIN` 可以新增管理员、分配/撤销范围、修改角色、启停账号和重置他人密码。
 - 至少保留一个 `ACTIVE` 的 `SUPER_ADMIN`；禁止停用自己、删除自己或撤销最后一个启用超级管理员。
 - 管理员只能发起密码重置，不能查看或恢复原密码。
@@ -70,14 +70,14 @@
 
 | 用户名 | 角色 | 管理范围 | 用途 |
 |---|---|---|---|
-| `student001` | `STUDENT` | 无 | 学生端流程 |
-| `teacher001` | `TEACHER` | 无 | 教师端流程 |
+| `student001` | `USER` | 无 | 普通账号；学籍资格由学籍子系统数据决定 |
+| `teacher001` | `USER` | 无 | 普通账号；当前医院医生名单包含其 `userId` |
 | `admin` | `SUPER_ADMIN` | 隐式全部 | 用户管理与全局管理流程 |
-| `studentadmin` | `STUDENT` | `STUDENT` | 学生身份 + 学籍管理授权 |
-| `courseadmin` | `STUDENT` | `COURSE` | 学生身份 + 选课管理授权 |
-| `libraryadmin` | `STUDENT` | `LIBRARY` | 学生身份 + 图书馆管理授权 |
-| `shopadmin` | `STUDENT` | `SHOP` | 学生身份 + 商店管理授权 |
-| `hospitaladmin` | `STUDENT` | `HOSPITAL` | 患者身份 + 医院管理授权；无医生绑定 |
+| `studentadmin` | `USER` | `STUDENT` | 学籍管理授权 |
+| `courseadmin` | `USER` | `COURSE` | 选课管理授权 |
+| `libraryadmin` | `USER` | `LIBRARY` | 图书馆管理授权 |
+| `shopadmin` | `USER` | `SHOP` | 商店管理授权 |
+| `hospitaladmin` | `USER` | `HOSPITAL` | 医院管理授权；当前不在医院医生名单中 |
 
 这些账号当前由 `InMemoryAuthenticationService` 提供，接入 Access 时用虚构数据替换，不能提交真实个人信息或密码。
 

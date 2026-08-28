@@ -60,8 +60,7 @@ classDiagram
     }
     class Role {
         <<enumeration>>
-        STUDENT
-        TEACHER
+        USER
         SUPER_ADMIN
     }
     class AdminScope {
@@ -166,7 +165,7 @@ sequenceDiagram
 ## 5. 各模块实现约定
 
 - 每个模块自己定义模式；管理按钮只在服务器确认该模块 `AdminScope` 后出现。
-- 同一账号可进入多个模式，但一次只进入一个工作台。以医院为例，医院管理员可进入患者和管理员模式；只有有效医生绑定才能进入医生模式。
+- 同一账号可进入多个模式，但一次只进入一个工作台。以医院为例，医院管理员可进入患者和管理员模式；只有医院医生名单中登记过的账号才能进入医生模式。
 - 每个管理 Action 都在对应 Epic 写明所需 `AdminScope`、DTO、校验、错误码和测试。
 - 客户端校验用于及时提示；服务器必须重复校验输入、身份和业务约束。
 - 数据库只允许服务器 DAO 访问；客户端和 common 层不得出现 JDBC、SQL 或 Access 路径。

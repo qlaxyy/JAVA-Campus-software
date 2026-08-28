@@ -32,7 +32,7 @@ class AuthenticationIntegrationTest {
 
             assertTrue(login.isSuccess());
             SessionInfo session = assertInstanceOf(SessionInfo.class, login.getData());
-            assertEquals(Role.STUDENT, session.getRole());
+            assertEquals(Role.USER, session.getRole());
             assertFalse(session.getToken().isBlank());
             assertTrue(context.currentSession().isPresent());
 
@@ -82,7 +82,7 @@ class AuthenticationIntegrationTest {
 
             assertTrue(login.isSuccess());
             SessionInfo session = assertInstanceOf(SessionInfo.class, login.getData());
-            assertEquals(Role.STUDENT, session.getRole());
+            assertEquals(Role.USER, session.getRole());
             assertEquals(java.util.Set.of(AdminScope.HOSPITAL), session.getAdminScopes());
         }
     }
@@ -106,7 +106,7 @@ class AuthenticationIntegrationTest {
                         entry.getKey(), "123456".toCharArray());
                 assertTrue(login.isSuccess(), entry.getKey());
                 SessionInfo session = assertInstanceOf(SessionInfo.class, login.getData());
-                assertEquals(Role.STUDENT, session.getRole());
+                assertEquals(Role.USER, session.getRole());
                 assertEquals(Set.of(entry.getValue().scope()), session.getAdminScopes());
             }
         }

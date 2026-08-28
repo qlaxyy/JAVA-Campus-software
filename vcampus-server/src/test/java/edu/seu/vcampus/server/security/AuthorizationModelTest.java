@@ -26,8 +26,8 @@ class AuthorizationModelTest {
     }
 
     @Test
-    void baseIdentityCanCarryAnAssignedAdminScope() {
-        SessionInfo session = session(Role.STUDENT, Set.of(AdminScope.HOSPITAL));
+    void regularUserCanCarryAnAssignedAdminScope() {
+        SessionInfo session = session(Role.USER, Set.of(AdminScope.HOSPITAL));
 
         assertFalse(session.canManageUsers());
         assertTrue(session.canAdminister(ModuleNames.HOSPITAL));

@@ -181,7 +181,7 @@ router.register(
 |---|---|
 | 普通登录功能 | `findSession(token)` 存在 |
 | 查询“我的数据” | 使用 `session.getUserId()`，不相信客户端 userId |
-| 医生、任课教师等专业功能 | 用 `userId` 查询本模块专业绑定 |
+| 医生、任课教师等需要业务资格的功能 | 用 `userId` 查询本模块保存的名单或业务资料 |
 | 子系统管理功能 | `sessions().canAdminister(token, ModuleNames.X)` |
 | 账号和授权管理 | `sessions().canManageUsers(token)` |
 
@@ -202,7 +202,7 @@ if (!context.sessions().canAdminister(
 }
 ```
 
-不能用 `Role.TEACHER` 推断医生，也不能用管理权限代替医生绑定。
+不能用 `Role.TEACHER` 推断医生，也不能用医院管理权限代替医生资格。医院应直接检查：医院医生名单中是否登记了当前 `userId`。
 
 ## 9. 多模式模块
 

@@ -2,6 +2,7 @@ package edu.seu.vcampus.server.module.course;
 
 import edu.seu.vcampus.common.course.BatchRequest;
 import edu.seu.vcampus.common.course.CourseActions;
+import edu.seu.vcampus.common.course.DropCourseRequest;
 import edu.seu.vcampus.common.course.SelectCourseRequest;
 import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.ModuleNames;
@@ -22,44 +23,40 @@ import java.util.Objects;
 public final class CourseServerModule
     implements ServerModule {
 
-    private final CourseBatchService batchService;
-    private final CoursePlanService planService;
-    private final CourseSelectionService selectionService;
+    private final CourseBatchService
+        batchService;
+
+    private final CoursePlanService
+        planService;
+
+    private final CourseSelectionService
+        selectionService;
+
+    private final CourseEnrollmentService
+        enrollmentService;
 
     /**
      * 默认构造器。
-     *
-     * 当前开发阶段使用内存 Repository。
      */
     public CourseServerModule() {
 
         Clock clock =
             Clock.systemDefaultZone();
 
-        /*
-         * 批次数据。
-         */
         CourseBatchService batchService =
             new CourseBatchService(
                 new InMemoryCourseBatchRepository(
                     clock),
                 clock);
 
-        /*
-         * 方案内课程原始数据。
-         */
         CoursePlanRepository planRepository =
             new InMemoryCoursePlanRepository();
 
         /*
-         * 选课记录。
-         *
-         * CoursePlanService 和 CourseSelectionService
-         * 必须共用同一个 Repository，
-         * 否则选课之后查询课程时看不到最新状态。
+         * 所有涉及选课状态的 Service
+         * 必须共用同一个 enrollmentRepository。
          */
-        CourseEnrollmentRepository
-            enrollmentRepository =
+        CourseEnrollmentRepository enrollmentRepository =
             new InMemoryCourseEnrollmentRepository();
 
         this.batchService =
@@ -75,30 +72,38 @@ public final class CourseServerModule
                 batchService,
                 planRepository,
                 enrollmentRepository);
+
+        this.enrollmentService =
+            new CourseEnrollmentService(
+                batchService,
+                planRepository,
+                enrollmentRepository);
     }
 
     /**
-     * 用于测试或后续依赖注入的构造器。
+     * 测试或依赖注入使用。
      */
     CourseServerModule(
         CourseBatchService batchService,
         CoursePlanService planService,
-        CourseSelectionService selectionService) {
+        CourseSelectionService selectionService,
+        CourseEnrollmentService enrollmentService) {
 
         this.batchService =
             Objects.requireNonNull(
-                batchService,
-                "batchService must not be null");
+                batchService);
 
         this.planService =
             Objects.requireNonNull(
-                planService,
-                "planService must not be null");
+                planService);
 
         this.selectionService =
             Objects.requireNonNull(
-                selectionService,
-                "selectionService must not be null");
+                selectionService);
+
+        this.enrollmentService =
+            Objects.requireNonNull(
+                enrollmentService);
     }
 
     @Override
@@ -107,17 +112,11 @@ public final class CourseServerModule
         return ModuleNames.COURSE;
     }
 
-    /**
-     * 注册选课模块所有服务器 Action。
-     */
     @Override
     public void registerHandlers(
         ActionRouter router,
         ServerContext context) {
 
-        /*
-         * 查询选课批次。
-         */
         router.register(
             CourseActions.LIST_BATCHES,
             request ->
@@ -125,9 +124,6 @@ public final class CourseServerModule
                     request,
                     context));
 
-        /*
-         * 查询方案内课程。
-         */
         router.register(
             CourseActions.LIST_PLAN_COURSES,
             request ->
@@ -135,27 +131,41 @@ public final class CourseServerModule
                     request,
                     context));
 
-        /*
-         * 选择教学班。
-         */
         router.register(
             CourseActions.SELECT_COURSE,
             request ->
                 selectCourse(
                     request,
                     context));
+
+        /*
+         * 已选课程。
+         */
+        router.register(
+            CourseActions.LIST_ENROLLMENTS,
+            request ->
+                listEnrollments(
+                    request,
+                    context));
+
+        /*
+         * 退课。
+         */
+        router.register(
+            CourseActions.DROP_COURSE,
+            request ->
+                dropCourse(
+                    request,
+                    context));
     }
 
     /**
-     * 查询当前学期选课批次。
+     * 查询选课批次。
      */
     private Response listBatches(
         Request request,
         ServerContext context) {
 
-        /*
-         * 必须登录。
-         */
         if (context.sessions()
             .findSession(
                 request.getToken())
@@ -167,9 +177,6 @@ public final class CourseServerModule
                 "Please log in before using the course module.");
         }
 
-        /*
-         * LIST_BATCHES 不需要请求数据。
-         */
         if (request.getData() != null) {
 
             return Response.failure(
@@ -192,9 +199,6 @@ public final class CourseServerModule
         Request request,
         ServerContext context) {
 
-        /*
-         * 先根据 token 获取登录用户。
-         */
         SessionInfo session =
             context.sessions()
                 .findSession(
@@ -209,9 +213,6 @@ public final class CourseServerModule
                 "Please log in before using the course module.");
         }
 
-        /*
-         * LIST_PLAN_COURSES 必须传 BatchRequest。
-         */
         if (!(request.getData()
             instanceof BatchRequest batchRequest)) {
 
@@ -231,15 +232,12 @@ public final class CourseServerModule
     }
 
     /**
-     * 学生选择教学班。
+     * 选择课程。
      */
     private Response selectCourse(
         Request request,
         ServerContext context) {
 
-        /*
-         * 获取当前登录用户。
-         */
         SessionInfo session =
             context.sessions()
                 .findSession(
@@ -254,9 +252,6 @@ public final class CourseServerModule
                 "Please log in before selecting courses.");
         }
 
-        /*
-         * 请求数据必须是 SelectCourseRequest。
-         */
         if (!(request.getData()
             instanceof SelectCourseRequest
             selectRequest)) {
@@ -267,18 +262,12 @@ public final class CourseServerModule
                 "Course-selection request is invalid.");
         }
 
-        /*
-         * 真正的业务判断交给 Service。
-         */
         CourseSelectionResult result =
             selectionService.selectCourse(
                 session.getUserId(),
                 selectRequest.getBatchId(),
                 selectRequest.getOfferingId());
 
-        /*
-         * 业务失败。
-         */
         if (!result.success()) {
 
             return Response.failure(
@@ -287,9 +276,96 @@ public final class CourseServerModule
                 result.message());
         }
 
-        /*
-         * 选课成功。
-         */
+        return Response.success(
+            request,
+            result.message(),
+            null);
+    }
+
+    /**
+     * 查询当前学生已选课程。
+     */
+    private Response listEnrollments(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "Please log in before viewing enrollments.");
+        }
+
+        if (!(request.getData()
+            instanceof BatchRequest batchRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "Enrollment request must contain a BatchRequest.");
+        }
+
+        return Response.success(
+            request,
+            "Enrollments loaded.",
+            new ArrayList<>(
+                enrollmentService.listEnrollments(
+                    session.getUserId(),
+                    batchRequest.getBatchId())));
+    }
+
+    /**
+     * 退课。
+     */
+    private Response dropCourse(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "Please log in before dropping courses.");
+        }
+
+        if (!(request.getData()
+            instanceof DropCourseRequest
+            dropRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "Drop-course request is invalid.");
+        }
+
+        CourseDropResult result =
+            enrollmentService.dropCourse(
+                session.getUserId(),
+                dropRequest.getBatchId(),
+                dropRequest.getEnrollmentId());
+
+        if (!result.success()) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                result.message());
+        }
+
         return Response.success(
             request,
             result.message(),

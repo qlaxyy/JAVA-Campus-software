@@ -41,16 +41,16 @@ java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.v
 
 | 身份 | 账户名 | 密码 |
 |---|---|---|
-| 学生 | `student001` | `Student@123` |
-| 教师 | `teacher001` | `Teacher@123` |
-| 超级管理员 | `admin` | `Admin@123` |
-| 学籍子系统管理员 | `studentadmin` | `StudentAdmin@123` |
-| 选课子系统管理员 | `courseadmin` | `CourseAdmin@123` |
-| 图书馆子系统管理员 | `libraryadmin` | `LibraryAdmin@123` |
-| 商店子系统管理员 | `shopadmin` | `ShopAdmin@123` |
-| 医院子系统管理员 | `hospitaladmin` | `HospitalAdmin@123` |
+| 学生 | `student001` | `123456` |
+| 教师（医院医生） | `teacher001` | `123456` |
+| 超级管理员 | `admin` | `123456` |
+| 学籍子系统管理员（学生） | `studentadmin` | `123456` |
+| 选课子系统管理员（学生） | `courseadmin` | `123456` |
+| 图书馆子系统管理员（学生） | `libraryadmin` | `123456` |
+| 商店子系统管理员（学生） | `shopadmin` | `123456` |
+| 医院子系统管理员（患者） | `hospitaladmin` | `123456` |
 
-这些是公开的虚构测试账号，不得用于真实系统或复用个人密码。
+这些是公开的虚构测试账号，统一简单密码仅用于联调，不得用于真实系统或复用个人密码。每个人只有一个账号；管理员权限是在学生/教师基础身份之上的附加授权。
 
 登录页只输入账号和密码，不让用户自行选择身份。角色和子系统管理范围由服务器根据账号加载：超级管理员可管理账号、分配子系统管理员并进入所有管理模块；子系统管理员只能进入获授权模块。客户端隐藏无权入口，服务器仍会对每个管理请求独立鉴权。
 

@@ -11,7 +11,7 @@
 | 表名 | 业务含义 | 主键 | 重要约束 |
 |---|---|---|---|
 | `tblUser` | 登录账号和基础身份 | `userId` | `username` 唯一；密码只存带盐慢哈希；状态控制登录 |
-| `tblUserAdminScope` | 子系统管理员的业务管理范围 | `userAdminScopeId` | `(userId, moduleCode)` 唯一；仅 `MODULE_ADMIN` 使用 |
+| `tblUserAdminScope` | 账号附加的业务管理范围 | `userAdminScopeId` | `(userId, moduleCode)` 唯一 |
 | `tblUserAuditLog` | 用户与授权管理审计 | `auditLogId` | 只追加；不记录密码、盐或完整 token |
 
 会话第一阶段仍保存在服务器内存，暂不落库。将来需要跨进程或重启保持会话时再单独评审会话表。
@@ -27,7 +27,7 @@
 | `passwordHash` | Short Text(255) | 是 | 无 | 慢哈希结果；算法和参数随记录保存或统一版本化 |
 | `passwordSalt` | Short Text(255) | 是 | 无 | 每个账号独立的密码盐 |
 | `displayName` | Short Text(100) | 是 | 无 | 界面显示名，不用于鉴权 |
-| `roleCode` | Short Text(20) | 是 | 无 | `STUDENT`、`TEACHER`、`MODULE_ADMIN`、`SUPER_ADMIN` |
+| `roleCode` | Short Text(20) | 是 | 无 | `STUDENT`、`TEACHER`、`SUPER_ADMIN` |
 | `status` | Short Text(20) | 是 | `ACTIVE` | `ACTIVE`、`DISABLED`、`LOCKED` |
 | `passwordChangedAt` | Date/Time | 是 | 当前时间 | 支持密码策略和会话失效判断 |
 | `createdAt` | Date/Time | 是 | 当前时间 | 创建时间 |
@@ -59,7 +59,7 @@
 
 - `tblUser.username` 建唯一索引。
 - `tblUserAdminScope.userId + moduleCode` 建联合唯一索引。
-- `STUDENT`、`TEACHER` 不能存在范围记录；`MODULE_ADMIN` 至少存在一条；`SUPER_ADMIN` 不写范围记录，权限由角色隐式覆盖所有业务模块。
+- `STUDENT`、`TEACHER` 可以存在零到多条范围记录；`SUPER_ADMIN` 不写范围记录时也由角色隐式覆盖所有业务模块。
 - 只有 `SUPER_ADMIN` 可以新增管理员、分配/撤销范围、修改角色、启停账号和重置他人密码。
 - 至少保留一个 `ACTIVE` 的 `SUPER_ADMIN`；禁止停用自己、删除自己或撤销最后一个启用超级管理员。
 - 管理员只能发起密码重置，不能查看或恢复原密码。
@@ -73,11 +73,11 @@
 | `student001` | `STUDENT` | 无 | 学生端流程 |
 | `teacher001` | `TEACHER` | 无 | 教师端流程 |
 | `admin` | `SUPER_ADMIN` | 隐式全部 | 用户管理与全局管理流程 |
-| `studentadmin` | `MODULE_ADMIN` | `STUDENT` | 学籍管理模式开发与越权测试 |
-| `courseadmin` | `MODULE_ADMIN` | `COURSE` | 选课管理模式开发与越权测试 |
-| `libraryadmin` | `MODULE_ADMIN` | `LIBRARY` | 图书馆管理模式开发与越权测试 |
-| `shopadmin` | `MODULE_ADMIN` | `SHOP` | 商店管理模式开发与越权测试 |
-| `hospitaladmin` | `MODULE_ADMIN` | `HOSPITAL` | 子系统越权边界测试 |
+| `studentadmin` | `STUDENT` | `STUDENT` | 学生身份 + 学籍管理授权 |
+| `courseadmin` | `STUDENT` | `COURSE` | 学生身份 + 选课管理授权 |
+| `libraryadmin` | `STUDENT` | `LIBRARY` | 学生身份 + 图书馆管理授权 |
+| `shopadmin` | `STUDENT` | `SHOP` | 学生身份 + 商店管理授权 |
+| `hospitaladmin` | `STUDENT` | `HOSPITAL` | 患者身份 + 医院管理授权；无医生绑定 |
 
 这些账号当前由 `InMemoryAuthenticationService` 提供，接入 Access 时用虚构数据替换，不能提交真实个人信息或密码。
 
@@ -88,7 +88,7 @@
 | `USER.ADMIN_LIST_ACCOUNTS` | `SUPER_ADMIN` | 按用户名、角色、状态查询账号 |
 | `USER.ADMIN_UPDATE_STATUS` | `SUPER_ADMIN` | 启用、停用或解锁账号 |
 | `USER.ADMIN_GRANT_SCOPE` | `SUPER_ADMIN` | 给子系统管理员增加业务范围 |
-| `USER.ADMIN_REVOKE_SCOPE` | `SUPER_ADMIN` | 撤销业务范围，不能留下无范围的 `MODULE_ADMIN` |
+| `USER.ADMIN_REVOKE_SCOPE` | `SUPER_ADMIN` | 撤销账号的某项附加业务管理范围 |
 
 第一条端到端链路先实现“查询账号 + 启用/停用”。创建账号、修改角色、重置密码和审计查询在后续 PR 增加。
 

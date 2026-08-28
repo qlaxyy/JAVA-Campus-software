@@ -62,7 +62,6 @@ classDiagram
         <<enumeration>>
         STUDENT
         TEACHER
-        MODULE_ADMIN
         SUPER_ADMIN
     }
     class AdminScope {
@@ -81,12 +80,13 @@ classDiagram
         +canAdminister(moduleId) boolean
     }
     class ModuleAccessPolicy {
-        +modeFor(session, moduleId) Optional~ModuleViewMode~
+        +isVisible(session, moduleId) boolean
     }
-    class ModuleViewMode {
+    class HospitalMode {
         <<enumeration>>
-        USER
-        MANAGEMENT
+        PATIENT
+        DOCTOR
+        ADMIN
     }
     class SessionLookup {
         +findSession(token) Optional~SessionInfo~
@@ -99,12 +99,12 @@ classDiagram
     class DAO
 
     UserAccount --> Role
-    UserAccount "1" --> "0..*" AdminScope : MODULE_ADMIN 授权
+    UserAccount "1" --> "0..*" AdminScope : 附加管理授权
     UserAccount --> SessionInfo : 登录后签发
     SessionInfo --> Role
     SessionInfo --> AdminScope
     ModuleAccessPolicy --> SessionInfo
-    ModuleAccessPolicy --> ModuleViewMode
+    SessionInfo --> HospitalMode : 服务器计算可进入模式
     SessionLookup --> SessionInfo
     ServerModule --> SessionLookup : 服务器鉴权
     ServerModule --> Service
@@ -116,18 +116,20 @@ classDiagram
 ```mermaid
 flowchart TD
     A[输入账号和密码] --> B[服务器验证凭据并加载 Role / AdminScope]
-    B --> C{角色}
-    C -->|STUDENT / TEACHER| D[显示业务模块 · 用户模式]
-    C -->|MODULE_ADMIN| E[只显示 AdminScope 对应模块 · 管理模式]
-    C -->|SUPER_ADMIN| F[显示用户管理和全部业务模块 · 管理模式]
-    D --> G[发送普通业务 Action]
-    E --> H[发送模块管理 Action]
-    F --> H
-    G --> I[服务器校验已登录及业务规则]
-    H --> J[服务器再次校验角色与模块范围]
-    J -->|无权限| K[返回 AUTH_FORBIDDEN]
-    J -->|有权限| L[Service 校验并调用 DAO]
-    L --> M[(Access 数据库)]
+    B --> C[所有账号显示普通业务模块]
+    C --> D[进入具体子系统]
+    D --> E{服务器计算模块内模式权限}
+    E -->|普通业务身份| F[患者/读者/消费者等普通模式]
+    E -->|模块业务绑定| G[医生/教师等专业模式]
+    E -->|具有对应 AdminScope| H[管理员模式]
+    F --> I[发送普通业务 Action]
+    G --> I
+    H --> J[发送模块管理 Action]
+    I --> K[服务器校验已登录及业务规则]
+    J --> L[服务器再次校验模块范围]
+    L -->|无权限| M[返回 AUTH_FORBIDDEN]
+    L -->|有权限| N[Service 校验并调用 DAO]
+    N --> O[(Access 数据库)]
 ```
 
 ## 4. 管理员修改业务数据时序图
@@ -163,7 +165,8 @@ sequenceDiagram
 
 ## 5. 各模块实现约定
 
-- 普通模式与管理模式可以复用查询页面，但管理按钮只在 `MANAGEMENT` 下出现。
+- 每个模块自己定义模式；管理按钮只在服务器确认该模块 `AdminScope` 后出现。
+- 同一账号可进入多个模式，但一次只进入一个工作台。以医院为例，医院管理员可进入患者和管理员模式；只有有效医生绑定才能进入医生模式。
 - 每个管理 Action 都在对应 Epic 写明所需 `AdminScope`、DTO、校验、错误码和测试。
 - 客户端校验用于及时提示；服务器必须重复校验输入、身份和业务约束。
 - 数据库只允许服务器 DAO 访问；客户端和 common 层不得出现 JDBC、SQL 或 Access 路径。

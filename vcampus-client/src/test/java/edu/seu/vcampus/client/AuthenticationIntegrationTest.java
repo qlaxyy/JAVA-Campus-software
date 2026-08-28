@@ -28,7 +28,7 @@ class AuthenticationIntegrationTest {
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
 
-            Response login = context.login("student001", "Student@123".toCharArray());
+            Response login = context.login("student001", "123456".toCharArray());
 
             assertTrue(login.isSuccess());
             SessionInfo session = assertInstanceOf(SessionInfo.class, login.getData());
@@ -78,11 +78,11 @@ class AuthenticationIntegrationTest {
                     new CampusClient("127.0.0.1", server.getPort()));
 
             Response login = context.login(
-                    "hospitaladmin", "HospitalAdmin@123".toCharArray());
+                    "hospitaladmin", "123456".toCharArray());
 
             assertTrue(login.isSuccess());
             SessionInfo session = assertInstanceOf(SessionInfo.class, login.getData());
-            assertEquals(Role.MODULE_ADMIN, session.getRole());
+            assertEquals(Role.STUDENT, session.getRole());
             assertEquals(java.util.Set.of(AdminScope.HOSPITAL), session.getAdminScopes());
         }
     }
@@ -90,11 +90,11 @@ class AuthenticationIntegrationTest {
     @Test
     void everySubsystemAdministratorReceivesItsOwnScope() throws Exception {
         Map<String, AdminLogin> accounts = Map.of(
-                "studentadmin", new AdminLogin("StudentAdmin@123", AdminScope.STUDENT),
-                "courseadmin", new AdminLogin("CourseAdmin@123", AdminScope.COURSE),
-                "libraryadmin", new AdminLogin("LibraryAdmin@123", AdminScope.LIBRARY),
-                "shopadmin", new AdminLogin("ShopAdmin@123", AdminScope.SHOP),
-                "hospitaladmin", new AdminLogin("HospitalAdmin@123", AdminScope.HOSPITAL));
+                "studentadmin", new AdminLogin(AdminScope.STUDENT),
+                "courseadmin", new AdminLogin(AdminScope.COURSE),
+                "libraryadmin", new AdminLogin(AdminScope.LIBRARY),
+                "shopadmin", new AdminLogin(AdminScope.SHOP),
+                "hospitaladmin", new AdminLogin(AdminScope.HOSPITAL));
 
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
@@ -103,15 +103,15 @@ class AuthenticationIntegrationTest {
 
             for (Map.Entry<String, AdminLogin> entry : accounts.entrySet()) {
                 Response login = context.login(
-                        entry.getKey(), entry.getValue().password().toCharArray());
+                        entry.getKey(), "123456".toCharArray());
                 assertTrue(login.isSuccess(), entry.getKey());
                 SessionInfo session = assertInstanceOf(SessionInfo.class, login.getData());
-                assertEquals(Role.MODULE_ADMIN, session.getRole());
+                assertEquals(Role.STUDENT, session.getRole());
                 assertEquals(Set.of(entry.getValue().scope()), session.getAdminScopes());
             }
         }
     }
 
-    private record AdminLogin(String password, AdminScope scope) {
+    private record AdminLogin(AdminScope scope) {
     }
 }

@@ -23,15 +23,4 @@ public interface ClientModule {
      */
     JComponent createView(ClientContext context);
 
-    /**
-     * Creates a role-aware module view. Existing modules keep their current
-     * user view until they override this method with management controls.
-     *
-     * @param context shared client context
-     * @param mode authenticated presentation mode
-     * @return module root component
-     */
-    default JComponent createView(ClientContext context, ModuleViewMode mode) {
-        return createView(context);
-    }
 }

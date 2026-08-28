@@ -105,8 +105,7 @@ public final class SessionInfo implements Serializable {
         if (role == Role.SUPER_ADMIN) {
             return AdminScope.fromModuleId(moduleId).isPresent();
         }
-        return role == Role.MODULE_ADMIN
-                && AdminScope.fromModuleId(moduleId).map(adminScopes::contains).orElse(false);
+        return AdminScope.fromModuleId(moduleId).map(adminScopes::contains).orElse(false);
     }
 
     /** @return whether this identity may manage accounts and administrator grants */
@@ -127,12 +126,6 @@ public final class SessionInfo implements Serializable {
                 ? EnumSet.noneOf(AdminScope.class)
                 : EnumSet.copyOf(scopes);
 
-        if (role == Role.MODULE_ADMIN && copy.isEmpty()) {
-            throw new IllegalArgumentException("MODULE_ADMIN must have at least one admin scope");
-        }
-        if ((role == Role.STUDENT || role == Role.TEACHER) && !copy.isEmpty()) {
-            throw new IllegalArgumentException(role + " must not have admin scopes");
-        }
         if (role == Role.SUPER_ADMIN && !copy.equals(EnumSet.allOf(AdminScope.class))) {
             throw new IllegalArgumentException("SUPER_ADMIN must have all admin scopes");
         }

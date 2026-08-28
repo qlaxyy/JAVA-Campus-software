@@ -26,8 +26,8 @@ class AuthorizationModelTest {
     }
 
     @Test
-    void moduleAdminIsLimitedToAssignedScopes() {
-        SessionInfo session = session(Role.MODULE_ADMIN, Set.of(AdminScope.HOSPITAL));
+    void baseIdentityCanCarryAnAssignedAdminScope() {
+        SessionInfo session = session(Role.STUDENT, Set.of(AdminScope.HOSPITAL));
 
         assertFalse(session.canManageUsers());
         assertTrue(session.canAdminister(ModuleNames.HOSPITAL));
@@ -35,11 +35,9 @@ class AuthorizationModelTest {
     }
 
     @Test
-    void invalidRoleAndScopeCombinationsAreRejected() {
+    void superAdminMustCarryEveryScope() {
         assertThrows(IllegalArgumentException.class,
-                () -> session(Role.MODULE_ADMIN, Set.of()));
-        assertThrows(IllegalArgumentException.class,
-                () -> session(Role.STUDENT, Set.of(AdminScope.HOSPITAL)));
+                () -> session(Role.SUPER_ADMIN, Set.of(AdminScope.HOSPITAL)));
     }
 
     private static SessionInfo session(Role role, Set<AdminScope> scopes) {

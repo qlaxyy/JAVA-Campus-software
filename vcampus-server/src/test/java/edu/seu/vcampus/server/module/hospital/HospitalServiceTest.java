@@ -106,7 +106,6 @@ class HospitalServiceTest {
     private static SessionInfo session(String userId, Role role) {
         return new SessionInfo("token-" + userId, userId, "demo", "演示用户", role);
     }
-
     private static SessionInfo session(String userId, Role role, Set<AdminScope> scopes) {
         return new SessionInfo(
                 "token-" + userId, userId, "demo", "演示用户", role, scopes);

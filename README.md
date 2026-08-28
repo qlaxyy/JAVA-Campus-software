@@ -39,18 +39,18 @@ java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.v
 
 开发期测试账号：
 
-| 身份 | 账户名 | 密码 |
-|---|---|---|
-| 学生 | `student001` | `123456` |
-| 教师（医院医生） | `teacher001` | `123456` |
-| 超级管理员 | `admin` | `123456` |
-| 学籍子系统管理员（学生） | `studentadmin` | `123456` |
-| 选课子系统管理员（学生） | `courseadmin` | `123456` |
-| 图书馆子系统管理员（学生） | `libraryadmin` | `123456` |
-| 商店子系统管理员（学生） | `shopadmin` | `123456` |
-| 医院子系统管理员（患者） | `hospitaladmin` | `123456` |
+| 测试用途 | 基础身份 `Role` | 附加授权或专业绑定 | 账户名 | 密码 |
+|---|---|---|---|---|
+| 普通学生 | `STUDENT` | 无 | `student001` | `123456` |
+| 医院医生 | `TEACHER` | 有效医院医生绑定 | `teacher001` | `123456` |
+| 超级管理员 | `SUPER_ADMIN` | 隐式拥有全部模块管理范围 | `admin` | `123456` |
+| 学籍管理 | `STUDENT` | `AdminScope.STUDENT` | `studentadmin` | `123456` |
+| 选课管理 | `STUDENT` | `AdminScope.COURSE` | `courseadmin` | `123456` |
+| 图书馆管理 | `STUDENT` | `AdminScope.LIBRARY` | `libraryadmin` | `123456` |
+| 商店管理 | `STUDENT` | `AdminScope.SHOP` | `shopadmin` | `123456` |
+| 医院管理 | `STUDENT` | `AdminScope.HOSPITAL` | `hospitaladmin` | `123456` |
 
-这些是公开的虚构测试账号，统一简单密码仅用于联调，不得用于真实系统或复用个人密码。每个人只有一个账号；管理员权限是在学生/教师基础身份之上的附加授权。
+这些是公开的虚构测试账号，统一简单密码仅用于联调，不得用于真实系统或复用个人密码。每个人只有一个账号；管理员权限是在学生/教师基础身份之上的附加授权。“患者”不是全局身份，所有已登录账号都可以进入医院患者模式。
 
 登录页只输入账号和密码，不让用户自行选择身份。服务器加载基础身份 `Role` 和附加管理范围 `AdminScope`：子系统管理员仍保留学生或教师身份，可以使用其他模块的普通功能，但只能管理获授权模块。客户端隐藏无权操作只用于改善体验，服务器仍会对每个请求独立鉴权。
 

@@ -40,6 +40,6 @@
 ## 验证证据
 
 - `docs/02-六人分工.md`
-- `docs/10-模块Epic创建清单.md`
+- 根目录 `README.md` 的模块 Epic 入口
 - `.github/ISSUE_TEMPLATE/module-task.yml`
 - 当前远程审计：截至 2026-08-24 仍为 0 个 Issue，尚待实施。

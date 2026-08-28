@@ -44,7 +44,7 @@
 - `docs/课程原始材料/软件设计说明书DEMO(20250825).docx`
 - `docs/01-需求基线.md`
 - `docs/03-总体架构与接口约定.md`
-- `docs/08-开发环境统一规范.md`
+- 根目录 `README.md` 中的统一环境与运行教程
 - 后续 ADR、模块 Issue、PR 和测试记录。
 - `docs/decisions/ADR-0001-JDK25与Maven版本.md`
 - `docs/decisions/ADR-0002-GitHub-Issue自主认领.md`
@@ -75,7 +75,7 @@ Java 25 提供 Swing、Socket、多线程、序列化和 JDBC 等项目所需能
 
 ### 主要风险
 
-当前主要风险为商店成员/Issue 尚未落地、Access/JDBC 未确认、业务 action/DTO 尚待各模块评审以及业务功能尚未开始。公共骨架和六模块扩展位置降低了并行集成风险。详见 `docs/progress/RISK_REGISTER.md`。
+当前主要风险为 Access/JDBC 未确认、业务 action/DTO 尚待各模块评审以及业务功能仍处于第一轮开发。六个模块 Epic、公共骨架和独立扩展位置已经建立，降低了并行集成风险。详见 `docs/progress/RISK_REGISTER.md`。
 
 ## 2.2 需求分析
 
@@ -234,7 +234,7 @@ Access Database
 - `SHOP.*` action、DTO、错误码。
 - 库存原子扣减和失败回滚测试。
 
-状态：原商店 Epic #5 已删除，等待重新创建并在成员加入后分配；业务功能未实现。
+状态：商店模块 Epic #11 已建立；具体业务完成情况以后续 PR 和测试证据为准。
 
 # 9 医院模块设计
 

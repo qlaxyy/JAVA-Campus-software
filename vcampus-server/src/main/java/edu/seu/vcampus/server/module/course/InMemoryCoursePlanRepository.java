@@ -108,6 +108,9 @@ final class InMemoryCoursePlanRepository
 
     /**
      * 测试课程：大学物理。
+     * <p>
+     * 当前时间故意设置为与高等数学 01 班冲突，
+     * 用于测试服务器时间冲突检测。
      */
     private CourseInfo createPhysicsCourse() {
 
@@ -121,11 +124,11 @@ final class InMemoryCoursePlanRepository
                 ),
                 List.of(
                     new ScheduleInfo(
-                        4,
-                        5,
-                        6,
-                        1,
-                        16,
+                        1,      // 周一
+                        2,      // 第2节开始
+                        3,      // 第3节结束
+                        1,      // 第1周
+                        16,     // 第16周
                         "EVERY"
                     )
                 ),

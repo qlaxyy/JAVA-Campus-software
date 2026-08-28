@@ -68,6 +68,18 @@ Optional<SessionInfo> session =
         context.sessions().findSession(request.getToken());
 ```
 
+### `SessionInfo` 给子系统提供什么
+
+| 接口 | 子系统怎样使用 |
+|---|---|
+| `getUserId()` | 获取当前登录账号的可信唯一标识；查询“我的数据”和本模块业务名单时使用 |
+| `getRole()` | 只返回 `USER` 或 `SUPER_ADMIN`；不能据此判断学生、教师、医生等业务身份 |
+| `getAdminScopes()` | 查看服务器授予的子系统管理范围；通常优先调用下面两个判断方法 |
+| `canManageUsers()` | 判断是否为可以管理账号和授权的超级管理员 |
+| `canAdminister(moduleId)` | 判断是否可以管理指定业务子系统 |
+
+总控不会提供 `isStudent()`、`isTeacher()`、`isDoctor()` 等接口。子系统取得 `userId` 后，应查询本模块自己的档案、名单或任课记录。例如医院查询医生名单，选课模块查询任课记录。旧的 `Role.STUDENT` 和 `Role.TEACHER` 已删除，子系统新代码不得依赖它们。
+
 ## 4. 一个功能需要哪些文件
 
 以医院“查询我的预约”为例：

@@ -13,6 +13,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Font;
 import java.time.format.DateTimeFormatter;
 
@@ -22,9 +23,11 @@ import java.time.format.DateTimeFormatter;
 final class CourseBatchPanel extends JPanel {
 
     private static final DateTimeFormatter TIME_FORMAT =
-        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        DateTimeFormatter.ofPattern(
+            "yyyy-MM-dd HH:mm");
 
     private final ClientContext context;
+
     private final SelectionBatchInfo batch;
 
     CourseBatchPanel(
@@ -35,12 +38,10 @@ final class CourseBatchPanel extends JPanel {
         this.context = context;
         this.batch = batch;
 
-        initializeView(goBack);
+        initializeView(
+            goBack);
     }
 
-    /**
-     * 初始化批次页面。
-     */
     private void initializeView(
         Runnable goBack) {
 
@@ -57,7 +58,8 @@ final class CourseBatchPanel extends JPanel {
                 24));
 
         add(
-            createHeader(goBack),
+            createHeader(
+                goBack),
             BorderLayout.NORTH);
 
         add(
@@ -65,9 +67,6 @@ final class CourseBatchPanel extends JPanel {
             BorderLayout.CENTER);
     }
 
-    /**
-     * 创建批次顶部信息。
-     */
     private JPanel createHeader(
         Runnable goBack) {
 
@@ -82,7 +81,8 @@ final class CourseBatchPanel extends JPanel {
                 "返回选课中心");
 
         backButton.addActionListener(
-            event -> goBack.run());
+            event ->
+                goBack.run());
 
         header.add(
             backButton,
@@ -127,22 +127,29 @@ final class CourseBatchPanel extends JPanel {
                     + statusText(
                     batch.getStatus()));
 
-        information.add(nameLabel);
+        information.add(
+            nameLabel);
 
         information.add(
-            Box.createVerticalStrut(5));
-
-        information.add(semesterLabel);
-
-        information.add(
-            Box.createVerticalStrut(3));
-
-        information.add(timeLabel);
+            Box.createVerticalStrut(
+                5));
 
         information.add(
-            Box.createVerticalStrut(3));
+            semesterLabel);
 
-        information.add(statusLabel);
+        information.add(
+            Box.createVerticalStrut(
+                3));
+
+        information.add(
+            timeLabel);
+
+        information.add(
+            Box.createVerticalStrut(
+                3));
+
+        information.add(
+            statusLabel);
 
         header.add(
             information,
@@ -152,7 +159,7 @@ final class CourseBatchPanel extends JPanel {
     }
 
     /**
-     * 创建批次内部功能标签。
+     * 批次内部标签。
      */
     private JTabbedPane createTabs() {
 
@@ -160,26 +167,28 @@ final class CourseBatchPanel extends JPanel {
             new JTabbedPane();
 
         /*
-         * 方案内课程已经接入真实服务器请求。
+         * 这两个页面需要在切换标签时重新加载，
+         * 保证选课 / 退课后看到服务器最新状态。
          */
-        tabs.addTab(
-            "方案内课程",
+        PlanCoursePanel planPanel =
             new PlanCoursePanel(
                 context,
-                batch));
+                batch);
 
-        /*
-         * 其余页面暂时还是占位页面。
-         */
+        SelectedCoursePanel selectedPanel =
+            new SelectedCoursePanel(
+                context,
+                batch);
+
+        tabs.addTab(
+            "方案内课程",
+            planPanel);
+
         tabs.addTab(
             "方案外课程",
             createPlaceholder(
                 "方案外课程"));
 
-        /*
-         * 体育课和通选课不能重修，
-         * 所以重修批次不显示这两个标签。
-         */
         if (batch.getBatchType()
             != SelectionBatchType.RETAKE) {
 
@@ -196,20 +205,36 @@ final class CourseBatchPanel extends JPanel {
 
         tabs.addTab(
             "已选课程",
-            createPlaceholder(
-                "已选课程"));
+            selectedPanel);
 
         tabs.addTab(
             "全校课程查询",
             createPlaceholder(
                 "全校课程查询"));
 
+        /*
+         * 每次用户切换标签时刷新真实状态。
+         */
+        tabs.addChangeListener(
+            event -> {
+
+                Component selected =
+                    tabs.getSelectedComponent();
+
+                if (selected == planPanel) {
+
+                    planPanel.reload();
+
+                } else if (selected
+                    == selectedPanel) {
+
+                    selectedPanel.reload();
+                }
+            });
+
         return tabs;
     }
 
-    /**
-     * 当前阶段暂时使用的占位页面。
-     */
     private JPanel createPlaceholder(
         String name) {
 
@@ -237,16 +262,19 @@ final class CourseBatchPanel extends JPanel {
         return panel;
     }
 
-    /**
-     * 将批次状态转换成中文。
-     */
     private String statusText(
         SelectionBatchStatus status) {
 
         return switch (status) {
-            case NOT_STARTED -> "未开始";
-            case OPEN -> "进行中";
-            case ENDED -> "已结束";
+
+            case NOT_STARTED ->
+                "未开始";
+
+            case OPEN ->
+                "进行中";
+
+            case ENDED ->
+                "已结束";
         };
     }
 }

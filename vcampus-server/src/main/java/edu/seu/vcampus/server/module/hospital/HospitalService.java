@@ -8,7 +8,7 @@ import edu.seu.vcampus.common.hospital.SlotAvailability;
 import edu.seu.vcampus.common.hospital.SlotListResponse;
 import edu.seu.vcampus.common.hospital.SlotView;
 import edu.seu.vcampus.common.hospital.VisitType;
-import edu.seu.vcampus.common.user.Role;
+import edu.seu.vcampus.common.protocol.ModuleNames;
 import edu.seu.vcampus.common.user.SessionInfo;
 
 import java.time.Clock;
@@ -35,7 +35,7 @@ final class HospitalService {
         return new HospitalModeAccessView(
                 true,
                 repository.isActiveDoctorUser(session.getUserId()),
-                session.getRole() == Role.ADMIN);
+                session.canAdminister(ModuleNames.HOSPITAL));
     }
 
     DepartmentListResponse listDepartments() {

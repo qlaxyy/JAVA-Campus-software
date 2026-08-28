@@ -42,16 +42,21 @@ class LoginPanelTest {
         assertEquals(List.of("登录"), buttons);
         assertFalse(labels.contains("用户登录"));
         assertFalse(labels.contains("开发期基础登录"));
-        assertTrue(labels.contains("学生：student001 / Student@123"));
-        assertTrue(labels.contains("教师：teacher001 / Teacher@123"));
-        assertTrue(labels.contains("管理员：admin / Admin@123"));
+        assertTrue(labels.contains("学生：student001 / 123456"));
+        assertTrue(labels.contains("教师：teacher001 / 123456"));
+        assertTrue(labels.contains("超级管理员：admin / 123456"));
+        assertTrue(labels.contains("学籍管理员（学生）：studentadmin / 123456"));
+        assertTrue(labels.contains("选课管理员（学生）：courseadmin / 123456"));
+        assertTrue(labels.contains("图书管理员（学生）：libraryadmin / 123456"));
+        assertTrue(labels.contains("商店管理员（学生）：shopadmin / 123456"));
+        assertTrue(labels.contains("医院管理员（患者）：hospitaladmin / 123456"));
     }
 
     @Test
     void credentialValidationRejectsMissingInput() {
         assertEquals("请输入账户名", LoginPanel.validationMessage(" ", "secret".toCharArray()));
         assertEquals("请输入密码", LoginPanel.validationMessage("student001", new char[0]));
-        assertNull(LoginPanel.validationMessage("student001", "Student@123".toCharArray()));
+        assertNull(LoginPanel.validationMessage("student001", "123456".toCharArray()));
     }
 
     private static List<Component> descendants(JPanel panel) {

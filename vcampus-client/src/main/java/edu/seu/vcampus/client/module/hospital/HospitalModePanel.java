@@ -118,7 +118,7 @@ final class HospitalModePanel extends JPanel {
                 doctorButton));
         modes.add(modeCard(
                 "管理员模式",
-                "需要系统管理员权限",
+                "需要医院管理范围授权",
                 "科室管理<br>医生管理<br>排班管理<br>号源与预约管理",
                 adminButton));
         return modes;

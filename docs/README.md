@@ -12,6 +12,7 @@
 - [过程记录、风险与需求追踪](progress/README.md)
 - [架构决策记录](decisions/README.md)
 - [软件设计说明书草稿](design/SOFTWARE_DESIGN_DRAFT.md)
+- [管理员权限与模块模式 UML/流程图](design/ADMIN_PERMISSION_AND_MODE.md)
 - [测试计划草稿](testing/TEST_PLAN_DRAFT.md)
 - [最终提交资料登记表](delivery/DOCUMENT_REGISTER.md)
 - [教师原始材料](课程原始材料/)

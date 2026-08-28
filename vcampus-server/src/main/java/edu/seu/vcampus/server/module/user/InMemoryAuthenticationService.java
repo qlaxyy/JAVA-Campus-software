@@ -1,6 +1,7 @@
 package edu.seu.vcampus.server.module.user;
 
 import edu.seu.vcampus.common.user.LoginRequest;
+import edu.seu.vcampus.common.user.AdminScope;
 import edu.seu.vcampus.common.user.PasswordProof;
 import edu.seu.vcampus.common.user.Role;
 import edu.seu.vcampus.common.user.SessionInfo;
@@ -13,6 +14,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -50,7 +52,8 @@ public final class InMemoryAuthenticationService implements SessionLookup {
                 user.userId(),
                 request.getUsername(),
                 user.displayName(),
-                user.role());
+                user.role(),
+                user.adminScopes());
         sessions.put(session.getToken(), session);
         return Optional.of(session);
     }
@@ -86,34 +89,58 @@ public final class InMemoryAuthenticationService implements SessionLookup {
     }
 
     private static Map<String, DemoUser> createDemoUsers() {
-        return Map.of(
-                "student001", demoUser("U-STUDENT-001", "演示学生", Role.STUDENT, "Student@123"),
-                "teacher001", demoUser("U-TEACHER-001", "演示教师", Role.TEACHER, "Teacher@123"),
-                "admin", demoUser("U-ADMIN-001", "演示管理员", Role.ADMIN, "Admin@123"));
+        return Map.ofEntries(
+                Map.entry("student001", demoUser(
+                        "U-STUDENT-001", "student001", "演示学生",
+                        Role.STUDENT, Set.of(), "123456")),
+                Map.entry("teacher001", demoUser(
+                        "U-TEACHER-001", "teacher001", "演示教师",
+                        Role.TEACHER, Set.of(), "123456")),
+                Map.entry("admin", demoUser(
+                        "U-ADMIN-001", "admin", "演示超级管理员",
+                        Role.SUPER_ADMIN, Set.of(AdminScope.values()), "123456")),
+                Map.entry("studentadmin", demoUser(
+                        "U-STUDENT-ADMIN-001", "studentadmin", "演示学籍管理员",
+                        Role.STUDENT, Set.of(AdminScope.STUDENT), "123456")),
+                Map.entry("courseadmin", demoUser(
+                        "U-COURSE-ADMIN-001", "courseadmin", "演示选课管理员",
+                        Role.STUDENT, Set.of(AdminScope.COURSE), "123456")),
+                Map.entry("libraryadmin", demoUser(
+                        "U-LIBRARY-ADMIN-001", "libraryadmin", "演示图书馆管理员",
+                        Role.STUDENT, Set.of(AdminScope.LIBRARY), "123456")),
+                Map.entry("shopadmin", demoUser(
+                        "U-SHOP-ADMIN-001", "shopadmin", "演示商店管理员",
+                        Role.STUDENT, Set.of(AdminScope.SHOP), "123456")),
+                Map.entry("hospitaladmin", demoUser(
+                        "U-HOSPITAL-ADMIN-001", "hospitaladmin", "演示医院管理员",
+                        Role.STUDENT, Set.of(AdminScope.HOSPITAL), "123456")));
     }
 
     private static DemoUser demoUser(
             String userId,
+            String username,
             String displayName,
             Role role,
+            Set<AdminScope> adminScopes,
             String passwordText) {
         char[] password = passwordText.toCharArray();
         try {
-            String username = switch (role) {
-                case STUDENT -> "student001";
-                case TEACHER -> "teacher001";
-                case ADMIN -> "admin";
-            };
             return new DemoUser(
                     userId,
                     displayName,
                     role,
+                    adminScopes,
                     PasswordProof.create(username, password));
         } finally {
             Arrays.fill(password, '\0');
         }
     }
 
-    private record DemoUser(String userId, String displayName, Role role, String passwordProof) {
+    private record DemoUser(
+            String userId,
+            String displayName,
+            Role role,
+            Set<AdminScope> adminScopes,
+            String passwordProof) {
     }
 }

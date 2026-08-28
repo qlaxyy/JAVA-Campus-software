@@ -6,10 +6,12 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /** Deterministic fake hospital data used before the Access repository is available. */
 final class InMemoryHospitalRepository implements HospitalRepository {
 
+    private final Set<String> activeDoctorUserIds = Set.of("U-TEACHER-001");
     private final List<HospitalDepartment> departments;
     private final List<HospitalSlot> slots;
 
@@ -49,6 +51,11 @@ final class InMemoryHospitalRepository implements HospitalRepository {
                 slot("slot-eye-closed", "dept-eye", "眼科",
                         "doctor-sun", "孙医生", "主任医师",
                         today.plusDays(3), 8, 30, 2_200, 10, 1, false));
+    }
+
+    @Override
+    public boolean isActiveDoctorUser(String userId) {
+        return userId != null && activeDoctorUserIds.contains(userId);
     }
 
     @Override

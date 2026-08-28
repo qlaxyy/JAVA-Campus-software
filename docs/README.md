@@ -9,6 +9,7 @@
 - [总体架构与接口约定](03-总体架构与接口约定.md)
 - [四周交付计划](04-四周交付计划.md)
 - [验收与最终提交清单](06-验收与提交清单.md)
+- [现行系统设计总览（开发唯一准则）](design/SYSTEM_DESIGN.md)
 - [过程记录、风险与需求追踪](progress/README.md)
 - [架构决策记录](decisions/README.md)
 - [软件设计说明书草稿](design/SOFTWARE_DESIGN_DRAFT.md)
@@ -19,8 +20,9 @@
 
 维护原则：
 
+- 当前整体架构、身份、权限和模块边界只在 `design/SYSTEM_DESIGN.md` 维护；
 - 日常教程只更新根目录 `README.md`；
-- 模块设计只更新对应 GitHub Epic 正文；
+- 模块内部需求、页面、Action 和验收项更新对应 GitHub Epic 正文；
 - 数据字段只更新 `database/schema/<module>.md`；
 - 已发生进展只追加到 `progress/PROJECT_LOG.md`；
 - 重大架构决定记录到 `decisions/`；

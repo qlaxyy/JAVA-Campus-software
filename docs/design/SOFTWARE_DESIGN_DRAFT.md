@@ -8,6 +8,7 @@
 |---|---|---|---|
 | 2026-08-24 | V0.1 | 根据课程材料、需求基线和架构规划建立持续草稿 | `713d91c` 至 `8b8ba9d` |
 | 2026-08-25 | V0.2 | 同步三模块骨架、六模块扩展点、开发期会话、主导航、路由与测试实况 | PR #7、ADR-0007/0008、9 个自动测试 |
+| 2026-08-28 | V0.3 | 同步附加管理授权、医院模块内三模式、选课批次链路和现行设计入口 | PR #24、#25、#26，27 个自动测试 |
 
 # 1 引言
 
@@ -22,8 +23,8 @@
 - 软件名称：虚拟校园系统（JAVA Virtual Campus）。
 - 任务来源：Java 专业技能实训课程项目。
 - 开发团队：6 人小组；姓名、学号和联系方式不写入公开仓库，按课程分工表另行提交。
-- 使用者：学生、教师、子系统管理员、超级管理员；管理员权限按 ADR-0009 的模块范围扩展。
-- 登录后的模块按 `USER` 或 `MANAGEMENT` 模式创建；完整结构、流程和管理操作时序见 `ADMIN_PERMISSION_AND_MODE.md`。
+- 使用者：学生、教师、具有附加模块管理授权的人员、超级管理员，以及由各子系统维护的专业身份（如医生）。
+- 系统不设置全局 `USER / MANAGEMENT` 模式；同一账号可按服务器授权进入子系统内部的普通、专业或管理工作台。现行准则见 `SYSTEM_DESIGN.md`，权限细节见 `ADMIN_PERMISSION_AND_MODE.md`。
 - 运行形式：Java C/S 客户端—服务器端系统。
 
 ## 1.3 定义
@@ -144,7 +145,7 @@ Access Database
 - `vcampus-client`：Swing 页面、客户端服务、网络连接。
 - `vcampus-server`：请求分发、业务服务、DAO、线程池和数据库连接。
 
-状态：三模块骨架已通过 PR #7 合并到 `main`。`feature/team-development-baseline` 进一步加入固定六模块 client/server/common 扩展位置；当前仍无业务功能。
+状态：三模块骨架和固定六模块扩展位置均已合并；学籍、选课和医院已经分别形成第一条可运行链路。
 
 ## 3.3 业务模块关系
 
@@ -187,7 +188,7 @@ Access Database
 - Student/Department/Major/Class 实体、约束和表结构。
 - `STUDENT.*` action、DTO、错误码和跨模块查询接口。
 
-状态：Epic [#2](https://github.com/qlaxyy/JAVA-Campus-software/issues/2) 已分配，业务功能未实现。
+状态：Epic [#2](https://github.com/qlaxyy/JAVA-Campus-software/issues/2) 已分配，个人学籍查询链路已实现，维护功能待开发。
 
 # 6 选课系统模块设计
 
@@ -203,7 +204,7 @@ Access Database
 - `COURSE.*` action、DTO、错误码。
 - 最后名额的并发一致性测试。
 
-状态：Epic [#3](https://github.com/qlaxyy/JAVA-Campus-software/issues/3) 已分配，业务功能未实现。
+状态：Epic [#3](https://github.com/qlaxyy/JAVA-Campus-software/issues/3) 已分配，选课批次列表已实现；课程列表、选退课、课表和成绩仍待开发。
 
 # 7 图书馆模块设计
 
@@ -251,7 +252,7 @@ Access Database
 - `HOSPITAL.*` action、DTO、错误码。
 - 最后一个号源的并发测试和隐私检查。
 
-状态：Epic [#4](https://github.com/qlaxyy/JAVA-Campus-software/issues/4) 已分配，业务功能未实现。
+状态：Epic [#4](https://github.com/qlaxyy/JAVA-Campus-software/issues/4) 已分配，患者号源查询和患者/医生/管理员三模式入口已实现；预约、诊疗与管理功能待开发。
 
 # 10 公共模块设计
 

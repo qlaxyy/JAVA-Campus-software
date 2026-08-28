@@ -11,7 +11,7 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
+import java.util.function.Consumer;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.SwingWorker;
@@ -35,13 +35,17 @@ final class CourseCenterPanel extends JPanel {
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final ClientContext context;
-
+    private final Consumer<SelectionBatchInfo> onEnterBatch;
     private final JPanel batchPanel = new JPanel();
     private final JLabel statusLabel = new JLabel("正在加载选课批次...");
     private final JButton refreshButton = new JButton("刷新");
 
-    CourseCenterPanel(ClientContext context) {
+    CourseCenterPanel(
+        ClientContext context,
+        Consumer<SelectionBatchInfo> onEnterBatch) {
+
         this.context = context;
+        this.onEnterBatch = onEnterBatch;
 
         initializeView();
         loadBatches();
@@ -313,29 +317,11 @@ final class CourseCenterPanel extends JPanel {
         return card;
     }
 
-    /**
-     * 进入具体批次。
-     *
-     * 当前下一层选课页面还没有实现，
-     * 所以暂时只验证进入逻辑。
-     */
+
     private void enterBatch(
         SelectionBatchInfo batch) {
 
-        JOptionPane.showMessageDialog(
-            this,
-            "已进入："
-                + batch.getBatchName()
-                + "\n\n"
-                + "下一步将在这里显示："
-                + "\n方案内课程"
-                + "\n方案外课程"
-                + "\n体育课"
-                + "\n通选课"
-                + "\n已选课程"
-                + "\n全校课程查询",
-            "选课批次",
-            JOptionPane.INFORMATION_MESSAGE);
+        onEnterBatch.accept(batch);
     }
 
     private String statusText(

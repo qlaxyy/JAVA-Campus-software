@@ -44,5 +44,5 @@
 ## 验证证据
 
 - 课程原始材料中的 C/S、Socket、多线程和三项目建议。
-- `docs/03-总体架构与接口约定.md`
+- `docs/design/SYSTEM_DESIGN.md`
 - `docs/design/SOFTWARE_DESIGN_DRAFT.md` 第 3、10、11、12 章。

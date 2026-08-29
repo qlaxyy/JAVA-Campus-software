@@ -2,18 +2,11 @@
 
 > 如果只看一份设计文档，就看本文。前半部分用登录示例解释系统如何识别人，后半部分供开发时查接口和边界。
 
-## 怎么读这两份文档
+## 文档定位
 
-- 想弄清“登录后系统怎么知道我是谁”：直接看下方 **1. 先看懂一次登录**。
-- 准备开发 Action、DTO、页面、ServerModule、Service 或 Repository：看独立的 [子系统开发接口手册](SUBSYSTEM_DEVELOPMENT_GUIDE.md)。
-- 想查身份、权限、模式和模块边界：继续阅读本文后续章节。
+本文是当前架构和子系统公共接口的唯一说明：开发者在这里查登录会话、公共 Java 接口、Action/DTO、服务器鉴权、分层边界和模块模式。模块自己的需求和验收项仍写在对应 GitHub Epic，表字段写在 `database/schema/<module>.md`。
 
-本文中的“接口”有两种：Java 扩展接口负责把模块挂入框架；网络业务接口负责约定一次请求的 Action、DTO、权限、响应和错误码。具体代码模板集中在接口手册，不要求先读 UML。
-
-<details>
-<summary>展开：内嵌接口模板（内容与独立接口手册相同，便于离线查阅）</summary>
-
-## 子系统开发接口模板
+## 1. 子系统公共接口
 
 子系统不负责登录，也不保存第二套用户。开发一个学籍、选课、图书馆、商店或医院功能时，只需要接入下面这条公共链路：
 
@@ -91,6 +84,18 @@ Optional<SessionInfo> session =
 - [`ServerContext`](../../vcampus-server/src/main/java/edu/seu/vcampus/server/module/ServerContext.java)
 - [`SessionLookup`](../../vcampus-server/src/main/java/edu/seu/vcampus/server/security/SessionLookup.java)
 - [`Request`](../../vcampus-common/src/main/java/edu/seu/vcampus/common/protocol/Request.java) / [`Response`](../../vcampus-common/src/main/java/edu/seu/vcampus/common/protocol/Response.java)
+
+`ServerContext` 是总控在服务器启动时创建并传给每个 `ServerModule` 的公共服务容器。子系统通过其中的只读 `SessionLookup` 查询会话：
+
+| 调用 | 用途 |
+|---|---|
+| `context.sessions().findSession(token)` | 查询服务器保存的 `SessionInfo`；无结果表示未登录或 token 已失效 |
+| `session.getUserId()` | 取得当前账号的可信唯一标识，用它查询本模块数据 |
+| `session.getRole()` | 取得账号级角色，当前值为 `USER` 或 `SUPER_ADMIN` |
+| `context.sessions().canAdminister(token, moduleId)` | 判断当前账号能否管理指定子系统 |
+| `context.sessions().canManageUsers(token)` | 判断当前账号能否管理账号和授权 |
+
+`ServerContext` 不经过 Socket 发送给客户端，也不允许子系统创建、修改或删除 Session。子系统需要判断医生、任课教师等业务资格时，使用 `userId` 查询本模块自己的名单或记录。
 
 ### 新增一个功能时分别写什么
 
@@ -252,7 +257,7 @@ if (!context.sessions().canAdminister(
 }
 ```
 
-全局 `Role.USER` 不表示学生、教师或医生。医院服务器必须用 `userId` 查询医院自己的医生名单；名单中没有这个账号，即使它有医院管理权限，也不能进入医生模式。
+医院的医生模式必须用 `userId` 查询医院自己的医生名单；名单中没有这个账号，即使它有医院管理权限，也不能进入医生模式。
 
 ### 模块有多个模式时怎么做
 
@@ -290,11 +295,9 @@ Repository / DAO：查询和写入数据，不决定界面与网络行为
 - `mvn clean verify` 全量成功；
 - UI 功能提供实际运行截图。
 
-下面章节解释这些接口背后的身份和架构设计；已经理解上述开发流程的成员可以按需查阅。
+下面章节解释这些接口背后的登录、会话和架构设计。
 
-</details>
-
-## 1. 先看懂一次登录
+## 2. 登录与会话
 
 最容易混淆的是“服务器怎么知道我是谁”。答案分成两步：
 
@@ -323,7 +326,7 @@ AdminScope  = HOSPITAL
 这三项分别表示：
 
 - `userId`：这是哪一个具体的人；
-- `Role.USER`：这是普通账号，不是超级管理员；它不表示这个人是学生、教师或医生；
+- `Role.USER`：这是普通账号，不是超级管理员；
 - `AdminScope.HOSPITAL`：这个账号额外获得了医院数据管理权。
 
 密码验证成功后，服务器创建 Session：
@@ -334,7 +337,7 @@ AdminScope  = HOSPITAL
 Session(userId, Role, AdminScope)
 ```
 
-客户端进入医院模块时携带 token。医院服务器找到 Session 后分别判断：
+客户端进入医院模块时携带 token。统一服务器中的医院模块找到 Session 后分别判断：
 
 ```text
 患者模式：已经登录                         → 可以进入
@@ -356,35 +359,47 @@ Session(userId, Role, AdminScope)
 ```mermaid
 sequenceDiagram
     actor User as 用户
-    participant Login as 登录界面
-    participant Auth as 用户服务器
-    participant Session as 会话存储
-    participant Hospital as 医院服务器
+    participant Client as Swing 客户端
+    participant Server as CampusServer
+    participant Auth as 用户模块
+    participant Sessions as 内存会话 Map
+    participant Hospital as 医院模块
 
-    User->>Login: 输入账号和密码
-    Login->>Auth: USER.LOGIN(账号, 密码凭据)
+    User->>Client: 输入账号和密码
+    Client->>Server: Socket：USER.LOGIN(账号, 密码凭据)
+    Server->>Auth: ActionRouter 分发登录请求
     Auth->>Auth: 查账号并读取 userId / Role / AdminScope
-    Auth->>Session: 保存 token → SessionInfo
-    Auth-->>Login: 返回 SessionInfo 和 token
-    Login->>Hospital: HOSPITAL.GET_MODE_ACCESS(token)
-    Hospital->>Session: 用 token 查 SessionInfo
+    Auth->>Sessions: 在同一服务器进程保存 token → SessionInfo
+    Auth-->>Server: Response.data = SessionInfo（内含 token）
+    Server-->>Client: Socket 返回 Response
+    Client->>Server: Socket：HOSPITAL.GET_MODE_ACCESS(token)
+    Server->>Hospital: ActionRouter 分发医院请求
+    Hospital->>Sessions: 通过 ServerContext.sessions() 查 SessionInfo
     Hospital->>Hospital: 用 userId 查医院医生名单，用 AdminScope 查管理权
-    Hospital-->>Login: 患者=是，医生=否，管理员=是
+    Hospital-->>Server: Response.data：患者=是，医生=否，管理员=是
+    Server-->>Client: Socket 返回 Response
 ```
 
-当前开发版的账号记录和 Session 暂存在服务器内存中；正式接入 Access 后，账号和授权从数据库加载，但 token → Session → 用户身份的流程不变。
+当前只有客户端与统一 `CampusServer` 之间使用 Socket；用户模块、医院模块和会话 Map 都在同一个服务器进程内。客户端把收到的 `SessionInfo` 暂存在 `ClientSession` 内存中，服务器把 `token → SessionInfo` 暂存在 `InMemoryAuthenticationService` 的 `ConcurrentHashMap` 中，双方重启后都需要重新登录。正式接入 Access 后，账号和授权从数据库加载；当前没有把 Session 写入数据库的计划。
 
-## 2. 核心设计原则
+对应源码：
+
+- [`SessionInfo`](../../vcampus-common/src/main/java/edu/seu/vcampus/common/user/SessionInfo.java)：token、`userId`、账号级角色和管理范围；
+- [`ClientSession`](../../vcampus-client/src/main/java/edu/seu/vcampus/client/application/ClientSession.java)：客户端内存中的当前会话；
+- [`UserServerModule`](../../vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/UserServerModule.java)：处理 `USER.LOGIN` 并把 `SessionInfo` 放入 `Response.data`；
+- [`InMemoryAuthenticationService`](../../vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/InMemoryAuthenticationService.java)：生成 token，并在服务器内存中维护 `token → SessionInfo`。
+
+## 3. 核心设计原则
 
 1. **一人一个账号。** 登录时只输入账号和密码，不选择“学生、教师、医生或管理员”。
-2. **全局账号角色保持最小。** `Role` 只表示普通账号 `USER` 或超级管理员 `SUPER_ADMIN`；学生、教师、医生等业务资格不放入全局 `Role`。
+2. **全局账号角色保持最小。** `Role` 当前只有普通账号 `USER` 和超级管理员 `SUPER_ADMIN`。
 3. **子系统管理员不是新的登录身份。** 例如医院管理员是 `USER + AdminScope.HOSPITAL`；同一账号仍可按各子系统自己的规则进入其他工作台。
 4. **业务资格由各子系统自己的数据决定。** 能否当医生，要看医院医生名单；不能只看全局 `Role` 或管理权限。其他模块也应查询自己的业务资料。
 5. **模式属于子系统界面，不属于全局账号。** 系统不设置全局 `USER / MANAGEMENT` 模式。每个子系统分别判断当前账号能进入哪些工作台。
 6. **服务器是权限边界。** 客户端隐藏按钮只用于改善体验；每个管理请求都必须在对应 `ServerModule / Service` 中再次校验会话和 `AdminScope`。
 7. **客户端不访问数据库。** 数据链路固定为 `Swing → ClientContext → Action/DTO → ServerModule → Service → Repository/DAO → Access`。
 
-## 3. 身份、授权与工作模式
+## 4. 身份、授权与工作模式
 
 ```mermaid
 classDiagram
@@ -446,7 +461,7 @@ classDiagram
 
 进入某个模式不会改变账号资料或权限，只会切换当前工作台。医生模式查询医院医生名单，管理员模式检查 `session.canAdminister(HOSPITAL)`。
 
-## 4. 登录、导航和服务器鉴权
+## 5. 登录、导航和服务器鉴权
 
 ```mermaid
 flowchart TD
@@ -477,7 +492,7 @@ flowchart TD
 - 子系统管理员仍能使用其他模块的普通功能，但只能管理 `AdminScope` 中的模块。
 - 超级管理员隐式拥有全部 `AdminScope`，但如果医院医生名单中没有它，也不能进入医生模式。
 
-## 5. 各子系统的模式边界
+## 6. 各子系统的模式边界
 
 | 子系统 | 普通/专业模式 | 管理模式授权 | 当前实现状态 |
 |---|---|---|---|
@@ -495,7 +510,7 @@ flowchart TD
 - DTO、错误码、数据表和业务约束；
 - 至少一条正常流程、异常流程和越权流程的自动测试。
 
-## 6. 分层和模块依赖
+## 7. 分层和模块依赖
 
 ```mermaid
 flowchart LR
@@ -514,7 +529,7 @@ flowchart LR
 - `vcampus-server` 负责认证、授权、业务规则、并发控制和持久化。
 - 模块不能直接修改其他模块的数据表；跨模块能力通过经过评审的接口或只读查询提供。
 
-## 7. 文档分别写在哪里
+## 8. 文档分别写在哪里
 
 | 内容 | 唯一维护位置 |
 |---|---|
@@ -529,10 +544,9 @@ flowchart LR
 
 当设计发生变化时，先修改本文和对应 ADR，再在同一 PR 中同步代码、测试以及受影响的数据字典。不要只在聊天、Issue 评论或某个页面代码里留下设计决定。
 
-## 8. 相关详细资料
+## 9. 相关详细资料
 
 - [管理员权限与模块模式详细图](ADMIN_PERMISSION_AND_MODE.md)
 - [ADR-0009：超级管理员与子系统管理员权限模型](../decisions/ADR-0009-超级管理员与子系统管理员权限模型.md)
-- [总体架构与接口约定](../03-总体架构与接口约定.md)
 - [软件设计说明书持续草稿](SOFTWARE_DESIGN_DRAFT.md)
 - [用户数据字典](../../database/schema/user.md)

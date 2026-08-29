@@ -6,11 +6,9 @@
 
 - [需求基线](01-需求基线.md)
 - [六人分工](02-六人分工.md)
-- [总体架构与接口约定](03-总体架构与接口约定.md)
 - [四周交付计划](04-四周交付计划.md)
 - [验收与最终提交清单](06-验收与提交清单.md)
 - [现行系统设计总览（开发唯一准则）](design/SYSTEM_DESIGN.md)
-- [子系统开发接口手册（Action/DTO/鉴权模板）](design/SUBSYSTEM_DEVELOPMENT_GUIDE.md)
 - [过程记录、风险与需求追踪](progress/README.md)
 - [架构决策记录](decisions/README.md)
 - [软件设计说明书草稿](design/SOFTWARE_DESIGN_DRAFT.md)

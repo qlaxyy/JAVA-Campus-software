@@ -185,9 +185,7 @@ mvn clean verify
 ## 8. 需要时再看的资料
 
 - [现行系统设计总览](docs/design/SYSTEM_DESIGN.md)
-- [子系统开发接口手册](docs/design/SUBSYSTEM_DEVELOPMENT_GUIDE.md)
 - [需求基线](docs/01-需求基线.md)
-- [总体架构与接口约定](docs/03-总体架构与接口约定.md)
 - [四周交付计划](docs/04-四周交付计划.md)
 - [验收与最终提交清单](docs/06-验收与提交清单.md)
 - [过程记录、风险与追踪](docs/progress/README.md)

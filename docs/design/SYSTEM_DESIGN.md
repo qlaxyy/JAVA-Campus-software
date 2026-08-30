@@ -226,4 +226,4 @@ database/schema/<module>.md         表、字段、约束
 | 为什么采用当前关键方案 | [当前架构决定](../ARCHITECTURE_DECISIONS.md) |
 | 某模块的表和字段 | `database/schema/<module>.md` |
 | 某模块的详细任务和验收项 | 对应 GitHub Epic |
-| 用户登录、会话和主界面的详细设计 | [用户登录模块设计说明书](USER_LOGIN_SOFTWARE_DESIGN.md) |
+| 整个系统的详细设计和最终汇总材料 | [虚拟校园系统软件设计说明书](SOFTWARE_DESIGN_SPECIFICATION.md) |

@@ -184,13 +184,11 @@ mvn clean verify
 
 ## 8. 需要时再看的资料
 
-- [现行系统设计总览](docs/design/SYSTEM_DESIGN.md)
-- [需求基线](docs/01-需求基线.md)
-- [四周交付计划](docs/04-四周交付计划.md)
-- [验收与最终提交清单](docs/06-验收与提交清单.md)
-- [过程记录、风险与追踪](docs/progress/README.md)
-- [软件设计说明书草稿](docs/design/SOFTWARE_DESIGN_DRAFT.md)
-- [测试计划草稿](docs/testing/TEST_PLAN_DRAFT.md)
+- [系统设计与接口说明](docs/design/SYSTEM_DESIGN.md)
+- [项目范围与分工](docs/PROJECT_SCOPE.md)
+- [项目当前状态](docs/PROJECT_STATUS.md)
+- [质量与交付清单](docs/QUALITY_AND_DELIVERY.md)
+- [当前架构决定](docs/ARCHITECTURE_DECISIONS.md)
 - [教师原始材料](docs/课程原始材料/)
 
-完整归档入口见 [docs/README.md](docs/README.md)，组员无需日常全部阅读。
+完整阅读顺序见 [文档入口](docs/README.md)。

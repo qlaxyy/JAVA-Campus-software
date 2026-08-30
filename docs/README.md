@@ -1,28 +1,19 @@
-# 归档与交付资料
+# 项目文档入口
 
-组员的运行、Git、Issue 和 Pull Request 教程已经统一到仓库首页 [README](../README.md)，不在 `docs` 中维护重复版本。
+项目级文档只保留下面 6 份。第一次了解项目时按顺序阅读前 3 份即可：
 
-本目录只保留需要长期留痕或用于最终报告的资料：
+1. [项目范围与分工](PROJECT_SCOPE.md)：做什么、六个模块、谁负责、阶段目标。
+2. [系统设计](design/SYSTEM_DESIGN.md)：系统怎样运行、登录会话、公共接口、权限和数据库边界。
+3. [当前状态](PROJECT_STATUS.md)：已经完成什么、下一步和当前风险。
+4. [质量与交付](QUALITY_AND_DELIVERY.md)：测试要求、完成标准和最终提交物。
+5. [架构决定](ARCHITECTURE_DECISIONS.md)：为什么选择当前技术和协作方案。
+6. [课程原始材料](课程原始材料/)：教师提供的原始文件，不修改。
 
-- [需求基线](01-需求基线.md)
-- [六人分工](02-六人分工.md)
-- [四周交付计划](04-四周交付计划.md)
-- [验收与最终提交清单](06-验收与提交清单.md)
-- [现行系统设计总览（开发唯一准则）](design/SYSTEM_DESIGN.md)
-- [过程记录、风险与需求追踪](progress/README.md)
-- [架构决策记录](decisions/README.md)
-- [软件设计说明书草稿](design/SOFTWARE_DESIGN_DRAFT.md)
-- [管理员权限与模块模式 UML/流程图](design/ADMIN_PERMISSION_AND_MODE.md)
-- [测试计划草稿](testing/TEST_PLAN_DRAFT.md)
-- [最终提交资料登记表](delivery/DOCUMENT_REGISTER.md)
-- [教师原始材料](课程原始材料/)
+其他位置：
 
-维护原则：
+- 安装、运行、Git、PR 和演示账号：仓库根 [README](../README.md)。
+- 表和字段：[`database/schema/`](../database/schema/)，每个模块只维护自己的数据字典。
+- 具体功能需求和验收条件：对应 GitHub Epic。
+- 已发生的详细过程：Git 提交、PR 和 Issue，不再复制到多份日志。
 
-- 当前整体架构、身份、权限和模块边界只在 `design/SYSTEM_DESIGN.md` 维护；
-- 日常教程只更新根目录 `README.md`；
-- 模块内部需求、页面、Action 和验收项更新对应 GitHub Epic 正文；
-- 数据字段只更新 `database/schema/<module>.md`；
-- 已发生进展只追加到 `progress/PROJECT_LOG.md`；
-- 重大架构决定记录到 `decisions/`；
-- 教师原始材料不得改写或删除。
+维护规则：同一内容只写一处。范围变化改 `PROJECT_SCOPE.md`，架构变化改 `SYSTEM_DESIGN.md`，进度变化改 `PROJECT_STATUS.md`，表字段变化改对应模块数据字典。

@@ -2,7 +2,6 @@ package edu.seu.vcampus.client.module.library;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.module.ClientModule;
-import edu.seu.vcampus.client.module.PlaceholderModuleView;
 import edu.seu.vcampus.common.protocol.ModuleNames;
 
 import javax.swing.JComponent;
@@ -22,6 +21,6 @@ public final class LibraryClientModule implements ClientModule {
 
     @Override
     public JComponent createView(ClientContext context) {
-        return PlaceholderModuleView.create(displayName(), "完成图书检索界面和馆藏数据设计");
+        return new LibraryPanel(context);
     }
 }

@@ -9,6 +9,10 @@
 5. [架构决定](ARCHITECTURE_DECISIONS.md)：为什么选择当前技术和协作方案。
 6. [课程原始材料](课程原始材料/)：教师提供的原始文件，不修改。
 
+模块级详细设计：
+
+- [用户登录模块设计说明书](design/USER_LOGIN_SOFTWARE_DESIGN.md)：登录、token 会话、退出登录和登录后主界面。日常接入子系统仍优先阅读上面的“系统设计”。
+
 其他位置：
 
 - 安装、运行、Git、PR 和演示账号：仓库根 [README](../README.md)。

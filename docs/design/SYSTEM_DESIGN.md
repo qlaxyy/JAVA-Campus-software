@@ -45,6 +45,8 @@ flowchart LR
 6. 客户端把 `SessionInfo` 保存到 `ClientSession`。
 7. 后续请求由 `ClientContext` 自动带上 token。
 
+登录成功后，`MainFrame` 根据 `SessionInfo` 和 `ModuleAccessPolicy` 生成校园服务入口。普通账号只看到普通业务模块；拥有管理范围或超级管理员权限的账号会看到相应管理入口。页面是否显示入口只是界面导航，不能替代服务器鉴权。
+
 ```mermaid
 sequenceDiagram
     participant UI as 登录页面
@@ -117,6 +119,8 @@ Optional<SessionInfo> session = context.sessions()
 因此，总控负责让医院模块可靠地取得当前 `userId` 和管理范围；医院负责人负责医生表、医生资格查询以及医生业务权限。教师、读者、顾客、任课关系等也由相应模块按自己的数据和规则判断。
 
 页面是否显示入口只是用户体验。服务器处理每个 Action 时仍必须重新验证，不能只靠按钮隐藏来保证安全。
+
+主界面底部的“测试服务器连接”只发送公共 `PING` 请求，用于确认 Socket 服务器是否可达。它不更新 `SessionInfo`、不改变权限，也不应影响右上角的退出登录操作。
 
 ## 6. 两类“接口”分别是什么
 
@@ -222,3 +226,4 @@ database/schema/<module>.md         表、字段、约束
 | 为什么采用当前关键方案 | [当前架构决定](../ARCHITECTURE_DECISIONS.md) |
 | 某模块的表和字段 | `database/schema/<module>.md` |
 | 某模块的详细任务和验收项 | 对应 GitHub Epic |
+| 用户登录、会话和主界面的详细设计 | [用户登录模块设计说明书](USER_LOGIN_SOFTWARE_DESIGN.md) |

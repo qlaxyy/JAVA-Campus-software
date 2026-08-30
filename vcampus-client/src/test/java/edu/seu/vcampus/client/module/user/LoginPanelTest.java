@@ -40,16 +40,19 @@ class LoginPanelTest {
                 .toList();
 
         assertEquals(List.of("登录"), buttons);
+        assertTrue(labels.contains("欢迎登录"));
+        assertTrue(labels.contains("开发阶段测试账号"));
+        assertTrue(labels.contains("以下账号统一密码：123456"));
         assertFalse(labels.contains("用户登录"));
         assertFalse(labels.contains("开发期基础登录"));
-        assertTrue(labels.contains("学生：student001 / 123456"));
-        assertTrue(labels.contains("教师：teacher001 / 123456"));
-        assertTrue(labels.contains("超级管理员：admin / 123456"));
-        assertTrue(labels.contains("学籍管理员（学生）：studentadmin / 123456"));
-        assertTrue(labels.contains("选课管理员（学生）：courseadmin / 123456"));
-        assertTrue(labels.contains("图书管理员（学生）：libraryadmin / 123456"));
-        assertTrue(labels.contains("商店管理员（学生）：shopadmin / 123456"));
-        assertTrue(labels.contains("医院管理员（患者）：hospitaladmin / 123456"));
+        assertTrue(labels.contains("普通账号  student001"));
+        assertTrue(labels.contains("医生演示  teacher001"));
+        assertTrue(labels.contains("超级管理员  admin"));
+        assertTrue(labels.contains("学籍管理员  studentadmin"));
+        assertTrue(labels.contains("选课管理员  courseadmin"));
+        assertTrue(labels.contains("图书馆管理员  libraryadmin"));
+        assertTrue(labels.contains("商店管理员  shopadmin"));
+        assertTrue(labels.contains("医院管理员  hospitaladmin"));
     }
 
     @Test

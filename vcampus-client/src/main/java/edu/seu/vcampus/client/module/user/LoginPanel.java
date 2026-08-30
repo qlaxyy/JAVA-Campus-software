@@ -4,7 +4,6 @@ import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.user.SessionInfo;
 
-import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -12,17 +11,13 @@ import javax.swing.JPasswordField;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 import javax.swing.SwingWorker;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.GridLayout;
-import java.awt.Insets;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
 /**
- * Minimal development login view shared by all module developers.
+ * Unified login view shared by all module developers.
  */
 public final class LoginPanel extends JPanel {
 
@@ -31,10 +26,10 @@ public final class LoginPanel extends JPanel {
     private final JTextField usernameField = new JTextField();
     private final JPasswordField passwordField = new JPasswordField();
     private final JButton loginButton = new JButton("登录");
-    private final JLabel statusLabel = new JLabel(" ", SwingConstants.CENTER);
+    private final JLabel statusLabel = new JLabel("请输入账号和密码", SwingConstants.CENTER);
 
     /**
-     * Creates the temporary demo login page.
+     * Creates the shared login page.
      *
      * @param context shared client context
      */
@@ -58,8 +53,6 @@ public final class LoginPanel extends JPanel {
     }
 
     private void initializeView() {
-        setLayout(new GridBagLayout());
-
         usernameField.setName("login.username");
         usernameField.setColumns(18);
         passwordField.setName("login.password");
@@ -67,65 +60,14 @@ public final class LoginPanel extends JPanel {
         loginButton.setName("login.submit");
         statusLabel.setName("login.status");
 
-        JPanel formPanel = new JPanel(new GridBagLayout());
-        formPanel.setBorder(BorderFactory.createEmptyBorder(28, 32, 28, 32));
-
-        GridBagConstraints constraints = new GridBagConstraints();
-        constraints.insets = new Insets(6, 6, 6, 6);
-        constraints.fill = GridBagConstraints.HORIZONTAL;
-
-        addField(formPanel, constraints, 0, "账户名", usernameField);
-        addField(formPanel, constraints, 1, "密码", passwordField);
-
-        constraints.gridx = 0;
-        constraints.gridy = 2;
-        constraints.gridwidth = 2;
-        constraints.weightx = 1.0;
-        formPanel.add(loginButton, constraints);
-
-        constraints.gridy = 3;
-        formPanel.add(statusLabel, constraints);
-
-        constraints.gridy = 4;
-        formPanel.add(createTestAccountsPanel(), constraints);
-
-        add(formPanel, new GridBagConstraints());
+        setLayout(new java.awt.BorderLayout());
+        add(LoginPanelDesign.create(
+                usernameField, passwordField, loginButton, statusLabel),
+                java.awt.BorderLayout.CENTER);
 
         loginButton.addActionListener(event -> login());
         passwordField.addActionListener(event -> login());
         updateButtons();
-    }
-
-    private JPanel createTestAccountsPanel() {
-        JPanel accountsPanel = new JPanel(new GridLayout(0, 1, 0, 4));
-        accountsPanel.setName("login.testAccounts");
-        accountsPanel.setBorder(BorderFactory.createTitledBorder("测试账号（开发阶段）"));
-        accountsPanel.add(new JLabel("学生：student001 / 123456"));
-        accountsPanel.add(new JLabel("教师：teacher001 / 123456"));
-        accountsPanel.add(new JLabel("超级管理员：admin / 123456"));
-        accountsPanel.add(new JLabel("学籍管理员（学生）：studentadmin / 123456"));
-        accountsPanel.add(new JLabel("选课管理员（学生）：courseadmin / 123456"));
-        accountsPanel.add(new JLabel("图书管理员（学生）：libraryadmin / 123456"));
-        accountsPanel.add(new JLabel("商店管理员（学生）：shopadmin / 123456"));
-        accountsPanel.add(new JLabel("医院管理员（患者）：hospitaladmin / 123456"));
-        return accountsPanel;
-    }
-
-    private void addField(
-            JPanel formPanel,
-            GridBagConstraints constraints,
-            int row,
-            String label,
-            JTextField field) {
-        constraints.gridy = row;
-        constraints.gridwidth = 1;
-        constraints.weightx = 0.0;
-        constraints.gridx = 0;
-        formPanel.add(new JLabel(label, SwingConstants.RIGHT), constraints);
-
-        constraints.weightx = 1.0;
-        constraints.gridx = 1;
-        formPanel.add(field, constraints);
     }
 
     private void login() {

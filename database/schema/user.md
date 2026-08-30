@@ -4,7 +4,7 @@
 
 - 模块：用户管理、登录、会话与管理员授权
 - 对应 Epic：[#1](https://github.com/qlaxyy/JAVA-Campus-software/issues/1)
-- 状态：权限模型已确定；Access 类型和 DAO 尚待最小原型验证
+- 状态：权限模型和内存版账号管理已实现；Access 类型和 DAO 尚待最小原型验证
 
 ## 2. 表清单
 
@@ -86,11 +86,12 @@
 | Action | 调用者 | 作用 |
 |---|---|---|
 | `USER.ADMIN_LIST_ACCOUNTS` | `SUPER_ADMIN` | 按用户名、角色、状态查询账号 |
-| `USER.ADMIN_UPDATE_STATUS` | `SUPER_ADMIN` | 启用、停用或解锁账号 |
-| `USER.ADMIN_GRANT_SCOPE` | `SUPER_ADMIN` | 给子系统管理员增加业务范围 |
-| `USER.ADMIN_REVOKE_SCOPE` | `SUPER_ADMIN` | 撤销账号的某项附加业务管理范围 |
+| `USER.ADMIN_CREATE_ACCOUNT` | `SUPER_ADMIN` | 创建普通账号并设置初始管理范围 |
+| `USER.ADMIN_UPDATE_ACCOUNT` | `SUPER_ADMIN` | 修改显示名称和子系统管理范围 |
+| `USER.ADMIN_UPDATE_STATUS` | `SUPER_ADMIN` | 启用或停用账号，不物理删除 |
+| `USER.ADMIN_RESET_PASSWORD` | `SUPER_ADMIN` | 重置账号密码并清除该账号已有会话 |
 
-第一条端到端链路先实现“查询账号 + 启用/停用”。创建账号、修改角色、重置密码和审计查询在后续 PR 增加。
+上述 Action 已有内存 Repository 版本。第一版不提供创建其他超级管理员或修改全局角色；接入 Access 时保持 Action 和 DTO 不变，只替换 Repository/DAO。
 
 ## 7. 待评审问题
 

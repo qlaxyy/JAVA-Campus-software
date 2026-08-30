@@ -11,6 +11,11 @@ public final class BookSearchRequest implements Serializable {
 
     private final String keyword;
 
+    /**
+     * Creates keyword criteria for one book search.
+     *
+     * @param keyword title, author, ISBN or category keyword
+     */
     public BookSearchRequest(String keyword) {
         this.keyword = keyword;
     }

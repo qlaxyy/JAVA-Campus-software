@@ -12,6 +12,11 @@ public final class BookSearchResult implements Serializable {
 
     private final List<BookDTO> books;
 
+    /**
+     * Creates an immutable book-search result.
+     *
+     * @param books matching books
+     */
     public BookSearchResult(List<BookDTO> books) {
         this.books = List.copyOf(books);
     }

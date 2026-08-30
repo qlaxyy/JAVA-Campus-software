@@ -38,6 +38,11 @@ public final class LibraryPanel extends JPanel {
         }
     };
 
+    /**
+     * Creates the library search page.
+     *
+     * @param context shared authenticated client context
+     */
     public LibraryPanel(ClientContext context) {
         this.context = context;
         initializeView();

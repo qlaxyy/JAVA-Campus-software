@@ -17,6 +17,17 @@ public final class BookDTO implements Serializable {
     private final int totalCount;
     private final int availableCount;
 
+    /**
+     * Creates an immutable summary of one searchable book.
+     *
+     * @param bookId stable library book identifier
+     * @param isbn international standard book number
+     * @param title display title
+     * @param author display author
+     * @param category library category
+     * @param totalCount total number of copies
+     * @param availableCount copies currently available to borrow
+     */
     public BookDTO(
             String bookId,
             String isbn,
@@ -34,30 +45,37 @@ public final class BookDTO implements Serializable {
         this.availableCount = availableCount;
     }
 
+    /** @return stable library book identifier */
     public String getBookId() {
         return bookId;
     }
 
+    /** @return international standard book number */
     public String getIsbn() {
         return isbn;
     }
 
+    /** @return display title */
     public String getTitle() {
         return title;
     }
 
+    /** @return display author */
     public String getAuthor() {
         return author;
     }
 
+    /** @return library category */
     public String getCategory() {
         return category;
     }
 
+    /** @return total number of copies */
     public int getTotalCount() {
         return totalCount;
     }
 
+    /** @return copies currently available to borrow */
     public int getAvailableCount() {
         return availableCount;
     }

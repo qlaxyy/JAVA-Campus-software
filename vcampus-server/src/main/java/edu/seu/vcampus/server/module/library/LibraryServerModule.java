@@ -18,6 +18,7 @@ public final class LibraryServerModule implements ServerModule {
 
     private final LibraryService service;
 
+    /** Creates the production library module with the current repository. */
     public LibraryServerModule() {
         this(new LibraryService(new InMemoryBookRepository()));
     }

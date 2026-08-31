@@ -6,7 +6,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-/** Temporary thread-safe account repository used before the Access DAO is integrated. */
+/** Thread-safe account repository used by isolated tests and local components. */
 final class InMemoryUserRepository implements UserRepository {
 
     private final ConcurrentMap<String, UserAccount> accountsById = new ConcurrentHashMap<>();

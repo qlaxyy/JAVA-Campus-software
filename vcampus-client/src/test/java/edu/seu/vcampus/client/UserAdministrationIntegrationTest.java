@@ -6,6 +6,7 @@ import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.user.UserActions;
 import edu.seu.vcampus.common.user.AdminScope;
+import edu.seu.vcampus.common.user.BatchCreateUserAccountsRequest;
 import edu.seu.vcampus.common.user.CreateUserAccountRequest;
 import edu.seu.vcampus.common.user.PasswordProof;
 import edu.seu.vcampus.common.user.UserAccountListResponse;
@@ -21,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 
 class UserAdministrationIntegrationTest {
@@ -58,6 +60,47 @@ class UserAdministrationIntegrationTest {
             assertTrue(newUser.login("newuser", password()).isSuccess());
             assertEquals(Set.of(AdminScope.COURSE),
                     newUser.currentSession().orElseThrow().getAdminScopes());
+        }
+    }
+
+    @Test
+    void superAdministratorCanBatchCreateAccounts() throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext administrator = client(server);
+            assertTrue(administrator.login("admin", password()).isSuccess());
+
+            BatchCreateUserAccountsRequest request = new BatchCreateUserAccountsRequest(List.of(
+                    createRequest("freshman001", "新生一"),
+                    createRequest("freshman002", "新生二")));
+            Response imported = administrator.send(
+                    UserActions.ADMIN_BATCH_CREATE_ACCOUNTS, request);
+
+            assertTrue(imported.isSuccess());
+            UserAccountListResponse created = assertInstanceOf(
+                    UserAccountListResponse.class, imported.getData());
+            assertEquals(2, created.getAccounts().size());
+            assertTrue(client(server).login("freshman001", password()).isSuccess());
+            assertTrue(client(server).login("freshman002", password()).isSuccess());
+        }
+    }
+
+    @Test
+    void duplicateInBatchRejectsTheWholeImport() throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext administrator = client(server);
+            assertTrue(administrator.login("admin", password()).isSuccess());
+
+            Response imported = administrator.send(
+                    UserActions.ADMIN_BATCH_CREATE_ACCOUNTS,
+                    new BatchCreateUserAccountsRequest(List.of(
+                            createRequest("freshman003", "新生三"),
+                            createRequest("student001", "重复账号"))));
+
+            assertFalse(imported.isSuccess());
+            assertEquals(ErrorCodes.USER_USERNAME_EXISTS, imported.getCode());
+            assertFalse(client(server).login("freshman003", password()).isSuccess());
         }
     }
 
@@ -157,6 +200,13 @@ class UserAdministrationIntegrationTest {
 
     private static String proof(String username) {
         return proof(username, "123456");
+    }
+
+    private static CreateUserAccountRequest createRequest(
+            String username,
+            String displayName) {
+        return new CreateUserAccountRequest(
+                username, displayName, proof(username), Set.of());
     }
 
     private static String proof(String username, String passwordText) {

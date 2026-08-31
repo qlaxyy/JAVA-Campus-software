@@ -26,10 +26,12 @@ mvn clean verify
 终端 1：
 
 ```powershell
-java -cp "vcampus-common\target\classes;vcampus-server\target\classes" edu.seu.vcampus.server.ServerMain
+java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar
 ```
 
-看到 `Virtual Campus server started on port 8888.` 后保持终端运行。
+首次启动会自动创建 `database/vCampus.accdb`、用户表和 8 个开发期账号。看到
+`Virtual Campus server started on port 8888.` 后保持终端运行。账号修改会保存在
+Access 中；token 会话仍保存在服务器内存，服务器重启后需要重新登录。
 
 终端 2：
 
@@ -56,16 +58,25 @@ java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.v
 
 系统没有全局“用户/管理模式”。每个子系统在模块内部提供自己的模式入口，例如医院管理员可以进入患者和管理员模式；只有医院医生名单中登记过的账号才能进入医生模式。客户端只能发送 Action，实际校验和数据库读写必须经过服务器 Service 与 DAO，禁止 Swing 客户端直接连接 Access。完整规则见 [现行系统设计总览](docs/design/SYSTEM_DESIGN.md)。
 
-当前可复现：登录门禁、模块大厅、登出、PING/PONG、学生学籍查询、选课批次列表、医院患者号源查询和医院三模式入口。停止服务器时在服务器终端按 `Ctrl + C`。
+当前可复现：登录门禁、模块大厅、登出、PING/PONG、超级管理员账号维护与 CSV 批量导入、学生学籍查询、选课批次列表、医院患者号源查询和医院三模式入口。停止服务器时在服务器终端按 `Ctrl + C`。
+
+批量导入文件使用 UTF-8 CSV，第一行固定为 `username,displayName`。每次最多
+1000 个普通账号，初始密码统一为 `123456`；任何一行错误都会取消整批写入。
 
 如果 8888 端口被占用，可临时改用 8890：
 
 ```powershell
 # 服务端
-java -cp "vcampus-common\target\classes;vcampus-server\target\classes" edu.seu.vcampus.server.ServerMain 8890
+java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar 8890
 
 # 客户端
 java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.vcampus.client.ClientMain 127.0.0.1 8890
+```
+
+服务器还可接收第二个参数作为数据库路径，例如：
+
+```powershell
+java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar 8888 database\test.accdb
 ```
 
 ## 2. 以后获取最新正式成果

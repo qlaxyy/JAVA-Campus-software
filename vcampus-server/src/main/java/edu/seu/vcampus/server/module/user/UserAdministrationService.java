@@ -1,6 +1,7 @@
 package edu.seu.vcampus.server.module.user;
 
 import edu.seu.vcampus.common.protocol.ErrorCodes;
+import edu.seu.vcampus.common.user.BatchCreateUserAccountsRequest;
 import edu.seu.vcampus.common.user.CreateUserAccountRequest;
 import edu.seu.vcampus.common.user.ResetUserPasswordRequest;
 import edu.seu.vcampus.common.user.Role;
@@ -10,7 +11,10 @@ import edu.seu.vcampus.common.user.UserAccountListResponse;
 import edu.seu.vcampus.common.user.UserAccountView;
 
 import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /** Server-authoritative account administration rules. */
@@ -45,6 +49,43 @@ final class UserAdministrationService {
                 request.getAdminScopes(), request.getPasswordProof(), true);
         repository.save(account);
         return account.toView();
+    }
+
+    synchronized UserAccountListResponse createAccounts(
+            BatchCreateUserAccountsRequest request) {
+        Objects.requireNonNull(request, "request must not be null");
+        Set<String> existing = new HashSet<>();
+        repository.findAll().forEach(account -> existing.add(account.username()));
+        Set<String> incoming = new HashSet<>();
+        List<CreateUserAccountRequest> rows = request.getAccounts();
+
+        for (int index = 0; index < rows.size(); index++) {
+            CreateUserAccountRequest row = rows.get(index);
+            if (!row.getAdminScopes().isEmpty()) {
+                throw failure(ErrorCodes.COMMON_INVALID_REQUEST,
+                        "批量导入只能创建不含管理权限的普通账号。第 "
+                                + (index + 1) + " 条数据无效。");
+            }
+            if (existing.contains(row.getUsername()) || !incoming.add(row.getUsername())) {
+                throw failure(ErrorCodes.USER_USERNAME_EXISTS,
+                        "账号 “" + row.getUsername() + "” 已存在或在文件中重复。第 "
+                                + (index + 1) + " 条数据无效。");
+            }
+        }
+
+        List<UserAccount> accounts = rows.stream()
+                .map(row -> new UserAccount(
+                        "U-" + UUID.randomUUID(),
+                        row.getUsername(),
+                        row.getDisplayName(),
+                        Role.USER,
+                        Set.of(),
+                        row.getPasswordProof(),
+                        true))
+                .toList();
+        repository.saveAll(accounts);
+        return new UserAccountListResponse(
+                accounts.stream().map(UserAccount::toView).toList());
     }
 
     synchronized UserAccountView updateAccount(UpdateUserAccountRequest request) {

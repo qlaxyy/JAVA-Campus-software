@@ -25,7 +25,7 @@
 - 公共网络协议、登录会话、权限和数据库访问方式；
 - 用户、学籍、选课、图书馆、商店和医院六个子系统的详细设计；
 - 各模块的界面、Action、DTO、Service、Repository/DAO、数据表和测试如何衔接；
-- 当前内存实现与后续 Access 数据库实现之间的迁移边界。
+- 生产 Access 实现与测试用内存实现之间的边界。
 
 本文采用逐步汇总方式编写。当前版本已完成公共架构和用户登录部分；其余子系统由对应负责人完成设计后，再按本文统一结构汇总。章节标记为“待负责人材料汇总”表示尚未纳入，不代表该模块没有代码，也不由总控代替负责人编造设计。
 
@@ -51,7 +51,7 @@
 | SessionInfo | 登录成功后的会话信息，包含 token、用户标识、显示名称、全局角色和管理范围。 |
 | Role | 账号级权限，只取 `USER` 或 `SUPER_ADMIN`。 |
 | AdminScope | 账号可以管理的业务模块范围，例如 `COURSE`、`HOSPITAL`。 |
-| Repository | 服务器访问账号数据的抽象边界；当前以内存实现，后续可替换为 Access DAO。 |
+| Repository | 服务器访问账号数据的抽象边界；正式启动使用 Access DAO，测试使用内存实现。 |
 | DAO | Data Access Object，封装 JDBC 数据库读写的对象。 |
 
 ### 1.4 参考资料
@@ -81,7 +81,7 @@
 
 项目使用 JDK 25 标准库即可完成 Swing 界面、Socket 通信、对象序列化、密码摘要和并发会话存储。登录模块已具备端到端实现，并有自动化测试覆盖登录成功、密码错误、会话查询和退出登录。
 
-后续 Access 持久化可以通过 JDBC DAO 替换 `InMemoryUserRepository`，公共 Action 和 DTO 无需改变，因此迁移风险可控。
+账号持久化已通过 JDBC DAO 替换正式启动路径中的 `InMemoryUserRepository`，公共 Action 和 DTO 未改变。
 
 #### 2.1.2 操作可行性
 
@@ -97,7 +97,7 @@
 
 | 子系统 | 主要功能范围 | 设计内容状态 |
 |---|---|---|
-| 用户 | 统一登录、会话、退出、账号与管理范围维护 | 公共架构和登录已纳入，账号管理待继续完善 |
+| 用户 | 统一登录、会话、退出、账号与管理范围维护 | 登录、账号管理、CSV 批量导入和 Access 持久化已纳入 |
 | 学籍 | 学生资料查询与学籍管理 | 待负责人材料汇总 |
 | 选课 | 选课批次、课程查询、选课、退课与冲突校验 | 待负责人材料汇总 |
 | 图书馆 | 图书检索、借阅、归还与馆藏管理 | 待负责人材料汇总 |
@@ -118,12 +118,19 @@
 | LOGIN-08 | 退出登录 | 服务器删除 token，客户端无论服务器结果如何都清除本地会话。 |
 | LOGIN-09 | 统一失败提示 | 账号不存在、被停用或密码错误均返回同一种凭据错误，避免泄露账号状态。 |
 
-#### 2.2.3 非功能需求
+#### 2.2.3 账号管理功能需求
+
+- 只有 `SUPER_ADMIN` 可以查看、新增、编辑、启停和重置账号密码。
+- 超级管理员可选择 UTF-8 CSV 批量创建普通账号，格式为 `username,displayName`。
+- 批量导入每次最多 1000 个账号，不从文件授予管理权限，初始密码统一为 `123456`。
+- 服务器必须检查数据库已有用户名和文件内重复用户名；任意一行失败时整批回滚。
+
+#### 2.2.4 非功能需求
 
 - 网络请求和响应必须实现 `Serializable`，供 Java 对象流传输。
 - 客户端连接和读取超时均为 5 秒，不能无限等待。
 - 登录网络操作不得阻塞 Swing 事件分派线程。
-- 会话存储和账号内存仓库必须支持多个服务器工作线程并发访问。
+- 会话存储和账号 Repository 必须支持多个服务器工作线程并发访问。
 - token 必须由安全随机数生成，不能由用户名、时间或顺序编号推算。
 - 密码字符数组使用后必须清零；服务器响应不得包含密码或密码 proof。
 - 服务器异常不得把内部堆栈和实现细节返回客户端。
@@ -138,8 +145,8 @@
 | 客户端界面 | Java Swing |
 | 网络通信 | TCP Socket + `ObjectInputStream` / `ObjectOutputStream` |
 | 测试框架 | JUnit Jupiter 5.13.1 |
-| 当前账号存储 | 服务器内存 `ConcurrentHashMap` |
-| 验收目标数据库 | Microsoft Access `vCampus.accdb`，通过 JDBC DAO 访问 |
+| 当前账号存储 | Microsoft Access `vCampus.accdb`，通过 UCanAccess/JDBC 访问 |
+| 当前会话存储 | 服务器内存 `ConcurrentHashMap` |
 
 ## 3. 程序系统结构
 
@@ -175,7 +182,7 @@ flowchart LR
 
 | 子系统 | 负责人 | 本说明书状态 |
 |---|---|---|
-| 用户与公共架构 | 吴尚扬 | 登录、会话和公共架构已纳入；账号管理待补充 |
+| 用户与公共架构 | 吴尚扬 | 登录、会话、账号管理、批量导入和 Access 持久化已纳入 |
 | 学籍 | 施天琦 | 待负责人材料汇总 |
 | 选课 | 杨凯涵 | 待负责人材料汇总 |
 | 图书馆 | 吴昊哲 | 待负责人材料汇总 |
@@ -395,6 +402,14 @@ classDiagram
         ~findByUsername(String username) Optional~UserAccount~
         ~findAll() List~UserAccount~
         ~save(UserAccount account) void
+        ~saveAll(List~UserAccount~ accounts) void
+    }
+
+    class AccessUserRepository {
+        -AccessDatabase database
+        ~findByUsername(String username) Optional~UserAccount~
+        ~save(UserAccount account) void
+        ~saveAll(List~UserAccount~ accounts) void
     }
 
     class InMemoryUserRepository {
@@ -422,7 +437,9 @@ classDiagram
     UserServerModule --> InMemoryAuthenticationService : 持有
     InMemoryAuthenticationService --> UserRepository : 通过接口查询
     UserRepository <|.. InMemoryUserRepository : 实现
+    UserRepository <|.. AccessUserRepository : 生产实现
     InMemoryUserRepository "1" o-- "0..*" UserAccount : 保存账号
+    AccessUserRepository --> UserAccount : 持久化
 ```
 
 #### 5.6.2 网络 DTO 类图
@@ -519,7 +536,8 @@ classDiagram
 | `UserServerModule` | 校验登录 DTO，组织成功或失败响应 | `registerHandlers()`、`login()`、`logout()`、`currentSession()` |
 | `InMemoryAuthenticationService` | 验证账号、创建/删除/查询会话 | `login()`、`logout()`、`findSession()` |
 | `UserRepository` | 定义账号存取边界 | `findById()`、`findByUsername()`、`findAll()`、`save()` |
-| `InMemoryUserRepository` | 当前线程安全的内存账号实现 | 实现 `UserRepository` |
+| `AccessUserRepository` | 正式启动时使用的 Access 账号实现 | 实现 `UserRepository` |
+| `InMemoryUserRepository` | 自动化测试使用的隔离账号实现 | 实现 `UserRepository` |
 | `UserAccount` | 服务器内部账号记录，不向客户端暴露密码 proof | 只读字段方法及不可变更新方法 |
 
 ## 6. 学籍子系统设计说明（待负责人材料汇总）
@@ -553,6 +571,12 @@ classDiagram
 | `USER.LOGIN` | `null` | `LoginRequest` | `SessionInfo` | 验证账号并创建新会话。 |
 | `USER.CURRENT_SESSION` | 必填 | `null` | `SessionInfo` | 检查 token 是否仍有效。 |
 | `USER.LOGOUT` | 必填 | `null` | `null` | 删除服务器会话。 |
+| `USER.ADMIN_LIST_ACCOUNTS` | 必填 | `null` | `UserAccountListResponse` | 超级管理员查询账号。 |
+| `USER.ADMIN_CREATE_ACCOUNT` | 必填 | `CreateUserAccountRequest` | `UserAccountView` | 创建一个普通账号。 |
+| `USER.ADMIN_BATCH_CREATE_ACCOUNTS` | 必填 | `BatchCreateUserAccountsRequest` | `UserAccountListResponse` | 原子批量创建普通账号。 |
+| `USER.ADMIN_UPDATE_ACCOUNT` | 必填 | `UpdateUserAccountRequest` | `UserAccountView` | 修改显示名和管理范围。 |
+| `USER.ADMIN_UPDATE_STATUS` | 必填 | `UpdateUserStatusRequest` | `UserAccountView` | 启用或停用账号。 |
+| `USER.ADMIN_RESET_PASSWORD` | 必填 | `ResetUserPasswordRequest` | `UserAccountView` | 重置密码并清除该账号会话。 |
 
 ### 11.2 Request
 
@@ -645,7 +669,8 @@ Swing 组件必须在事件分派线程中创建和更新。登录网络请求�
 `CampusServer` 使用一个接收线程监听连接，使用固定线程池并发处理客户端请求。并发共享对象采用线程安全结构：
 
 - 会话：`ConcurrentHashMap<String, SessionInfo>`；
-- 内存账号：`ConcurrentHashMap<String, UserAccount>`；
+- 测试用内存账号：`ConcurrentHashMap<String, UserAccount>`；
+- 正式启动账号：Access DAO，每次操作使用独立 JDBC 连接，写入使用事务；
 - Action 注册表：`ConcurrentHashMap<String, RequestHandler>`。
 
 `SessionInfo` 和 `UserAccount` 采用不可变对象设计，减少并发修改风险。
@@ -654,24 +679,25 @@ Swing 组件必须在事件分派线程中创建和更新。登录网络请求�
 
 ### 14.1 当前实现
 
-当前登录模块尚未连接 `vCampus.accdb`：
+当前登录模块已经连接 `vCampus.accdb`：
 
-- `DemoUserAccounts` 在服务器启动时创建公开测试账号；
-- `InMemoryUserRepository` 在内存中保存账号；
+- `AccessUserRepository` 首次连接时创建用户表；
+- `DemoUserAccounts` 只在空库中初始化公开测试账号；
+- 账号资料和 `AdminScope` 修改会跨服务器重启保留；
 - `InMemoryAuthenticationService` 在内存中保存会话；
-- 服务器重启后，内存账号修改和全部 token 都会丢失。
+- 服务器重启后全部 token 会失效，用户需要重新登录。
 
-因此，当前代码中的 Repository 是可运行的开发替身，不应表述为“已经使用 Access 数据库”。
+自动化测试仍使用 `InMemoryUserRepository`，防止测试修改正式数据库。
 
-### 14.2 目标结构
+### 14.2 当前结构
 
-接入 Access 后，由服务器中的 JDBC DAO 实现 `UserRepository`，客户端不得直接连接数据库。登录流程的 Action、DTO 和界面不变，只替换服务器的数据访问实现。
+服务器中的 JDBC DAO 实现 `UserRepository`，客户端不得直接连接数据库。登录流程的 Action、DTO 和界面没有因持久化而改变。
 
 ```mermaid
 flowchart LR
     AUTH[AuthenticationService] --> UR[UserRepository 接口]
-    UR --> MEM[当前 InMemoryUserRepository]
-    UR --> DAO[目标 AccessUserDao]
+    UR --> MEM[测试 InMemoryUserRepository]
+    UR --> DAO[生产 AccessUserRepository]
     DAO --> DB[(vCampus.accdb)]
 ```
 
@@ -770,7 +796,8 @@ flowchart LR
 | 用户服务器入口 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/UserServerModule.java` |
 | 身份认证与会话存储 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/InMemoryAuthenticationService.java` |
 | 账号 Repository | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/UserRepository.java` |
-| 当前内存账号实现 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/InMemoryUserRepository.java` |
+| 生产账号实现 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/AccessUserRepository.java` |
+| 测试账号实现 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/InMemoryUserRepository.java` |
 | 子系统会话查询接口 | `vcampus-server/src/main/java/edu/seu/vcampus/server/security/SessionLookup.java` |
 | 用户数据库设计 | `database/schema/user.md` |
 

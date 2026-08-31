@@ -5,6 +5,7 @@ import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.Request;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.user.LoginRequest;
+import edu.seu.vcampus.common.user.BatchCreateUserAccountsRequest;
 import edu.seu.vcampus.common.user.CreateUserAccountRequest;
 import edu.seu.vcampus.common.user.ResetUserPasswordRequest;
 import edu.seu.vcampus.common.user.SessionInfo;
@@ -50,6 +51,7 @@ public final class UserServerModule implements ServerModule {
         router.register(UserActions.CURRENT_SESSION, this::currentSession);
         router.register(UserActions.ADMIN_LIST_ACCOUNTS, this::listAccounts);
         router.register(UserActions.ADMIN_CREATE_ACCOUNT, this::createAccount);
+        router.register(UserActions.ADMIN_BATCH_CREATE_ACCOUNTS, this::createAccounts);
         router.register(UserActions.ADMIN_UPDATE_ACCOUNT, this::updateAccount);
         router.register(UserActions.ADMIN_UPDATE_STATUS, this::updateStatus);
         router.register(UserActions.ADMIN_RESET_PASSWORD, this::resetPassword);
@@ -102,6 +104,20 @@ public final class UserServerModule implements ServerModule {
         }
         return executeAdministration(
                 request, "账号创建成功。", () -> administration.createAccount(data));
+    }
+
+    private Response createAccounts(Request request) {
+        if (!(request.getData() instanceof BatchCreateUserAccountsRequest data)) {
+            return invalidRequest(request);
+        }
+        Response denied = administrationFailure(request);
+        if (denied != null) {
+            return denied;
+        }
+        return executeAdministration(
+                request,
+                "成功导入 " + data.getAccounts().size() + " 个账号。",
+                () -> administration.createAccounts(data));
     }
 
     private Response updateAccount(Request request) {

@@ -2,6 +2,7 @@ package edu.seu.vcampus.client.module.user;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.common.user.BatchCreateUserAccountsRequest;
 import edu.seu.vcampus.common.user.CreateUserAccountRequest;
 import edu.seu.vcampus.common.user.PasswordProof;
 import edu.seu.vcampus.common.user.ResetUserPasswordRequest;
@@ -13,6 +14,7 @@ import edu.seu.vcampus.common.user.UserAccountView;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -20,10 +22,14 @@ import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingWorker;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.event.HierarchyEvent;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
@@ -35,6 +41,7 @@ public final class UserAdminPanel extends JPanel {
     private final JTable table = new JTable(tableModel);
     private final JLabel statusLabel = new JLabel("进入页面后加载账号列表");
     private final JButton addButton = new JButton("新增账号");
+    private final JButton importButton = new JButton("批量导入");
     private final JButton editButton = new JButton("编辑账号");
     private final JButton statusButton = new JButton("启用/禁用");
     private final JButton resetButton = new JButton("重置密码");
@@ -52,6 +59,7 @@ public final class UserAdminPanel extends JPanel {
 
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT));
         actions.add(addButton);
+        actions.add(importButton);
         actions.add(editButton);
         actions.add(statusButton);
         actions.add(resetButton);
@@ -62,6 +70,8 @@ public final class UserAdminPanel extends JPanel {
         add(statusLabel, BorderLayout.SOUTH);
 
         addButton.addActionListener(event -> createAccount());
+        importButton.addActionListener(event -> importAccounts());
+        importButton.setToolTipText("导入 UTF-8 CSV：username,displayName");
         editButton.addActionListener(event -> editAccount());
         statusButton.addActionListener(event -> changeStatus());
         resetButton.addActionListener(event -> resetPassword());
@@ -121,6 +131,35 @@ public final class UserAdminPanel extends JPanel {
             showValidationError(exception.getMessage());
         } finally {
             Arrays.fill(password, '\0');
+        }
+    }
+
+    private void importAccounts() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setDialogTitle("选择账号 CSV 文件");
+        chooser.setFileFilter(new FileNameExtensionFilter("CSV 文件 (*.csv)", "csv"));
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        Path path = chooser.getSelectedFile().toPath();
+        try {
+            List<CreateUserAccountRequest> accounts = UserAccountCsvParser.parse(path);
+            int confirmation = JOptionPane.showConfirmDialog(
+                    this,
+                    "将导入 " + accounts.size() + " 个普通账号，初始密码统一为 123456。\n"
+                            + "任意一行无效时，本次导入将全部取消。是否继续？",
+                    "确认批量导入",
+                    JOptionPane.YES_NO_OPTION);
+            if (confirmation == JOptionPane.YES_OPTION) {
+                runMutation(
+                        UserActions.ADMIN_BATCH_CREATE_ACCOUNTS,
+                        new BatchCreateUserAccountsRequest(accounts),
+                        "正在批量导入账号……");
+            }
+        } catch (IOException exception) {
+            showValidationError("无法读取 CSV 文件：" + exception.getMessage());
+        } catch (IllegalArgumentException exception) {
+            showValidationError(exception.getMessage());
         }
     }
 
@@ -224,6 +263,7 @@ public final class UserAdminPanel extends JPanel {
 
     private void setActionsEnabled(boolean enabled) {
         addButton.setEnabled(enabled);
+        importButton.setEnabled(enabled);
         refreshButton.setEnabled(enabled);
         editButton.setEnabled(enabled);
         statusButton.setEnabled(enabled);

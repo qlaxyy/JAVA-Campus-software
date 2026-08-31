@@ -15,6 +15,8 @@ public final class UserActions {
             ActionNames.of(ModuleNames.USER, "ADMIN_LIST_ACCOUNTS");
     public static final String ADMIN_CREATE_ACCOUNT =
             ActionNames.of(ModuleNames.USER, "ADMIN_CREATE_ACCOUNT");
+    public static final String ADMIN_BATCH_CREATE_ACCOUNTS =
+            ActionNames.of(ModuleNames.USER, "ADMIN_BATCH_CREATE_ACCOUNTS");
     public static final String ADMIN_UPDATE_ACCOUNT =
             ActionNames.of(ModuleNames.USER, "ADMIN_UPDATE_ACCOUNT");
     public static final String ADMIN_UPDATE_STATUS =

@@ -4,7 +4,7 @@
 
 - 模块：用户管理、登录、会话与管理员授权
 - 对应 Epic：[#1](https://github.com/qlaxyy/JAVA-Campus-software/issues/1)
-- 状态：权限模型和内存版账号管理已实现；Access 类型和 DAO 尚待最小原型验证
+- 状态：账号与管理范围已接入 Access DAO；慢哈希、审计和完整状态模型待实现
 
 ## 2. 表清单
 
@@ -12,9 +12,13 @@
 |---|---|---|---|
 | `tblUser` | 登录账号和账号级权限 | `userId` | `username` 唯一；密码只存带盐慢哈希；状态控制登录 |
 | `tblUserAdminScope` | 账号附加的业务管理范围 | `userAdminScopeId` | `(userId, moduleCode)` 唯一 |
-| `tblUserAuditLog` | 用户与授权管理审计 | `auditLogId` | 只追加；不记录密码、盐或完整 token |
+| `tblUserAuditLog`（规划） | 用户与授权管理审计 | `auditLogId` | 尚未建表；只追加且不记录密码、盐或完整 token |
 
 会话第一阶段仍保存在服务器内存，暂不落库。将来需要跨进程或重启保持会话时再单独评审会话表。
+
+当前可运行版本为了与既有登录协议兼容，`tblUser` 实际保存 `passwordProof`
+和 `enabled`；`tblUserAdminScope` 实际使用 `scopeId`、`userId`、`moduleCode`。
+下面的慢哈希、时间字段和审计表是交付前的目标结构，不应误认为已经实现。
 
 ## 3. 字段字典
 
@@ -79,7 +83,7 @@
 | `shopadmin` | `USER` | `SHOP` | 商店管理授权 |
 | `hospitaladmin` | `USER` | `HOSPITAL` | 医院管理授权；当前不在医院医生名单中 |
 
-这些账号当前由 `InMemoryAuthenticationService` 提供，接入 Access 时用虚构数据替换，不能提交真实个人信息或密码。
+空的 `vCampus.accdb` 首次启动时会写入这些虚构账号；已有数据时不会重复初始化或覆盖修改。不能提交真实个人信息或密码。
 
 ## 6. 第一批用户管理 Action
 
@@ -87,14 +91,19 @@
 |---|---|---|
 | `USER.ADMIN_LIST_ACCOUNTS` | `SUPER_ADMIN` | 按用户名、角色、状态查询账号 |
 | `USER.ADMIN_CREATE_ACCOUNT` | `SUPER_ADMIN` | 创建普通账号并设置初始管理范围 |
+| `USER.ADMIN_BATCH_CREATE_ACCOUNTS` | `SUPER_ADMIN` | 原子批量创建不含管理权限的普通账号，最多 1000 个 |
 | `USER.ADMIN_UPDATE_ACCOUNT` | `SUPER_ADMIN` | 修改显示名称和子系统管理范围 |
 | `USER.ADMIN_UPDATE_STATUS` | `SUPER_ADMIN` | 启用或停用账号，不物理删除 |
 | `USER.ADMIN_RESET_PASSWORD` | `SUPER_ADMIN` | 重置账号密码并清除该账号已有会话 |
 
-上述 Action 已有内存 Repository 版本。第一版不提供创建其他超级管理员或修改全局角色；接入 Access 时保持 Action 和 DTO 不变，只替换 Repository/DAO。
+上述 Action 已通过 `UserRepository` 使用 Access。第一版不提供创建其他超级管理员或修改全局角色；Action 和 DTO 保持不变。
+
+批量导入 CSV 使用 UTF-8 编码，第一行为 `username,displayName`。初始密码统一为
+`123456`，文件中不保存密码和管理范围。服务器会再次检查已有账号和文件内重复账号；
+任意一行失败时 Access 事务整体回滚。
 
 ## 7. 待评审问题
 
-- Access JDBC 驱动、连接串、事务能力和并发写入限制需通过公共数据库实验确认。
+- UCanAccess 连接、建表、事务写入和重连读取已完成最小实验；多客户端并发写入限制仍需专项验证。
 - 正式密码慢哈希优先评估 PBKDF2（JDK 自带）；具体迭代次数和兼容字段需做性能测试后确定。
 - `LOCKED` 的失败次数阈值、自动解锁时间和管理员手工解锁流程待用户模块安全设计补充。

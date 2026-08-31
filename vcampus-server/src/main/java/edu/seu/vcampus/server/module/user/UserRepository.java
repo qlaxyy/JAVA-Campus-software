@@ -9,4 +9,8 @@ interface UserRepository {
     Optional<UserAccount> findByUsername(String username);
     List<UserAccount> findAll();
     void save(UserAccount account);
+
+    default void saveAll(List<UserAccount> accounts) {
+        accounts.forEach(this::save);
+    }
 }

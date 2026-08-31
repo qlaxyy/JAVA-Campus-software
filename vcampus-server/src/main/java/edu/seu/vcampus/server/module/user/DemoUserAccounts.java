@@ -8,7 +8,7 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.Set;
 
-/** Creates the public development accounts used before Access persistence is connected. */
+/** Creates the public development accounts used by local development and tests. */
 final class DemoUserAccounts {
 
     private DemoUserAccounts() {
@@ -16,6 +16,15 @@ final class DemoUserAccounts {
 
     static InMemoryUserRepository createRepository() {
         InMemoryUserRepository repository = new InMemoryUserRepository();
+        seedIfEmpty(repository);
+        return repository;
+    }
+
+    /** Seeds a newly created repository without overwriting persisted changes. */
+    static void seedIfEmpty(UserRepository repository) {
+        if (!repository.findAll().isEmpty()) {
+            return;
+        }
         repository.save(account("U-STUDENT-001", "student001", "演示学生",
                 Role.USER, Set.of()));
         repository.save(account("U-TEACHER-001", "teacher001", "演示教师",
@@ -32,7 +41,6 @@ final class DemoUserAccounts {
                 Role.USER, Set.of(AdminScope.SHOP)));
         repository.save(account("U-HOSPITAL-ADMIN-001", "hospitaladmin", "演示医院管理员",
                 Role.USER, Set.of(AdminScope.HOSPITAL)));
-        return repository;
     }
 
     private static UserAccount account(

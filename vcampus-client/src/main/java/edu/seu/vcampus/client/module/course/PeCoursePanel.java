@@ -1,10 +1,10 @@
 package edu.seu.vcampus.client.module.course;
 
 import edu.seu.vcampus.client.application.ClientContext;
-import edu.seu.vcampus.common.course.BatchRequest;
 import edu.seu.vcampus.common.course.CourseActions;
 import edu.seu.vcampus.common.course.CourseInfo;
 import edu.seu.vcampus.common.course.OfferingInfo;
+import edu.seu.vcampus.common.course.PeCourseListRequest;
 import edu.seu.vcampus.common.course.ScheduleInfo;
 import edu.seu.vcampus.common.course.SelectCourseRequest;
 import edu.seu.vcampus.common.course.SelectionBatchInfo;
@@ -15,6 +15,7 @@ import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -23,15 +24,16 @@ import javax.swing.SwingWorker;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.FlowLayout;
 import java.awt.Font;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 /**
- * 方案外课程页面。
+ * 体育课页面。
  */
-final class SubstituteCoursePanel
+final class PeCoursePanel
     extends JPanel {
 
     private final ClientContext context;
@@ -44,12 +46,26 @@ final class SubstituteCoursePanel
     private final JLabel statusLabel =
         new JLabel(" ");
 
-    SubstituteCoursePanel(
+    private final JComboBox<String>
+        projectBox =
+        new JComboBox<>(
+            new String[]{
+                "全部",
+                "篮球",
+                "羽毛球",
+                "瑜伽",
+                "保健班"
+            });
+
+    PeCoursePanel(
         ClientContext context,
         SelectionBatchInfo batch) {
 
-        this.context = context;
-        this.batch = batch;
+        this.context =
+            context;
+
+        this.batch =
+            batch;
 
         initializeView();
         loadCourses();
@@ -69,9 +85,13 @@ final class SubstituteCoursePanel
                 16,
                 16));
 
+        JPanel top =
+            new JPanel(
+                new BorderLayout());
+
         JLabel title =
             new JLabel(
-                "方案外课程");
+                "体育课");
 
         title.setFont(
             title.getFont()
@@ -79,8 +99,28 @@ final class SubstituteCoursePanel
                     Font.BOLD,
                     20F));
 
-        add(
+        top.add(
             title,
+            BorderLayout.WEST);
+
+        JPanel filter =
+            new JPanel(
+                new FlowLayout(
+                    FlowLayout.RIGHT));
+
+        filter.add(
+            new JLabel(
+                "体育项目："));
+
+        filter.add(
+            projectBox);
+
+        top.add(
+            filter,
+            BorderLayout.EAST);
+
+        add(
+            top,
             BorderLayout.NORTH);
 
         coursePanel.setLayout(
@@ -88,40 +128,39 @@ final class SubstituteCoursePanel
                 coursePanel,
                 BoxLayout.Y_AXIS));
 
-        JScrollPane scrollPane =
+        JScrollPane scroll =
             new JScrollPane(
                 coursePanel);
 
-        scrollPane.setBorder(
+        scroll.setBorder(
             BorderFactory.createEmptyBorder());
 
-        scrollPane
-            .getVerticalScrollBar()
-            .setUnitIncrement(12);
+        scroll.getVerticalScrollBar()
+            .setUnitIncrement(
+                12);
 
         add(
-            scrollPane,
+            scroll,
             BorderLayout.CENTER);
 
         add(
             statusLabel,
             BorderLayout.SOUTH);
+
+        projectBox.addActionListener(
+            event ->
+                loadCourses());
     }
 
-    /**
-     * 标签页重新进入时刷新。
-     */
     void reload() {
 
         loadCourses();
     }
 
-    /**
-     * 加载方案外课程。
-     */
     private void loadCourses() {
 
-        if (context.currentSession().isEmpty()) {
+        if (context.currentSession()
+            .isEmpty()) {
 
             showError(
                 "登录状态已失效，请重新登录。");
@@ -129,8 +168,11 @@ final class SubstituteCoursePanel
             return;
         }
 
+        String project =
+            selectedProject();
+
         statusLabel.setText(
-            "正在加载方案外课程...");
+            "正在加载体育课程...");
 
         SwingWorker<Response, Void> worker =
             new SwingWorker<>() {
@@ -140,9 +182,10 @@ final class SubstituteCoursePanel
                     throws Exception {
 
                     return context.send(
-                        CourseActions.LIST_SUBSTITUTE_COURSES,
-                        new BatchRequest(
-                            batch.getBatchId()));
+                        CourseActions.LIST_PE_COURSES,
+                        new PeCourseListRequest(
+                            batch.getBatchId(),
+                            project));
                 }
 
                 @Override
@@ -171,7 +214,7 @@ final class SubstituteCoursePanel
                         statusLabel.setText(
                             "共加载 "
                                 + courses.size()
-                                + " 门方案外课程");
+                                + " 门体育课程");
 
                     } catch (InterruptedException exception) {
 
@@ -179,7 +222,7 @@ final class SubstituteCoursePanel
                             .interrupt();
 
                         showError(
-                            "加载方案外课程被中断。");
+                            "加载体育课程被中断。");
 
                     } catch (ExecutionException exception) {
 
@@ -187,10 +230,9 @@ final class SubstituteCoursePanel
                             exception.getCause();
 
                         showError(
-                            "无法加载方案外课程："
-                                + (cause == null
+                            cause == null
                                 ? exception.getMessage()
-                                : cause.getMessage()));
+                                : cause.getMessage());
 
                     } catch (IllegalStateException exception) {
 
@@ -203,6 +245,20 @@ final class SubstituteCoursePanel
         worker.execute();
     }
 
+    private String selectedProject() {
+
+        Object value =
+            projectBox.getSelectedItem();
+
+        if (value == null
+            || "全部".equals(value)) {
+
+            return null;
+        }
+
+        return value.toString();
+    }
+
     private List<CourseInfo> readCourses(
         Response response) {
 
@@ -210,19 +266,20 @@ final class SubstituteCoursePanel
             instanceof List<?> values)) {
 
             throw new IllegalStateException(
-                "服务器返回的方案外课程数据格式错误。");
+                "服务器返回的体育课程数据格式错误。");
         }
 
         List<CourseInfo> result =
             new ArrayList<>();
 
-        for (Object value : values) {
+        for (Object value
+            : values) {
 
             if (!(value
                 instanceof CourseInfo course)) {
 
                 throw new IllegalStateException(
-                    "服务器返回的方案外课程数据格式错误。");
+                    "服务器返回的体育课程数据格式错误。");
             }
 
             result.add(
@@ -241,11 +298,12 @@ final class SubstituteCoursePanel
 
             coursePanel.add(
                 new JLabel(
-                    "当前没有方案外课程。"));
+                    "当前没有符合条件的体育课程。"));
 
         } else {
 
-            for (CourseInfo course : courses) {
+            for (CourseInfo course
+                : courses) {
 
                 coursePanel.add(
                     createCourseCard(
@@ -260,15 +318,7 @@ final class SubstituteCoursePanel
         coursePanel.revalidate();
         coursePanel.repaint();
     }
-    /**
-     * 方案外课程对应的培养方案要求
-     * 是否已经被其他课程满足。
-     */
 
-
-    /**
-     * 创建课程卡片。
-     */
     private JPanel createCourseCard(
         CourseInfo course) {
 
@@ -281,46 +331,47 @@ final class SubstituteCoursePanel
         card.setAlignmentX(
             Component.LEFT_ALIGNMENT);
 
-        /*
-         * 这里只负责设置边框。
-         */
-        if (hasTimeConflict(course)) {
+        if (hasTimeConflict(
+            course)) {
 
             card.setBorder(
-                BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(
-                        new Color(
-                            190,
-                            45,
-                            45),
-                        2),
-                    BorderFactory.createEmptyBorder(
-                        14,
-                        16,
-                        14,
-                        16)));
+                BorderFactory
+                    .createCompoundBorder(
+                        BorderFactory
+                            .createLineBorder(
+                                new Color(
+                                    190,
+                                    45,
+                                    45),
+                                2),
+                        BorderFactory
+                            .createEmptyBorder(
+                                14,
+                                16,
+                                14,
+                                16)));
 
         } else {
 
             card.setBorder(
-                BorderFactory.createCompoundBorder(
-                    BorderFactory.createEtchedBorder(),
-                    BorderFactory.createEmptyBorder(
-                        14,
-                        16,
-                        14,
-                        16)));
+                BorderFactory
+                    .createCompoundBorder(
+                        BorderFactory
+                            .createEtchedBorder(),
+                        BorderFactory
+                            .createEmptyBorder(
+                                14,
+                                16,
+                                14,
+                                16)));
         }
 
-        JPanel summaryPanel =
+        JPanel summary =
             new JPanel(
                 new BorderLayout(
                     16,
                     0));
 
-        /*
-         * 到这里 information 才创建。
-         */
         JPanel information =
             new JPanel();
 
@@ -329,18 +380,18 @@ final class SubstituteCoursePanel
                 information,
                 BoxLayout.Y_AXIS));
 
-        JLabel nameLabel =
+        JLabel name =
             new JLabel(
                 course.getCourseName());
 
-        nameLabel.setFont(
-            nameLabel.getFont()
+        name.setFont(
+            name.getFont()
                 .deriveFont(
                     Font.BOLD,
                     17F));
 
         information.add(
-            nameLabel);
+            name);
 
         information.add(
             Box.createVerticalStrut(
@@ -362,50 +413,20 @@ final class SubstituteCoursePanel
                     + "    类型："
                     + course.getCourseType()));
 
-        /*
-         * =========================
-         * 时间冲突提示
-         * =========================
-         */
-        JLabel conflictLabel =
+        JLabel conflict =
             createConflictLabel(
                 course);
 
-        if (conflictLabel != null) {
+        if (conflict != null) {
 
             information.add(
                 Box.createVerticalStrut(
                     6));
 
             information.add(
-                conflictLabel);
+                conflict);
         }
 
-        /*
-         * =========================
-         * 培养方案要求已满足提示
-         * =========================
-         *
-         * 注意：
-         * 必须放在 information 创建之后。
-         */
-        JLabel satisfiedLabel =
-            createRequirementSatisfiedLabel(
-                course);
-
-        if (satisfiedLabel != null) {
-
-            information.add(
-                Box.createVerticalStrut(
-                    6));
-
-            information.add(
-                satisfiedLabel);
-        }
-
-        /*
-         * 当前课程状态。
-         */
         information.add(
             Box.createVerticalStrut(
                 3));
@@ -416,68 +437,69 @@ final class SubstituteCoursePanel
                     ? "状态：已选"
                     : "状态：未选"));
 
-        summaryPanel.add(
+        summary.add(
             information,
             BorderLayout.CENTER);
 
-        JButton expandButton =
+        JButton expand =
             new JButton(
                 "展开教学班");
 
-        summaryPanel.add(
-            expandButton,
+        summary.add(
+            expand,
             BorderLayout.EAST);
 
         card.add(
-            summaryPanel,
+            summary,
             BorderLayout.NORTH);
 
-        JPanel offeringPanel =
+        JPanel offerings =
             new JPanel();
 
-        offeringPanel.setLayout(
+        offerings.setLayout(
             new BoxLayout(
-                offeringPanel,
+                offerings,
                 BoxLayout.Y_AXIS));
 
-        offeringPanel.setBorder(
-            BorderFactory.createEmptyBorder(
-                8,
-                12,
-                0,
-                12));
+        offerings.setBorder(
+            BorderFactory
+                .createEmptyBorder(
+                    8,
+                    12,
+                    0,
+                    12));
 
         for (OfferingInfo offering
             : course.getOfferings()) {
 
-            offeringPanel.add(
+            offerings.add(
                 createOfferingCard(
                     course,
                     offering));
 
-            offeringPanel.add(
+            offerings.add(
                 Box.createVerticalStrut(
                     8));
         }
 
-        offeringPanel.setVisible(
+        offerings.setVisible(
             false);
 
         card.add(
-            offeringPanel,
+            offerings,
             BorderLayout.CENTER);
 
-        expandButton.addActionListener(
+        expand.addActionListener(
             event -> {
 
-                boolean expanded =
-                    !offeringPanel.isVisible();
+                boolean visible =
+                    !offerings.isVisible();
 
-                offeringPanel.setVisible(
-                    expanded);
+                offerings.setVisible(
+                    visible);
 
-                expandButton.setText(
-                    expanded
+                expand.setText(
+                    visible
                         ? "收起教学班"
                         : "展开教学班");
 
@@ -491,38 +513,6 @@ final class SubstituteCoursePanel
         return card;
     }
 
-    /**
-     * 方案外课程对应的培养方案要求
-     * 是否已经被其他课程满足。
-     */
-    private JLabel createRequirementSatisfiedLabel(
-        CourseInfo course) {
-
-        boolean satisfied =
-            course.getOfferings()
-                .stream()
-                .anyMatch(offering ->
-                    "REQUIREMENT_SATISFIED".equals(
-                        offering.getAvailabilityStatus()));
-
-        if (!satisfied) {
-            return null;
-        }
-
-        JLabel label =
-            new JLabel(
-                "✓ 对应培养方案要求已满足");
-
-        label.setFont(
-            label.getFont()
-                .deriveFont(
-                    Font.BOLD));
-
-        return label;
-    }
-    /**
-     * 创建教学班卡片。
-     */
     private JPanel createOfferingCard(
         CourseInfo course,
         OfferingInfo offering) {
@@ -540,36 +530,42 @@ final class SubstituteCoursePanel
             offering.getAvailabilityStatus())) {
 
             card.setBorder(
-                BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(
-                        new Color(
-                            190,
-                            45,
-                            45)),
-                    BorderFactory.createEmptyBorder(
-                        10,
-                        12,
-                        10,
-                        12)));
+                BorderFactory
+                    .createCompoundBorder(
+                        BorderFactory
+                            .createLineBorder(
+                                new Color(
+                                    190,
+                                    45,
+                                    45)),
+                        BorderFactory
+                            .createEmptyBorder(
+                                10,
+                                12,
+                                10,
+                                12)));
 
         } else {
 
             card.setBorder(
-                BorderFactory.createCompoundBorder(
-                    BorderFactory.createEtchedBorder(),
-                    BorderFactory.createEmptyBorder(
-                        10,
-                        12,
-                        10,
-                        12)));
+                BorderFactory
+                    .createCompoundBorder(
+                        BorderFactory
+                            .createEtchedBorder(),
+                        BorderFactory
+                            .createEmptyBorder(
+                                10,
+                                12,
+                                10,
+                                12)));
         }
 
-        JPanel information =
+        JPanel info =
             new JPanel();
 
-        information.setLayout(
+        info.setLayout(
             new BoxLayout(
-                information,
+                info,
                 BoxLayout.Y_AXIS));
 
         JLabel classLabel =
@@ -582,6 +578,63 @@ final class SubstituteCoursePanel
                 .deriveFont(
                     Font.BOLD,
                     15F));
+
+        info.add(
+            classLabel);
+
+        info.add(
+            Box.createVerticalStrut(
+                5));
+
+        info.add(
+            new JLabel(
+                "教师："
+                    + teacherText(
+                    offering)));
+
+        info.add(
+            Box.createVerticalStrut(
+                3));
+
+        info.add(
+            new JLabel(
+                "上课时间："
+                    + scheduleText(
+                    offering)));
+
+        info.add(
+            Box.createVerticalStrut(
+                3));
+
+        info.add(
+            new JLabel(
+                "地点："
+                    + nullableText(
+                    offering.getLocationName())
+                    + "    校区："
+                    + nullableText(
+                    offering.getCampusName())));
+
+        info.add(
+            Box.createVerticalStrut(
+                3));
+
+        /*
+         * MIXED_SPLIT 时服务器返回的是
+         * 当前学生性别对应的可竞争名额。
+         */
+        info.add(
+            new JLabel(
+                "当前适用名额："
+                    + offering.getSelectedCount()
+                    + " / "
+                    + offering.getCapacity()
+                    + "    剩余："
+                    + offering.getRemainingCount()));
+
+        info.add(
+            Box.createVerticalStrut(
+                3));
 
         JLabel status =
             new JLabel(
@@ -604,110 +657,43 @@ final class SubstituteCoursePanel
                         Font.BOLD));
         }
 
-        information.add(
-            classLabel);
-
-        information.add(
-            Box.createVerticalStrut(5));
-
-        information.add(
-            new JLabel(
-                "教师："
-                    + teacherText(
-                    offering)));
-
-        information.add(
-            Box.createVerticalStrut(3));
-
-        information.add(
-            new JLabel(
-                "上课时间："
-                    + scheduleText(
-                    offering)));
-
-        information.add(
-            Box.createVerticalStrut(3));
-
-        information.add(
-            new JLabel(
-                "地点："
-                    + nullableText(
-                    offering.getLocationName())
-                    + "    校区："
-                    + nullableText(
-                    offering.getCampusName())));
-
-        information.add(
-            Box.createVerticalStrut(3));
-
-        information.add(
-            new JLabel(
-                "人数："
-                    + offering.getSelectedCount()
-                    + " / "
-                    + offering.getCapacity()
-                    + "    剩余："
-                    + offering.getRemainingCount()));
-
-        information.add(
-            Box.createVerticalStrut(3));
-
-        information.add(
+        info.add(
             status);
 
-        String language =
-            offering.getTeachingLanguage();
-
-        if (language != null
-            && !language.isBlank()
-            && !"中文".equals(language)) {
-
-            information.add(
-                Box.createVerticalStrut(3));
-
-            information.add(
-                new JLabel(
-                    "授课语言："
-                        + language));
-        }
-
         card.add(
-            information,
+            info,
             BorderLayout.CENTER);
 
-        JButton selectButton =
+        JButton select =
             new JButton(
                 selectButtonText(
                     offering));
 
-        selectButton.setEnabled(
+        select.setEnabled(
             canSelect(
                 offering));
 
-        selectButton.addActionListener(
+        select.addActionListener(
             event ->
                 confirmAndSelect(
                     course,
                     offering,
-                    selectButton));
+                    select));
 
         card.add(
-            selectButton,
+            select,
             BorderLayout.EAST);
 
         return card;
     }
 
-    /**
-     * 选课确认。
-     */
     private void confirmAndSelect(
         CourseInfo course,
         OfferingInfo offering,
         JButton button) {
 
         String message =
-            "请确认选择以下方案外课程教学班：\n\n"
+            "请确认选择以下体育教学班：\n\n"
                 + "课程："
                 + course.getCourseName()
                 + "（"
@@ -717,24 +703,22 @@ final class SubstituteCoursePanel
                 + offering.getClassNo()
                 + "\n"
                 + "教师："
-                + teacherText(offering)
+                + teacherText(
+                offering)
                 + "\n"
                 + "时间："
-                + scheduleText(offering)
+                + scheduleText(
+                offering)
                 + "\n"
                 + "地点："
                 + nullableText(
-                offering.getLocationName())
-                + "\n"
-                + "校区："
-                + nullableText(
-                offering.getCampusName());
+                offering.getLocationName());
 
         int result =
             JOptionPane.showConfirmDialog(
                 this,
                 message,
-                "确认选课",
+                "确认体育选课",
                 JOptionPane.YES_NO_OPTION,
                 JOptionPane.QUESTION_MESSAGE);
 
@@ -749,9 +733,6 @@ final class SubstituteCoursePanel
             button);
     }
 
-    /**
-     * 提交方案外选课。
-     */
     private void submitSelection(
         OfferingInfo offering,
         JButton button) {
@@ -761,9 +742,6 @@ final class SubstituteCoursePanel
 
         button.setText(
             "提交中...");
-
-        statusLabel.setText(
-            "正在提交选课请求...");
 
         SwingWorker<Response, Void> worker =
             new SwingWorker<>() {
@@ -787,22 +765,15 @@ final class SubstituteCoursePanel
                         Response response =
                             get();
 
-                        if (response.isSuccess()) {
-
-                            JOptionPane.showMessageDialog(
-                                SubstituteCoursePanel.this,
-                                response.getMessage(),
-                                "选课成功",
-                                JOptionPane.INFORMATION_MESSAGE);
-
-                        } else {
-
-                            JOptionPane.showMessageDialog(
-                                SubstituteCoursePanel.this,
-                                response.getMessage(),
-                                "选课失败",
-                                JOptionPane.WARNING_MESSAGE);
-                        }
+                        JOptionPane.showMessageDialog(
+                            PeCoursePanel.this,
+                            response.getMessage(),
+                            response.isSuccess()
+                                ? "选课成功"
+                                : "选课失败",
+                            response.isSuccess()
+                                ? JOptionPane.INFORMATION_MESSAGE
+                                : JOptionPane.WARNING_MESSAGE);
 
                         loadCourses();
 
@@ -810,12 +781,6 @@ final class SubstituteCoursePanel
 
                         Thread.currentThread()
                             .interrupt();
-
-                        JOptionPane.showMessageDialog(
-                            SubstituteCoursePanel.this,
-                            "选课请求被中断。",
-                            "选课失败",
-                            JOptionPane.ERROR_MESSAGE);
 
                         loadCourses();
 
@@ -825,11 +790,10 @@ final class SubstituteCoursePanel
                             exception.getCause();
 
                         JOptionPane.showMessageDialog(
-                            SubstituteCoursePanel.this,
-                            "无法提交选课请求："
-                                + (cause == null
+                            PeCoursePanel.this,
+                            cause == null
                                 ? exception.getMessage()
-                                : cause.getMessage()),
+                                : cause.getMessage(),
                             "选课失败",
                             JOptionPane.ERROR_MESSAGE);
 
@@ -863,8 +827,7 @@ final class SubstituteCoursePanel
 
         return switch (
             offering.getAvailabilityStatus()) {
-            case "REQUIREMENT_SATISFIED" ->
-                "培养方案要求已满足";
+
             case "AVAILABLE" ->
                 "选择";
 
@@ -885,6 +848,35 @@ final class SubstituteCoursePanel
         };
     }
 
+    private String availabilityText(
+        OfferingInfo offering) {
+
+        return switch (
+            offering.getAvailabilityStatus()) {
+
+            case "AVAILABLE" ->
+                "可选";
+
+            case "SELECTED" ->
+                "已选";
+
+            case "COURSE_ALREADY_SELECTED" ->
+                "已经选择该课程";
+
+            case "FULL" ->
+                "人数已满";
+
+            case "TIME_CONFLICT" ->
+                "时间冲突";
+
+            case "NOT_ELIGIBLE" ->
+                "不符合选课条件";
+
+            default ->
+                "不可选";
+        };
+    }
+
     private boolean hasTimeConflict(
         CourseInfo course) {
 
@@ -892,29 +884,30 @@ final class SubstituteCoursePanel
             .stream()
             .anyMatch(offering ->
                 "TIME_CONFLICT".equals(
-                    offering.getAvailabilityStatus()));
+                    offering
+                        .getAvailabilityStatus()));
     }
 
     private JLabel createConflictLabel(
         CourseInfo course) {
 
-        int total =
-            course.getOfferings().size();
-
-        long conflictCount =
+        long count =
             course.getOfferings()
                 .stream()
                 .filter(offering ->
                     "TIME_CONFLICT".equals(
-                        offering.getAvailabilityStatus()))
+                        offering
+                            .getAvailabilityStatus()))
                 .count();
 
-        if (conflictCount == 0) {
+        if (count == 0) {
             return null;
         }
 
         String text =
-            conflictCount == total
+            count == course
+                .getOfferings()
+                .size()
                 ? "⚠ 时间冲突：所有教学班均与已选课程冲突"
                 : "⚠ 时间冲突：部分教学班与已选课程冲突";
 
@@ -978,43 +971,32 @@ final class SubstituteCoursePanel
     private String scheduleText(
         ScheduleInfo schedule) {
 
-        StringBuilder text =
-            new StringBuilder();
+        String week =
+            switch (
+                schedule.getWeekPattern()) {
 
-        text.append(
-            dayText(
-                schedule.getDayOfWeek()));
+                case "ODD" ->
+                    "（单周）";
 
-        text.append(" 第")
-            .append(
-                schedule.getStartPeriod())
-            .append("-")
-            .append(
-                schedule.getEndPeriod())
-            .append("节");
+                case "EVEN" ->
+                    "（双周）";
 
-        text.append(" 第")
-            .append(
-                schedule.getStartWeek())
-            .append("-")
-            .append(
-                schedule.getEndWeek())
-            .append("周");
+                default ->
+                    "";
+            };
 
-        if ("ODD".equals(
-            schedule.getWeekPattern())) {
-
-            text.append(
-                "（单周）");
-
-        } else if ("EVEN".equals(
-            schedule.getWeekPattern())) {
-
-            text.append(
-                "（双周）");
-        }
-
-        return text.toString();
+        return dayText(
+            schedule.getDayOfWeek())
+            + " 第"
+            + schedule.getStartPeriod()
+            + "-"
+            + schedule.getEndPeriod()
+            + "节 第"
+            + schedule.getStartWeek()
+            + "-"
+            + schedule.getEndWeek()
+            + "周"
+            + week;
     }
 
     private String dayText(
@@ -1032,43 +1014,6 @@ final class SubstituteCoursePanel
 
             default ->
                 "未知星期";
-        };
-    }
-
-    private String availabilityText(
-        OfferingInfo offering) {
-
-        if (offering.isSelected()) {
-            return "已选";
-        }
-
-        return switch (
-            offering.getAvailabilityStatus()) {
-            case "REQUIREMENT_SATISFIED" ->
-                "培养方案要求已满足";
-            case "AVAILABLE" ->
-                "可选";
-
-            case "SELECTED" ->
-                "已选";
-
-            case "COURSE_ALREADY_SELECTED" ->
-                "已经选择该课程";
-
-            case "FULL" ->
-                "人数已满";
-
-            case "TIME_CONFLICT" ->
-                "时间冲突";
-
-            case "NOT_ELIGIBLE" ->
-                "不符合选课条件";
-
-            case "OFFERING_CLOSED" ->
-                "当前教学班不可选";
-
-            default ->
-                "不可选";
         };
     }
 
@@ -1091,7 +1036,7 @@ final class SubstituteCoursePanel
 
         coursePanel.add(
             new JLabel(
-                "方案外课程加载失败。"));
+                "体育课程加载失败。"));
 
         coursePanel.revalidate();
         coursePanel.repaint();

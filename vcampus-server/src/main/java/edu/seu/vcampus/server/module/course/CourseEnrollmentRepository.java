@@ -8,60 +8,62 @@ import java.util.Set;
  */
 interface CourseEnrollmentRepository {
 
-    /**
-     * 是否已经选择某教学班。
-     */
     boolean isOfferingSelected(
         String userId,
         long offeringId);
 
-    /**
-     * 当前学生所有已选教学班 ID。
-     */
     Set<Long> findSelectedOfferingIds(
         String userId);
 
-    /**
-     * 当前学生所有有效选课记录。
-     */
-    List<CourseEnrollmentRecord> findSelectedEnrollments(
+    List<CourseEnrollmentRecord>
+    findSelectedEnrollments(
         String userId);
 
-    /**
-     * 根据 enrollmentId 查询学生自己的选课记录。
-     */
-    CourseEnrollmentRecord findSelectedEnrollment(
+    CourseEnrollmentRecord
+    findSelectedEnrollment(
         String userId,
         long enrollmentId);
 
     /**
-     * 当前运行期间新增选择人数。
+     * 查询一个教学班在当前运行期间
+     * 所有新增选课记录。
+     *
+     * 体育课男女容量计算需要使用。
      */
+    List<CourseEnrollmentRecord>
+    findSelectedEnrollmentsByOffering(
+        long offeringId);
+
     int countAdditionalSelections(
         long offeringId);
 
     /**
      * 选课。
+     *
+     * userId：
+     * 登录系统稳定用户 ID。
+     *
+     * studentId：
+     * 当前学籍模块使用的学生 ID。
      */
     void select(
         String userId,
+        String studentId,
         long batchId,
         long offeringId);
 
-    /**
-     * 退课。
-     */
     boolean drop(
         String userId,
         long enrollmentId);
 }
 
 /**
- * 服务器内部使用的选课记录。
+ * 服务器内部选课记录。
  */
 record CourseEnrollmentRecord(
     long enrollmentId,
     String userId,
+    String studentId,
     long selectedBatchId,
     long offeringId) {
 }

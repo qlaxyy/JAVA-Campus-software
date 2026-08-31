@@ -53,7 +53,7 @@ final class InMemoryCourseBatchRepository
                 "2026-2027-1",
                 "2026-2027秋季学期退改补",
                 SelectionBatchType.ADD_DROP,
-                now.plusDays(3),
+                now.minusDays(1),
                 now.plusDays(7),
                 true,
                 true,

@@ -9,36 +9,23 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 开发阶段内存选课记录 Repository。
- *
- * Server 重启后数据会清空。
+ * 开发阶段内存选课记录。
  */
 final class InMemoryCourseEnrollmentRepository
     implements CourseEnrollmentRepository {
 
-    /**
-     * userId
-     * ->
-     * enrollmentId -> EnrollmentRecord
-     */
     private final Map<
         String,
         Map<Long, CourseEnrollmentRecord>>
         recordsByUser =
         new HashMap<>();
 
-    /**
-     * 本次服务器运行期间，
-     * 每个教学班新增了多少学生。
-     */
     private final Map<Long, Integer>
         additionalCounts =
         new HashMap<>();
 
-    /**
-     * 临时选课记录 ID。
-     */
-    private long nextEnrollmentId = 1L;
+    private long nextEnrollmentId =
+        1L;
 
     @Override
     public synchronized boolean isOfferingSelected(
@@ -46,7 +33,8 @@ final class InMemoryCourseEnrollmentRepository
         long offeringId) {
 
         Map<Long, CourseEnrollmentRecord> records =
-            recordsByUser.get(userId);
+            recordsByUser.get(
+                userId);
 
         if (records == null) {
             return false;
@@ -60,11 +48,13 @@ final class InMemoryCourseEnrollmentRepository
     }
 
     @Override
-    public synchronized Set<Long> findSelectedOfferingIds(
+    public synchronized Set<Long>
+    findSelectedOfferingIds(
         String userId) {
 
         Map<Long, CourseEnrollmentRecord> records =
-            recordsByUser.get(userId);
+            recordsByUser.get(
+                userId);
 
         if (records == null) {
             return Set.of();
@@ -80,7 +70,8 @@ final class InMemoryCourseEnrollmentRepository
                 record.offeringId());
         }
 
-        return Set.copyOf(result);
+        return Set.copyOf(
+            result);
     }
 
     @Override
@@ -89,7 +80,8 @@ final class InMemoryCourseEnrollmentRepository
         String userId) {
 
         Map<Long, CourseEnrollmentRecord> records =
-            recordsByUser.get(userId);
+            recordsByUser.get(
+                userId);
 
         if (records == null) {
             return List.of();
@@ -106,7 +98,8 @@ final class InMemoryCourseEnrollmentRepository
         long enrollmentId) {
 
         Map<Long, CourseEnrollmentRecord> records =
-            recordsByUser.get(userId);
+            recordsByUser.get(
+                userId);
 
         if (records == null) {
             return null;
@@ -117,23 +110,48 @@ final class InMemoryCourseEnrollmentRepository
     }
 
     @Override
+    public synchronized List<CourseEnrollmentRecord>
+    findSelectedEnrollmentsByOffering(
+        long offeringId) {
+
+        List<CourseEnrollmentRecord> result =
+            new ArrayList<>();
+
+        for (Map<Long, CourseEnrollmentRecord> records
+            : recordsByUser.values()) {
+
+            for (CourseEnrollmentRecord record
+                : records.values()) {
+
+                if (record.offeringId()
+                    == offeringId) {
+
+                    result.add(
+                        record);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    @Override
     public synchronized int countAdditionalSelections(
         long offeringId) {
 
-        return additionalCounts.getOrDefault(
-            offeringId,
-            0);
+        return additionalCounts
+            .getOrDefault(
+                offeringId,
+                0);
     }
 
     @Override
     public synchronized void select(
         String userId,
+        String studentId,
         long batchId,
         long offeringId) {
 
-        /*
-         * 防止重复选择同一个教学班。
-         */
         if (isOfferingSelected(
             userId,
             offeringId)) {
@@ -154,6 +172,7 @@ final class InMemoryCourseEnrollmentRepository
             new CourseEnrollmentRecord(
                 enrollmentId,
                 userId,
+                studentId,
                 batchId,
                 offeringId);
 
@@ -173,7 +192,8 @@ final class InMemoryCourseEnrollmentRepository
         long enrollmentId) {
 
         Map<Long, CourseEnrollmentRecord> records =
-            recordsByUser.get(userId);
+            recordsByUser.get(
+                userId);
 
         if (records == null) {
             return false;
@@ -187,9 +207,6 @@ final class InMemoryCourseEnrollmentRepository
             return false;
         }
 
-        /*
-         * 退课之后恢复教学班剩余名额。
-         */
         additionalCounts.computeIfPresent(
             removed.offeringId(),
             (id, count) -> {

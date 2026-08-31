@@ -12,13 +12,15 @@ final class InMemoryCourseHistoryRepository
      * 当前测试数据：
      *
      * 101 = 高等数学
+     * 201 = 数学分析基础（方案外课程）
      *
-     * 表示测试学生历史上修过高等数学。
+     * 当前测试学生历史上修过这两门课程。
      */
     private static final Set<Long>
         DEFAULT_TAKEN_COURSE_IDS =
         Set.of(
-            101L
+            101L,
+            201L
         );
 
     @Override

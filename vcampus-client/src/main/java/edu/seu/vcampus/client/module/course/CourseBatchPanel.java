@@ -225,7 +225,58 @@ final class CourseBatchPanel extends JPanel {
 
         /*
          * =========================
-         * 3. 已选课程
+         * 3. 体育课
+         * =========================
+         *
+         * 重修批次不显示体育课。
+         */
+        final PeCoursePanel pePanel;
+
+        if (batch.getBatchType()
+            != SelectionBatchType.RETAKE) {
+
+            pePanel =
+                new PeCoursePanel(
+                    context,
+                    batch);
+
+        } else {
+
+            pePanel =
+                null;
+        }
+
+        /*
+         * =========================
+         * 4. 通选课
+         * =========================
+         *
+         * 与体育课一样：
+         *
+         * PRE_SELECTION 显示
+         * ADD_DROP 显示
+         * RETAKE 不显示
+         */
+        final GeneralCoursePanel
+            generalPanel;
+
+        if (batch.getBatchType()
+            != SelectionBatchType.RETAKE) {
+
+            generalPanel =
+                new GeneralCoursePanel(
+                    context,
+                    batch);
+
+        } else {
+
+            generalPanel =
+                null;
+        }
+
+        /*
+         * =========================
+         * 5. 已选课程
          * =========================
          */
         SelectedCoursePanel selectedPanel =
@@ -235,7 +286,7 @@ final class CourseBatchPanel extends JPanel {
 
         /*
          * =========================
-         * 加入方案内课程
+         * 加入方案内
          * =========================
          */
         tabs.addTab(
@@ -244,7 +295,7 @@ final class CourseBatchPanel extends JPanel {
 
         /*
          * =========================
-         * 加入方案外课程
+         * 加入方案外
          * =========================
          */
         tabs.addTab(
@@ -253,28 +304,23 @@ final class CourseBatchPanel extends JPanel {
 
         /*
          * =========================
-         * 体育课 / 通选课
+         * 体育课 + 通选课
          * =========================
          *
-         * 重修批次中：
+         * 重修批次都不显示。
          *
-         * 体育课不参与重修
-         * 通选课不参与重修
-         *
-         * 因此重修批次不显示。
+         * 预选和退改补完全一致。
          */
         if (batch.getBatchType()
             != SelectionBatchType.RETAKE) {
 
             tabs.addTab(
                 "体育课",
-                createPlaceholder(
-                    "体育课"));
+                pePanel);
 
             tabs.addTab(
                 "通选课",
-                createPlaceholder(
-                    "通选课"));
+                generalPanel);
         }
 
         /*
@@ -298,19 +344,8 @@ final class CourseBatchPanel extends JPanel {
 
         /*
          * =========================
-         * 标签切换时刷新
+         * 标签切换刷新
          * =========================
-         *
-         * 这样可以保证：
-         *
-         * 方案内选课之后
-         * → 已选课程立刻刷新
-         *
-         * 已选课程退课之后
-         * → 方案内课程立刻刷新
-         *
-         * 后续方案外选课以后
-         * → 方案外页面也可以刷新
          */
         tabs.addChangeListener(
             event -> {
@@ -319,14 +354,15 @@ final class CourseBatchPanel extends JPanel {
                     tabs.getSelectedComponent();
 
                 /*
-                 * 方案内课程。
+                 * 方案内。
                  */
-                if (selected == planPanel) {
+                if (selected
+                    == planPanel) {
 
                     planPanel.reload();
 
                     /*
-                     * 方案外课程。
+                     * 方案外。
                      */
                 } else if (selected
                     == substitutePanel) {
@@ -334,7 +370,25 @@ final class CourseBatchPanel extends JPanel {
                     substitutePanel.reload();
 
                     /*
-                     * 已选课程。
+                     * 体育课。
+                     */
+                } else if (pePanel != null
+                    && selected
+                    == pePanel) {
+
+                    pePanel.reload();
+
+                    /*
+                     * 通选课。
+                     */
+                } else if (generalPanel != null
+                    && selected
+                    == generalPanel) {
+
+                    generalPanel.reload();
+
+                    /*
+                     * 已选。
                      */
                 } else if (selected
                     == selectedPanel) {
@@ -345,6 +399,7 @@ final class CourseBatchPanel extends JPanel {
 
         return tabs;
     }
+
 
     /**
      * 当前尚未实现页面使用的占位面板。

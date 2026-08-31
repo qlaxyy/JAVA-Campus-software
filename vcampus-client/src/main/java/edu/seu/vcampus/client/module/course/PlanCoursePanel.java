@@ -895,7 +895,8 @@ final class PlanCoursePanel extends JPanel {
 
         return switch (
             offering.getAvailabilityStatus()) {
-
+            case "REQUIREMENT_SATISFIED" ->
+                "培养方案要求已满足";
             case "AVAILABLE" ->
                 "选择";
 
@@ -1119,7 +1120,8 @@ final class PlanCoursePanel extends JPanel {
 
         return switch (
             offering.getAvailabilityStatus()) {
-
+            case "REQUIREMENT_SATISFIED" ->
+                "培养方案要求已满足";
             case "AVAILABLE" ->
                 "可选";
 

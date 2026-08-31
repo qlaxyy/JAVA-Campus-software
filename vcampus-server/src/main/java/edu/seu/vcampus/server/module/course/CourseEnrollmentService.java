@@ -12,6 +12,13 @@ import java.util.Objects;
 
 /**
  * 已选课程及退课业务。
+ *
+ * 当前支持：
+ *
+ * - 方案内
+ * - 方案外
+ * - 体育
+ * - 通选
  */
 final class CourseEnrollmentService {
 
@@ -21,12 +28,24 @@ final class CourseEnrollmentService {
     private final CoursePlanRepository
         planRepository;
 
+    private final CourseSubstitutionRepository
+        substitutionRepository;
+
+    private final PeCourseRepository
+        peCourseRepository;
+
+    private final GeneralCourseRepository
+        generalCourseRepository;
+
     private final CourseEnrollmentRepository
         enrollmentRepository;
 
     CourseEnrollmentService(
         CourseBatchService batchService,
         CoursePlanRepository planRepository,
+        CourseSubstitutionRepository substitutionRepository,
+        PeCourseRepository peCourseRepository,
+        GeneralCourseRepository generalCourseRepository,
         CourseEnrollmentRepository enrollmentRepository) {
 
         this.batchService =
@@ -37,13 +56,25 @@ final class CourseEnrollmentService {
             Objects.requireNonNull(
                 planRepository);
 
+        this.substitutionRepository =
+            Objects.requireNonNull(
+                substitutionRepository);
+
+        this.peCourseRepository =
+            Objects.requireNonNull(
+                peCourseRepository);
+
+        this.generalCourseRepository =
+            Objects.requireNonNull(
+                generalCourseRepository);
+
         this.enrollmentRepository =
             Objects.requireNonNull(
                 enrollmentRepository);
     }
 
     /**
-     * 查询学生当前已选课程。
+     * 查询当前学生已选课程。
      */
     List<EnrollmentInfo> listEnrollments(
         String userId,
@@ -81,10 +112,6 @@ final class CourseEnrollmentService {
 
             if (resolved == null) {
 
-                /*
-                 * 当前 demo 阶段理论上不会发生。
-                 * 后面接数据库以后会改成独立 Offering Repository。
-                 */
                 continue;
             }
 
@@ -121,11 +148,6 @@ final class CourseEnrollmentService {
         long currentBatchId,
         long enrollmentId) {
 
-        /*
-         * =========================
-         * 1. 再次检查当前批次
-         * =========================
-         */
         SelectionBatchInfo batch =
             batchService.findBatch(
                 currentBatchId);
@@ -139,11 +161,6 @@ final class CourseEnrollmentService {
                 "当前批次不可退课");
         }
 
-        /*
-         * =========================
-         * 2. 必须是自己的有效选课记录
-         * =========================
-         */
         CourseEnrollmentRecord record =
             enrollmentRepository
                 .findSelectedEnrollment(
@@ -156,11 +173,6 @@ final class CourseEnrollmentService {
                 "选课记录不存在。");
         }
 
-        /*
-         * =========================
-         * 3. 执行退课
-         * =========================
-         */
         boolean dropped =
             enrollmentRepository.drop(
                 userId,
@@ -177,25 +189,107 @@ final class CourseEnrollmentService {
     }
 
     /**
-     * 通过选课记录找到课程和教学班。
+     * 根据选课记录解析课程。
      *
-     * 当前 demo 的 CoursePlanRepository
-     * 暂时承担教学班数据来源。
+     * 顺序：
+     *
+     * 方案内
+     * → 方案外
+     * → 体育
+     * → 通选
      */
-    private CourseAndOffering resolveCourseAndOffering(
+    private CourseAndOffering
+    resolveCourseAndOffering(
         CourseEnrollmentRecord record) {
 
-        List<CourseInfo> courses =
-            planRepository.findPlanCourses(
-                record.selectedBatchId());
+        /*
+         * 方案内。
+         */
+        CourseAndOffering resolved =
+            findCourseAndOffering(
+                planRepository
+                    .findPlanCourses(
+                        record
+                            .selectedBatchId()),
+                record.offeringId());
 
-        for (CourseInfo course : courses) {
+        if (resolved != null) {
+
+            return resolved;
+        }
+
+        /*
+         * 方案外。
+         */
+        resolved =
+            findCourseAndOffering(
+                substitutionRepository
+                    .findSubstituteCourses(
+                        record
+                            .selectedBatchId()),
+                record.offeringId());
+
+        if (resolved != null) {
+
+            return resolved;
+        }
+
+        /*
+         * 体育。
+         */
+        for (PeCourseRecord peRecord
+            : peCourseRepository
+            .findPeCourses(
+                record.selectedBatchId())) {
+
+            resolved =
+                findCourseAndOffering(
+                    List.of(
+                        peRecord.course()),
+                    record.offeringId());
+
+            if (resolved != null) {
+
+                return resolved;
+            }
+        }
+
+        /*
+         * 通选。
+         */
+        for (GeneralCourseRecord generalRecord
+            : generalCourseRepository
+            .findGeneralCourses(
+                record.selectedBatchId())) {
+
+            resolved =
+                findCourseAndOffering(
+                    List.of(
+                        generalRecord.course()),
+                    record.offeringId());
+
+            if (resolved != null) {
+
+                return resolved;
+            }
+        }
+
+        return null;
+    }
+
+    private CourseAndOffering
+    findCourseAndOffering(
+        List<CourseInfo> courses,
+        long offeringId) {
+
+        for (CourseInfo course
+            : courses) {
 
             for (OfferingInfo offering
                 : course.getOfferings()) {
 
                 if (offering.getOfferingId()
-                    == record.offeringId()) {
+                    == offeringId) {
 
                     return new CourseAndOffering(
                         course,
@@ -214,7 +308,7 @@ final class CourseEnrollmentService {
 }
 
 /**
- * 服务器内部退课结果。
+ * Server 内部退课结果。
  */
 record CourseDropResult(
     boolean success,

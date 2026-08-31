@@ -22,6 +22,9 @@ import java.time.format.DateTimeFormatter;
  */
 final class CourseBatchPanel extends JPanel {
 
+    /**
+     * 批次开放时间显示格式。
+     */
     private static final DateTimeFormatter TIME_FORMAT =
         DateTimeFormatter.ofPattern(
             "yyyy-MM-dd HH:mm");
@@ -42,6 +45,9 @@ final class CourseBatchPanel extends JPanel {
             goBack);
     }
 
+    /**
+     * 初始化整个批次页面。
+     */
     private void initializeView(
         Runnable goBack) {
 
@@ -57,16 +63,25 @@ final class CourseBatchPanel extends JPanel {
                 20,
                 24));
 
+        /*
+         * 顶部批次信息。
+         */
         add(
             createHeader(
                 goBack),
             BorderLayout.NORTH);
 
+        /*
+         * 中间功能标签页。
+         */
         add(
             createTabs(),
             BorderLayout.CENTER);
     }
 
+    /**
+     * 创建顶部批次信息。
+     */
     private JPanel createHeader(
         Runnable goBack) {
 
@@ -76,6 +91,11 @@ final class CourseBatchPanel extends JPanel {
                     16,
                     0));
 
+        /*
+         * =========================
+         * 返回按钮
+         * =========================
+         */
         JButton backButton =
             new JButton(
                 "返回选课中心");
@@ -88,6 +108,11 @@ final class CourseBatchPanel extends JPanel {
             backButton,
             BorderLayout.WEST);
 
+        /*
+         * =========================
+         * 批次信息
+         * =========================
+         */
         JPanel information =
             new JPanel();
 
@@ -96,6 +121,9 @@ final class CourseBatchPanel extends JPanel {
                 information,
                 BoxLayout.Y_AXIS));
 
+        /*
+         * 批次名称。
+         */
         JLabel nameLabel =
             new JLabel(
                 batch.getBatchName());
@@ -107,11 +135,17 @@ final class CourseBatchPanel extends JPanel {
                     Font.BOLD,
                     22F));
 
+        /*
+         * 学期。
+         */
         JLabel semesterLabel =
             new JLabel(
                 "学期："
                     + batch.getSemester());
 
+        /*
+         * 开放时间。
+         */
         JLabel timeLabel =
             new JLabel(
                 "开放时间："
@@ -121,6 +155,9 @@ final class CourseBatchPanel extends JPanel {
                     + TIME_FORMAT.format(
                     batch.getEndTime()));
 
+        /*
+         * 当前状态。
+         */
         JLabel statusLabel =
             new JLabel(
                 "状态："
@@ -159,7 +196,7 @@ final class CourseBatchPanel extends JPanel {
     }
 
     /**
-     * 批次内部标签。
+     * 创建批次内部所有功能标签页。
      */
     private JTabbedPane createTabs() {
 
@@ -167,28 +204,65 @@ final class CourseBatchPanel extends JPanel {
             new JTabbedPane();
 
         /*
-         * 这两个页面需要在切换标签时重新加载，
-         * 保证选课 / 退课后看到服务器最新状态。
+         * =========================
+         * 1. 方案内课程
+         * =========================
          */
         PlanCoursePanel planPanel =
             new PlanCoursePanel(
                 context,
                 batch);
 
+        /*
+         * =========================
+         * 2. 方案外课程
+         * =========================
+         */
+        SubstituteCoursePanel substitutePanel =
+            new SubstituteCoursePanel(
+                context,
+                batch);
+
+        /*
+         * =========================
+         * 3. 已选课程
+         * =========================
+         */
         SelectedCoursePanel selectedPanel =
             new SelectedCoursePanel(
                 context,
                 batch);
 
+        /*
+         * =========================
+         * 加入方案内课程
+         * =========================
+         */
         tabs.addTab(
             "方案内课程",
             planPanel);
 
+        /*
+         * =========================
+         * 加入方案外课程
+         * =========================
+         */
         tabs.addTab(
             "方案外课程",
-            createPlaceholder(
-                "方案外课程"));
+            substitutePanel);
 
+        /*
+         * =========================
+         * 体育课 / 通选课
+         * =========================
+         *
+         * 重修批次中：
+         *
+         * 体育课不参与重修
+         * 通选课不参与重修
+         *
+         * 因此重修批次不显示。
+         */
         if (batch.getBatchType()
             != SelectionBatchType.RETAKE) {
 
@@ -203,17 +277,40 @@ final class CourseBatchPanel extends JPanel {
                     "通选课"));
         }
 
+        /*
+         * =========================
+         * 已选课程
+         * =========================
+         */
         tabs.addTab(
             "已选课程",
             selectedPanel);
 
+        /*
+         * =========================
+         * 全校课程查询
+         * =========================
+         */
         tabs.addTab(
             "全校课程查询",
             createPlaceholder(
                 "全校课程查询"));
 
         /*
-         * 每次用户切换标签时刷新真实状态。
+         * =========================
+         * 标签切换时刷新
+         * =========================
+         *
+         * 这样可以保证：
+         *
+         * 方案内选课之后
+         * → 已选课程立刻刷新
+         *
+         * 已选课程退课之后
+         * → 方案内课程立刻刷新
+         *
+         * 后续方案外选课以后
+         * → 方案外页面也可以刷新
          */
         tabs.addChangeListener(
             event -> {
@@ -221,10 +318,24 @@ final class CourseBatchPanel extends JPanel {
                 Component selected =
                     tabs.getSelectedComponent();
 
+                /*
+                 * 方案内课程。
+                 */
                 if (selected == planPanel) {
 
                     planPanel.reload();
 
+                    /*
+                     * 方案外课程。
+                     */
+                } else if (selected
+                    == substitutePanel) {
+
+                    substitutePanel.reload();
+
+                    /*
+                     * 已选课程。
+                     */
                 } else if (selected
                     == selectedPanel) {
 
@@ -235,6 +346,9 @@ final class CourseBatchPanel extends JPanel {
         return tabs;
     }
 
+    /**
+     * 当前尚未实现页面使用的占位面板。
+     */
     private JPanel createPlaceholder(
         String name) {
 
@@ -262,6 +376,9 @@ final class CourseBatchPanel extends JPanel {
         return panel;
     }
 
+    /**
+     * 批次状态转换成中文。
+     */
     private String statusText(
         SelectionBatchStatus status) {
 

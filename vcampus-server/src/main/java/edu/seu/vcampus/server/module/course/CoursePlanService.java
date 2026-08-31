@@ -2,6 +2,8 @@ package edu.seu.vcampus.server.module.course;
 
 import edu.seu.vcampus.common.course.CourseInfo;
 import edu.seu.vcampus.common.course.OfferingInfo;
+import edu.seu.vcampus.common.course.SelectionBatchInfo;
+import edu.seu.vcampus.common.course.SelectionBatchType;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,28 +15,43 @@ import java.util.Set;
  */
 final class CoursePlanService {
 
-    private final CoursePlanRepository repository;
+    private final CourseBatchService
+        batchService;
+
+    private final CoursePlanRepository
+        repository;
 
     private final CourseEnrollmentRepository
         enrollmentRepository;
+
+    private final CourseHistoryRepository
+        historyRepository;
 
     private final CourseScheduleConflictChecker
         conflictChecker =
         new CourseScheduleConflictChecker();
 
     CoursePlanService(
+        CourseBatchService batchService,
         CoursePlanRepository repository,
-        CourseEnrollmentRepository enrollmentRepository) {
+        CourseEnrollmentRepository enrollmentRepository,
+        CourseHistoryRepository historyRepository) {
+
+        this.batchService =
+            Objects.requireNonNull(
+                batchService);
 
         this.repository =
             Objects.requireNonNull(
-                repository,
-                "repository must not be null");
+                repository);
 
         this.enrollmentRepository =
             Objects.requireNonNull(
-                enrollmentRepository,
-                "enrollmentRepository must not be null");
+                enrollmentRepository);
+
+        this.historyRepository =
+            Objects.requireNonNull(
+                historyRepository);
     }
 
     /**
@@ -55,14 +72,47 @@ final class CoursePlanService {
             "userId must not be null");
 
         /*
-         * Repository 中的原始课程数据。
+         * =========================
+         * 1. 获取当前批次
+         * =========================
          */
-        List<CourseInfo> courses =
+        SelectionBatchInfo batch =
+            batchService.findBatch(
+                batchId);
+
+        if (batch == null) {
+
+            throw new IllegalArgumentException(
+                "selection batch does not exist");
+        }
+
+        /*
+         * =========================
+         * 2. Repository 原始课程
+         * =========================
+         */
+        List<CourseInfo> originalCourses =
             repository.findPlanCourses(
                 batchId);
 
         /*
-         * 当前学生已经选择的教学班。
+         * =========================
+         * 3. 根据历史修读情况过滤
+         * =========================
+         */
+        List<CourseInfo> eligibleCourses =
+            originalCourses.stream()
+                .filter(course ->
+                    isCourseVisible(
+                        batch,
+                        userId,
+                        course))
+                .toList();
+
+        /*
+         * =========================
+         * 4. 当前已选教学班
+         * =========================
          */
         Set<Long> selectedOfferingIds =
             enrollmentRepository
@@ -71,14 +121,15 @@ final class CoursePlanService {
 
         List<OfferingInfo> selectedOfferings =
             findSelectedOfferings(
-                courses,
+                originalCourses,
                 selectedOfferingIds);
 
         /*
-         * 将选课状态、人数、时间冲突状态
-         * 合并到返回 DTO 中。
+         * =========================
+         * 5. 合并动态状态
+         * =========================
          */
-        return courses.stream()
+        return eligibleCourses.stream()
             .map(course ->
                 decorateCourse(
                     course,
@@ -88,7 +139,41 @@ final class CoursePlanService {
     }
 
     /**
-     * 找到当前学生已经选择的教学班完整信息。
+     * 当前批次中是否应该显示这门课程。
+     */
+    private boolean isCourseVisible(
+        SelectionBatchInfo batch,
+        String userId,
+        CourseInfo course) {
+
+        boolean previouslyTaken =
+            historyRepository
+                .hasTakenCourse(
+                    userId,
+                    course.getCourseId());
+
+        /*
+         * 重修：
+         *
+         * 只有以前修过的课程才显示。
+         */
+        if (batch.getBatchType()
+            == SelectionBatchType.RETAKE) {
+
+            return previouslyTaken;
+        }
+
+        /*
+         * 普通预选 / 退改补：
+         *
+         * 已经历史修过的普通课程，
+         * 不允许再次按普通选课方式选择。
+         */
+        return !previouslyTaken;
+    }
+
+    /**
+     * 找到学生当前已选择的教学班。
      */
     private List<OfferingInfo> findSelectedOfferings(
         List<CourseInfo> courses,
@@ -105,7 +190,8 @@ final class CoursePlanService {
                 if (selectedOfferingIds.contains(
                     offering.getOfferingId())) {
 
-                    result.add(offering);
+                    result.add(
+                        offering);
                 }
             }
         }
@@ -114,7 +200,7 @@ final class CoursePlanService {
     }
 
     /**
-     * 合并课程级状态。
+     * 合并课程状态。
      */
     private CourseInfo decorateCourse(
         CourseInfo course,
@@ -128,8 +214,7 @@ final class CoursePlanService {
                     enrollmentRepository
                         .isOfferingSelected(
                             userId,
-                            offering
-                                .getOfferingId()));
+                            offering.getOfferingId()));
 
         List<OfferingInfo> offerings =
             course.getOfferings()
@@ -161,18 +246,12 @@ final class CoursePlanService {
         boolean courseSelected,
         List<OfferingInfo> selectedOfferings) {
 
-        /*
-         * 当前学生是否选择了这个教学班。
-         */
         boolean selected =
             enrollmentRepository
                 .isOfferingSelected(
                     userId,
                     offering.getOfferingId());
 
-        /*
-         * 动态人数。
-         */
         int selectedCount =
             offering.getSelectedCount()
                 + enrollmentRepository
@@ -185,9 +264,6 @@ final class CoursePlanService {
                     - selectedCount,
                 0);
 
-        /*
-         * 当前教学班最终显示状态。
-         */
         String availabilityStatus =
             calculateAvailabilityStatus(
                 offering,
@@ -212,7 +288,7 @@ final class CoursePlanService {
     }
 
     /**
-     * 计算教学班可选状态。
+     * 计算教学班最终状态。
      */
     private String calculateAvailabilityStatus(
         OfferingInfo offering,
@@ -221,33 +297,18 @@ final class CoursePlanService {
         int remainingCount,
         List<OfferingInfo> selectedOfferings) {
 
-        /*
-         * 自己已经选择。
-         */
         if (selected) {
             return "SELECTED";
         }
 
-        /*
-         * 同一课程已经选择其他教学班。
-         */
         if (courseSelected) {
             return "COURSE_ALREADY_SELECTED";
         }
 
-        /*
-         * 已满。
-         */
         if (remainingCount <= 0) {
             return "FULL";
         }
 
-        /*
-         * 与已选教学班存在时间冲突。
-         *
-         * 现在 LIST_PLAN_COURSES 阶段
-         * 就会提前算出来。
-         */
         if (conflictChecker.hasConflict(
             offering,
             selectedOfferings)) {
@@ -255,9 +316,6 @@ final class CoursePlanService {
             return "TIME_CONFLICT";
         }
 
-        /*
-         * 保留 Repository 原始状态。
-         */
         return offering.getAvailabilityStatus();
     }
 }

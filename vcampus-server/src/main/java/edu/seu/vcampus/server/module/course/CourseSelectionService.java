@@ -2,10 +2,11 @@ package edu.seu.vcampus.server.module.course;
 
 import edu.seu.vcampus.common.course.CourseInfo;
 import edu.seu.vcampus.common.course.OfferingInfo;
-import edu.seu.vcampus.common.course.ScheduleInfo;
 import edu.seu.vcampus.common.course.SelectionBatchInfo;
 import edu.seu.vcampus.common.course.SelectionBatchStatus;
+import edu.seu.vcampus.common.course.SelectionBatchType;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -15,7 +16,8 @@ import java.util.Set;
  */
 final class CourseSelectionService {
 
-    private final CourseBatchService batchService;
+    private final CourseBatchService
+        batchService;
 
     private final CoursePlanRepository
         planRepository;
@@ -23,10 +25,18 @@ final class CourseSelectionService {
     private final CourseEnrollmentRepository
         enrollmentRepository;
 
+    private final CourseHistoryRepository
+        historyRepository;
+
+    private final CourseScheduleConflictChecker
+        conflictChecker =
+        new CourseScheduleConflictChecker();
+
     CourseSelectionService(
         CourseBatchService batchService,
         CoursePlanRepository planRepository,
-        CourseEnrollmentRepository enrollmentRepository) {
+        CourseEnrollmentRepository enrollmentRepository,
+        CourseHistoryRepository historyRepository) {
 
         this.batchService =
             Objects.requireNonNull(
@@ -39,6 +49,10 @@ final class CourseSelectionService {
         this.enrollmentRepository =
             Objects.requireNonNull(
                 enrollmentRepository);
+
+        this.historyRepository =
+            Objects.requireNonNull(
+                historyRepository);
     }
 
     /**
@@ -51,7 +65,7 @@ final class CourseSelectionService {
 
         /*
          * =========================
-         * 1. 检查选课批次
+         * 1. 批次校验
          * =========================
          */
         SelectionBatchInfo batch =
@@ -79,7 +93,7 @@ final class CourseSelectionService {
 
         /*
          * =========================
-         * 2. 获取当前可选课程
+         * 2. 找课程和教学班
          * =========================
          */
         List<CourseInfo> courses =
@@ -97,8 +111,11 @@ final class CourseSelectionService {
                 if (offering.getOfferingId()
                     == offeringId) {
 
-                    targetCourse = course;
-                    targetOffering = offering;
+                    targetCourse =
+                        course;
+
+                    targetOffering =
+                        offering;
 
                     break;
                 }
@@ -118,7 +135,45 @@ final class CourseSelectionService {
 
         /*
          * =========================
-         * 3. 同一门课程不能重复选择
+         * 3. 历史修读资格
+         * =========================
+         */
+        boolean previouslyTaken =
+            historyRepository
+                .hasTakenCourse(
+                    userId,
+                    targetCourse.getCourseId());
+
+        /*
+         * 重修批次：
+         *
+         * 必须以前修过。
+         */
+        if (batch.getBatchType()
+            == SelectionBatchType.RETAKE
+            && !previouslyTaken) {
+
+            return CourseSelectionResult.failure(
+                "不符合重修选课条件。");
+        }
+
+        /*
+         * 非重修批次：
+         *
+         * 以前已经修过的普通课程，
+         * 不允许再次普通选课。
+         */
+        if (batch.getBatchType()
+            != SelectionBatchType.RETAKE
+            && previouslyTaken) {
+
+            return CourseSelectionResult.failure(
+                "该课程已修读，请通过重修选课。");
+        }
+
+        /*
+         * =========================
+         * 4. 同一课程不能重复选择
          * =========================
          */
         for (OfferingInfo offering
@@ -136,7 +191,7 @@ final class CourseSelectionService {
 
         /*
          * =========================
-         * 4. 检查容量
+         * 5. 容量
          * =========================
          */
         int currentSelectedCount =
@@ -154,7 +209,7 @@ final class CourseSelectionService {
 
         /*
          * =========================
-         * 5. 检查教学班基础状态
+         * 6. 教学班基础状态
          * =========================
          */
         if (!"AVAILABLE".equals(
@@ -169,13 +224,17 @@ final class CourseSelectionService {
 
         /*
          * =========================
-         * 6. 时间冲突检测
+         * 7. 时间冲突
          * =========================
          */
-        if (hasConflictWithSelectedCourses(
-            userId,
+        List<OfferingInfo> selectedOfferings =
+            findSelectedOfferings(
+                userId,
+                courses);
+
+        if (conflictChecker.hasConflict(
             targetOffering,
-            courses)) {
+            selectedOfferings)) {
 
             return CourseSelectionResult.failure(
                 "时间冲突。");
@@ -183,7 +242,7 @@ final class CourseSelectionService {
 
         /*
          * =========================
-         * 7. 保存选课记录
+         * 8. 保存选课
          * =========================
          */
         enrollmentRepository.select(
@@ -196,237 +255,39 @@ final class CourseSelectionService {
     }
 
     /**
-     * 判断目标教学班是否与学生当前已选教学班冲突。
+     * 当前学生已选教学班。
      */
-    private boolean hasConflictWithSelectedCourses(
+    private List<OfferingInfo> findSelectedOfferings(
         String userId,
-        OfferingInfo targetOffering,
         List<CourseInfo> courses) {
 
-        Set<Long> selectedOfferingIds =
+        Set<Long> selectedIds =
             enrollmentRepository
                 .findSelectedOfferingIds(
                     userId);
 
-        if (selectedOfferingIds.isEmpty()) {
-            return false;
-        }
-
-        for (Long selectedOfferingId
-            : selectedOfferingIds) {
-
-            OfferingInfo selectedOffering =
-                findOffering(
-                    courses,
-                    selectedOfferingId);
-
-            /*
-             * 当前阶段所有选课都来自方案内课程，
-             * 因此原则上能够找到。
-             */
-            if (selectedOffering == null) {
-                continue;
-            }
-
-            if (offeringsConflict(
-                targetOffering,
-                selectedOffering)) {
-
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * 根据 offeringId 找教学班。
-     */
-    private OfferingInfo findOffering(
-        List<CourseInfo> courses,
-        long offeringId) {
+        List<OfferingInfo> result =
+            new ArrayList<>();
 
         for (CourseInfo course : courses) {
 
             for (OfferingInfo offering
                 : course.getOfferings()) {
 
-                if (offering.getOfferingId()
-                    == offeringId) {
+                if (selectedIds.contains(
+                    offering.getOfferingId())) {
 
-                    return offering;
+                    result.add(
+                        offering);
                 }
             }
         }
 
-        return null;
+        return result;
     }
 
     /**
-     * 判断两个教学班是否存在至少一组冲突时间。
-     */
-    private boolean offeringsConflict(
-        OfferingInfo first,
-        OfferingInfo second) {
-
-        for (ScheduleInfo firstSchedule
-            : first.getSchedules()) {
-
-            for (ScheduleInfo secondSchedule
-                : second.getSchedules()) {
-
-                if (schedulesConflict(
-                    firstSchedule,
-                    secondSchedule)) {
-
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * 判断两条上课时间是否冲突。
-     *
-     * 冲突条件：
-     *
-     * 1. 星期相同
-     * 2. 节次有交集
-     * 3. 实际教学周有交集
-     */
-    private boolean schedulesConflict(
-        ScheduleInfo first,
-        ScheduleInfo second) {
-
-        /*
-         * 星期不同。
-         */
-        if (first.getDayOfWeek()
-            != second.getDayOfWeek()) {
-
-            return false;
-        }
-
-        /*
-         * 节次没有重叠。
-         *
-         * 例如：
-         * 1-2节 和 3-4节
-         */
-        if (!periodsOverlap(
-            first,
-            second)) {
-
-            return false;
-        }
-
-        /*
-         * 最后判断实际教学周。
-         */
-        return teachingWeeksOverlap(
-            first,
-            second);
-    }
-
-    /**
-     * 节次是否重叠。
-     */
-    private boolean periodsOverlap(
-        ScheduleInfo first,
-        ScheduleInfo second) {
-
-        return first.getStartPeriod()
-            <= second.getEndPeriod()
-            &&
-            second.getStartPeriod()
-                <= first.getEndPeriod();
-    }
-
-    /**
-     * 判断两条记录是否存在真正共同上课的一周。
-     *
-     * 同时处理：
-     * EVERY
-     * ODD
-     * EVEN
-     */
-    private boolean teachingWeeksOverlap(
-        ScheduleInfo first,
-        ScheduleInfo second) {
-
-        int startWeek =
-            Math.max(
-                first.getStartWeek(),
-                second.getStartWeek());
-
-        int endWeek =
-            Math.min(
-                first.getEndWeek(),
-                second.getEndWeek());
-
-        /*
-         * 周次范围本身不重叠。
-         *
-         * 例如：
-         * 1-8周
-         * 9-16周
-         */
-        if (startWeek > endWeek) {
-            return false;
-        }
-
-        /*
-         * 在共同周次范围中寻找至少一个
-         * 两门课都会真正上课的周。
-         */
-        for (int week = startWeek;
-             week <= endWeek;
-             week++) {
-
-            if (isTeachingWeek(
-                first,
-                week)
-                &&
-                isTeachingWeek(
-                    second,
-                    week)) {
-
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * 指定周是否实际上课。
-     */
-    private boolean isTeachingWeek(
-        ScheduleInfo schedule,
-        int week) {
-
-        return switch (
-            schedule.getWeekPattern()) {
-
-            case "ODD" ->
-                week % 2 == 1;
-
-            case "EVEN" ->
-                week % 2 == 0;
-
-            /*
-             * EVERY，以及当前阶段未知值，
-             * 按每周处理。
-             */
-            default ->
-                true;
-        };
-    }
-
-    /**
-     * 教学班不可选原因。
+     * 不可选状态文字。
      */
     private String availabilityMessage(
         String status) {

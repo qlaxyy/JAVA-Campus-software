@@ -1,5 +1,6 @@
 package edu.seu.vcampus.server.module.library;
 
+import edu.seu.vcampus.common.library.BookBorrowRequest;
 import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BookSearchResult;
 import edu.seu.vcampus.common.library.LibraryActions;
@@ -25,6 +26,8 @@ class LibraryServerModuleTest {
     private static final String TOKEN = "valid-library-test-token";
 
     private ActionRouter router;
+    private InMemoryBookRepository books;
+    private InMemoryBorrowRecordRepository records;
 
     @BeforeEach
     void setUp() {
@@ -32,8 +35,11 @@ class LibraryServerModuleTest {
                 TOKEN, "U-001", "student001", "演示学生", Role.USER);
         ServerContext context = new ServerContext(token ->
                 TOKEN.equals(token) ? Optional.of(session) : Optional.empty());
+        books = new InMemoryBookRepository();
+        records = new InMemoryBorrowRecordRepository();
         router = new ActionRouter();
-        new LibraryServerModule().registerHandlers(router, context);
+        new LibraryServerModule(new LibraryService(books, records))
+                .registerHandlers(router, context);
     }
 
     @Test
@@ -67,6 +73,43 @@ class LibraryServerModuleTest {
                 LibraryActions.SEARCH_BOOKS,
                 TOKEN,
                 new BookSearchRequest("   ")));
+
+        assertFalse(response.isSuccess());
+        assertEquals(ErrorCodes.COMMON_INVALID_REQUEST, response.getCode());
+    }
+
+    @Test
+    void authenticatedUserCanBorrowBookUsingSessionIdentity() {
+        Response response = router.dispatch(Request.create(
+                LibraryActions.BORROW_BOOK,
+                TOKEN,
+                new BookBorrowRequest("B001")));
+
+        assertTrue(response.isSuccess());
+        assertEquals(1, books.findById("B001").orElseThrow().getAvailableCount());
+        BorrowRecord record = records.findBorrowedByUserId("U-001").getFirst();
+        assertEquals("U-001", record.userId());
+        assertEquals("B001", record.bookId());
+    }
+
+    @Test
+    void anonymousBorrowIsRejected() {
+        Response response = router.dispatch(Request.create(
+                LibraryActions.BORROW_BOOK,
+                null,
+                new BookBorrowRequest("B001")));
+
+        assertFalse(response.isSuccess());
+        assertEquals(ErrorCodes.AUTH_REQUIRED, response.getCode());
+        assertEquals(2, books.findById("B001").orElseThrow().getAvailableCount());
+    }
+
+    @Test
+    void borrowWithWrongDtoTypeIsRejected() {
+        Response response = router.dispatch(Request.create(
+                LibraryActions.BORROW_BOOK,
+                TOKEN,
+                new BookSearchRequest("B001")));
 
         assertFalse(response.isSuccess());
         assertEquals(ErrorCodes.COMMON_INVALID_REQUEST, response.getCode());

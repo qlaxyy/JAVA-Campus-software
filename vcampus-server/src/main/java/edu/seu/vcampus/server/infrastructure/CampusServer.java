@@ -45,6 +45,13 @@ public final class CampusServer implements AutoCloseable {
         this(port, Math.max(MINIMUM_WORKER_THREADS, Runtime.getRuntime().availableProcessors()));
     }
 
+    /** Creates a server with an explicitly supplied action router. */
+    public CampusServer(int port, ActionRouter actionRouter) {
+        this(port,
+                Math.max(MINIMUM_WORKER_THREADS, Runtime.getRuntime().availableProcessors()),
+                actionRouter);
+    }
+
     /**
      * Creates a server.
      *

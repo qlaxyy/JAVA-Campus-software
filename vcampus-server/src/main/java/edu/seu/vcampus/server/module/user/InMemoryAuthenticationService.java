@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * Temporary in-memory authentication and sessions used before Access is integrated.
+ * Authentication service with in-memory sessions and a pluggable account repository.
  */
 public final class InMemoryAuthenticationService implements SessionLookup {
 

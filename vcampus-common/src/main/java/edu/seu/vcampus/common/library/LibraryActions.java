@@ -9,6 +9,10 @@ public final class LibraryActions {
     public static final String SEARCH_BOOKS =
             ActionNames.of(ModuleNames.LIBRARY, "SEARCH_BOOKS");
 
+    /** Borrows one book for the authenticated user. */
+    public static final String BORROW_BOOK =
+            ActionNames.of(ModuleNames.LIBRARY, "BORROW_BOOK");
+
     private LibraryActions() {
     }
 }

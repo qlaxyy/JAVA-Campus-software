@@ -2,7 +2,6 @@ package edu.seu.vcampus.client.module.shop;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.module.ClientModule;
-import edu.seu.vcampus.client.module.PlaceholderModuleView;
 import edu.seu.vcampus.common.protocol.ModuleNames;
 
 import javax.swing.JComponent;
@@ -22,6 +21,6 @@ public final class ShopClientModule implements ClientModule {
 
     @Override
     public JComponent createView(ClientContext context) {
-        return PlaceholderModuleView.create(displayName(), "完成商品浏览界面和库存数据设计");
+        return new ShopView(context);
     }
 }

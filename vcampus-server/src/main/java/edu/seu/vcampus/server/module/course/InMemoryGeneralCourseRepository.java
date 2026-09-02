@@ -16,16 +16,6 @@ final class InMemoryGeneralCourseRepository
     public List<GeneralCourseRecord> findGeneralCourses(
         long batchId) {
 
-        /*
-         * 预选课和退改补使用
-         * 完全相同的课程池。
-         *
-         * 因此这里不根据 PRE_SELECTION /
-         * ADD_DROP 创建两套数据。
-         *
-         * 是否允许在某个批次显示通选课，
-         * 由 Service 判断。
-         */
         return List.of(
             createNaturalScience(),
             createHumanities(),
@@ -45,7 +35,7 @@ final class InMemoryGeneralCourseRepository
 
         OfferingInfo offering =
             new OfferingInfo(
-                5001L,
+                15001L,
                 "01",
                 List.of(
                     "刘老师"
@@ -96,7 +86,7 @@ final class InMemoryGeneralCourseRepository
 
         OfferingInfo offering =
             new OfferingInfo(
-                5002L,
+                15002L,
                 "01",
                 List.of(
                     "陈老师"
@@ -147,7 +137,7 @@ final class InMemoryGeneralCourseRepository
 
         OfferingInfo offering =
             new OfferingInfo(
-                5003L,
+                15003L,
                 "01",
                 List.of(
                     "杨老师"
@@ -198,7 +188,7 @@ final class InMemoryGeneralCourseRepository
 
         OfferingInfo offering =
             new OfferingInfo(
-                5004L,
+                15004L,
                 "01",
                 List.of(
                     "王老师"
@@ -252,7 +242,7 @@ final class InMemoryGeneralCourseRepository
 
         OfferingInfo offering =
             new OfferingInfo(
-                5005L,
+                15005L,
                 "01",
                 List.of(
                     "赵老师"

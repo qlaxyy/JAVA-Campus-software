@@ -31,7 +31,7 @@ import java.util.concurrent.ExecutionException;
 final class SelectedCoursePanel extends JPanel {
 
     private final ClientContext context;
-
+    private final Runnable onEnrollmentChanged;
     private final SelectionBatchInfo batch;
 
     private final JPanel enrollmentPanel =
@@ -42,10 +42,12 @@ final class SelectedCoursePanel extends JPanel {
 
     SelectedCoursePanel(
         ClientContext context,
-        SelectionBatchInfo batch) {
+        SelectionBatchInfo batch,
+        Runnable onEnrollmentChanged) {
 
         this.context = context;
         this.batch = batch;
+        this.onEnrollmentChanged = onEnrollmentChanged;
 
         initializeView();
     }
@@ -55,48 +57,114 @@ final class SelectedCoursePanel extends JPanel {
         setLayout(
             new BorderLayout(
                 0,
-                12));
+                14));
+
+        setBackground(
+            CourseTheme.BACKGROUND);
 
         setBorder(
             BorderFactory.createEmptyBorder(
-                16,
-                16,
-                16,
-                16));
+                18,
+                18,
+                18,
+                18));
+
+        /*
+         * =========================
+         * 标题
+         * =========================
+         */
+        JPanel header =
+            new JPanel();
+
+        header.setOpaque(
+            false);
+
+        header.setLayout(
+            new BoxLayout(
+                header,
+                BoxLayout.Y_AXIS));
 
         JLabel title =
-            new JLabel(
+            CourseTheme.title(
                 "已选课程");
 
-        title.setFont(
-            title.getFont()
-                .deriveFont(
-                    Font.BOLD,
-                    20F));
+        JLabel subtitle =
+            CourseTheme.subtitle(
+                "查看当前学期已经选择的教学班，并在允许时退课");
+
+        header.add(
+            title);
+
+        header.add(
+            Box.createVerticalStrut(
+                5));
+
+        header.add(
+            subtitle);
 
         add(
-            title,
+            header,
             BorderLayout.NORTH);
 
+        /*
+         * =========================
+         * 已选课程列表
+         * =========================
+         */
         enrollmentPanel.setLayout(
             new BoxLayout(
                 enrollmentPanel,
                 BoxLayout.Y_AXIS));
+
+        enrollmentPanel.setBackground(
+            CourseTheme.BACKGROUND);
 
         JScrollPane scrollPane =
             new JScrollPane(
                 enrollmentPanel);
 
         scrollPane.setBorder(
-            BorderFactory.createEmptyBorder());
+            BorderFactory
+                .createEmptyBorder());
+
+        scrollPane.setBackground(
+            CourseTheme.BACKGROUND);
+
+        scrollPane
+            .getViewport()
+            .setBackground(
+                CourseTheme.BACKGROUND);
 
         scrollPane
             .getVerticalScrollBar()
-            .setUnitIncrement(12);
+            .setUnitIncrement(
+                14);
 
         add(
             scrollPane,
             BorderLayout.CENTER);
+
+        /*
+         * =========================
+         * 状态栏
+         * =========================
+         */
+        statusLabel.setForeground(
+            CourseTheme.MUTED);
+
+        statusLabel.setFont(
+            statusLabel
+                .getFont()
+                .deriveFont(
+                    13F));
+
+        statusLabel.setBorder(
+            BorderFactory.createEmptyBorder(
+                2,
+                2,
+                0,
+                2));
 
         add(
             statusLabel,
@@ -258,26 +326,37 @@ final class SelectedCoursePanel extends JPanel {
     private JPanel createEnrollmentCard(
         EnrollmentInfo enrollment) {
 
-        JPanel card =
-            new JPanel(
-                new BorderLayout(
-                    16,
-                    0));
+        CourseTheme.SurfacePanel card =
+            new CourseTheme.SurfacePanel();
+
+        card.setLayout(
+            new BorderLayout(
+                20,
+                0));
 
         card.setAlignmentX(
             Component.LEFT_ALIGNMENT);
 
         card.setBorder(
             BorderFactory.createCompoundBorder(
-                BorderFactory.createEtchedBorder(),
+                BorderFactory.createLineBorder(
+                    CourseTheme.BORDER),
                 BorderFactory.createEmptyBorder(
-                    12,
-                    14,
-                    12,
-                    14)));
+                    15,
+                    18,
+                    15,
+                    18)));
 
+        /*
+         * =========================
+         * 课程信息
+         * =========================
+         */
         JPanel information =
             new JPanel();
+
+        information.setOpaque(
+            false);
 
         information.setLayout(
             new BoxLayout(
@@ -290,6 +369,9 @@ final class SelectedCoursePanel extends JPanel {
                     + "（"
                     + enrollment.getCourseCode()
                     + "）");
+
+        nameLabel.setForeground(
+            CourseTheme.TEXT);
 
         nameLabel.setFont(
             nameLabel.getFont()
@@ -318,7 +400,8 @@ final class SelectedCoursePanel extends JPanel {
             new JLabel(
                 "地点："
                     + nullableText(
-                    enrollment.getLocationName()));
+                    enrollment
+                        .getLocationName()));
 
         JLabel detailLabel =
             new JLabel(
@@ -327,43 +410,92 @@ final class SelectedCoursePanel extends JPanel {
                     + "    类型："
                     + enrollment.getCourseType());
 
+        classLabel.setForeground(
+            CourseTheme.MUTED);
+
+        teacherLabel.setForeground(
+            CourseTheme.MUTED);
+
+        scheduleLabel.setForeground(
+            CourseTheme.MUTED);
+
+        locationLabel.setForeground(
+            CourseTheme.MUTED);
+
+        detailLabel.setForeground(
+            CourseTheme.MUTED);
+
         information.add(
             nameLabel);
 
         information.add(
-            Box.createVerticalStrut(5));
+            Box.createVerticalStrut(
+                7));
 
         information.add(
             classLabel);
 
         information.add(
-            Box.createVerticalStrut(3));
+            Box.createVerticalStrut(
+                4));
 
         information.add(
             teacherLabel);
 
         information.add(
-            Box.createVerticalStrut(3));
+            Box.createVerticalStrut(
+                4));
 
         information.add(
             scheduleLabel);
 
         information.add(
-            Box.createVerticalStrut(3));
+            Box.createVerticalStrut(
+                4));
 
         information.add(
             locationLabel);
 
         information.add(
-            Box.createVerticalStrut(3));
+            Box.createVerticalStrut(
+                4));
 
         information.add(
             detailLabel);
+
+        /*
+         * 已选状态。
+         */
+        JLabel selectedLabel =
+            new JLabel(
+                "● 已选");
+
+        selectedLabel.setForeground(
+            CourseTheme.SUCCESS);
+
+        selectedLabel.setFont(
+            selectedLabel
+                .getFont()
+                .deriveFont(
+                    Font.BOLD,
+                    13F));
+
+        information.add(
+            Box.createVerticalStrut(
+                7));
+
+        information.add(
+            selectedLabel);
 
         card.add(
             information,
             BorderLayout.CENTER);
 
+        /*
+         * =========================
+         * 退课按钮
+         * =========================
+         */
         JButton dropButton =
             new JButton();
 
@@ -372,15 +504,24 @@ final class SelectedCoursePanel extends JPanel {
             dropButton.setText(
                 "退课");
 
+            CourseTheme.styleDangerButton(
+                dropButton);
+
             dropButton.setEnabled(
                 true);
 
         } else {
 
             dropButton.setText(
-                enrollment.getDropUnavailableReason() == null
+                enrollment
+                    .getDropUnavailableReason()
+                    == null
                     ? "不可退课"
-                    : enrollment.getDropUnavailableReason());
+                    : enrollment
+                    .getDropUnavailableReason());
+
+            CourseTheme.styleQuietButton(
+                dropButton);
 
             dropButton.setEnabled(
                 false);
@@ -483,7 +624,7 @@ final class SelectedCoursePanel extends JPanel {
                             get();
 
                         if (response.isSuccess()) {
-
+                            onEnrollmentChanged.run();
                             JOptionPane.showMessageDialog(
                                 SelectedCoursePanel.this,
                                 response.getMessage(),

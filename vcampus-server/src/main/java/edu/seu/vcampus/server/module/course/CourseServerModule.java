@@ -18,7 +18,7 @@ import edu.seu.vcampus.common.course.GeneralCourseListRequest;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Objects;
-
+import edu.seu.vcampus.common.course.CourseSearchRequest;
 /**
  * 选课模块服务器入口。
  */
@@ -53,6 +53,11 @@ public final class CourseServerModule
      */
     private final GeneralCourseService
         generalCourseService;
+    /**
+     * 全校课程查询业务。
+     */
+    private final CourseSearchService
+        searchService;
     /**
      * 选课业务。
      */
@@ -137,6 +142,13 @@ public final class CourseServerModule
          * 但 planService / peCourseService
          * 看不到这条记录。
          */
+        /*
+         * =========================
+         * 全校课程目录 Repository
+         * =========================
+         */
+        CourseCatalogRepository catalogRepository =
+            new InMemoryCourseCatalogRepository();
         CourseEnrollmentRepository
             enrollmentRepository =
             new InMemoryCourseEnrollmentRepository();
@@ -211,6 +223,14 @@ public final class CourseServerModule
                 substitutionRepository,
                 peCourseRepository,
                 enrollmentRepository);
+        /*
+         * =========================
+         * 全校课程查询 Service
+         * =========================
+         */
+        this.searchService =
+            new CourseSearchService(
+                catalogRepository);
         /*
          * =========================
          * 12. 方案内课程 Service
@@ -321,6 +341,13 @@ public final class CourseServerModule
             Objects.requireNonNull(
                 generalCourseService,
                 "generalCourseService must not be null");
+        /*
+         * 测试构造器暂时使用独立的
+         * InMemory 全校课程目录。
+         */
+        this.searchService =
+            new CourseSearchService(
+                new InMemoryCourseCatalogRepository());
         this.selectionService =
             Objects.requireNonNull(
                 selectionService,
@@ -405,6 +432,17 @@ public final class CourseServerModule
             CourseActions.LIST_GENERAL_COURSES,
             request ->
                 listGeneralCourses(
+                    request,
+                    context));
+        /*
+         * =========================
+         * 全校课程查询
+         * =========================
+         */
+        router.register(
+            CourseActions.SEARCH_OFFERINGS,
+            request ->
+                searchOfferings(
                     request,
                     context));
         /*
@@ -743,6 +781,58 @@ public final class CourseServerModule
                             .getGeneralCategory(),
                         session
                             .getUserId())));
+    }
+    /**
+     * 全校课程查询。
+     */
+    private Response searchOfferings(
+        Request request,
+        ServerContext context) {
+
+        /*
+         * =========================
+         * 1. 登录检查
+         * =========================
+         */
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "Please log in before searching courses.");
+        }
+
+        /*
+         * =========================
+         * 2. CourseSearchRequest
+         * =========================
+         */
+        if (!(request.getData()
+            instanceof CourseSearchRequest
+            searchRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "Course-search request must contain a CourseSearchRequest.");
+        }
+
+        /*
+         * =========================
+         * 3. 执行查询
+         * =========================
+         */
+        return Response.success(
+            request,
+            "Courses loaded.",
+            searchService.search(
+                searchRequest));
     }
     /**
      * 学生选择教学班。

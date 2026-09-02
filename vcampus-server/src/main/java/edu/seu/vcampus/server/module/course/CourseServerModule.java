@@ -1,20 +1,973 @@
 package edu.seu.vcampus.server.module.course;
 
+import edu.seu.vcampus.common.course.BatchRequest;
+import edu.seu.vcampus.common.course.CourseActions;
+import edu.seu.vcampus.common.course.DropCourseRequest;
+import edu.seu.vcampus.common.course.PeCourseListRequest;
+import edu.seu.vcampus.common.course.SelectCourseRequest;
+import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.ModuleNames;
+import edu.seu.vcampus.common.protocol.Request;
+import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.infrastructure.ActionRouter;
-import edu.seu.vcampus.server.module.ServerModule;
 import edu.seu.vcampus.server.module.ServerContext;
+import edu.seu.vcampus.server.module.ServerModule;
+import edu.seu.vcampus.server.module.student.StudentMemoryRepository;
+import edu.seu.vcampus.common.course.GeneralCourseListRequest;
+import java.time.Clock;
+import java.util.ArrayList;
+import java.util.Objects;
 
-/** Server entry point owned by the course-selection module. */
-public final class CourseServerModule implements ServerModule {
+/**
+ * 选课模块服务器入口。
+ */
+public final class CourseServerModule
+    implements ServerModule {
 
+    /**
+     * 选课批次业务。
+     */
+    private final CourseBatchService
+        batchService;
+
+    /**
+     * 方案内课程业务。
+     */
+    private final CoursePlanService
+        planService;
+
+    /**
+     * 方案外课程业务。
+     */
+    private final CourseSubstitutionService
+        substitutionService;
+
+    /**
+     * 体育课程业务。
+     */
+    private final PeCourseService
+        peCourseService;
+    /**
+     * 通选课程业务。
+     */
+    private final GeneralCourseService
+        generalCourseService;
+    /**
+     * 选课业务。
+     */
+    private final CourseSelectionService
+        selectionService;
+
+    /**
+     * 已选课程 / 退课业务。
+     */
+    private final CourseEnrollmentService
+        enrollmentService;
+
+    /**
+     * 默认构造器。
+     *
+     * 当前开发阶段主要使用
+     * InMemory Repository。
+     */
+    public CourseServerModule() {
+
+        /*
+         * =========================
+         * 1. 时钟
+         * =========================
+         */
+        Clock clock =
+            Clock.systemDefaultZone();
+
+        /*
+         * =========================
+         * 2. 选课批次
+         * =========================
+         */
+        CourseBatchService batchService =
+            new CourseBatchService(
+                new InMemoryCourseBatchRepository(
+                    clock),
+                clock);
+
+        /*
+         * =========================
+         * 3. 方案内课程 Repository
+         * =========================
+         */
+        CoursePlanRepository planRepository =
+            new InMemoryCoursePlanRepository();
+
+        /*
+         * =========================
+         * 4. 方案外课程 Repository
+         * =========================
+         */
+        CourseSubstitutionRepository
+            substitutionRepository =
+            new InMemoryCourseSubstitutionRepository();
+
+        /*
+         * =========================
+         * 5. 体育课程 Repository
+         * =========================
+         */
+        PeCourseRepository peCourseRepository =
+            new InMemoryPeCourseRepository();
+        /*
+         * =========================
+         * 通选课程 Repository
+         * =========================
+         */
+        GeneralCourseRepository generalCourseRepository =
+            new InMemoryGeneralCourseRepository();
+        /*
+         * =========================
+         * 6. 当前选课记录 Repository
+         * =========================
+         *
+         * 所有 Service 必须共享同一个
+         * enrollmentRepository。
+         *
+         * 否则会出现：
+         *
+         * selectionService 选课成功，
+         * 但 planService / peCourseService
+         * 看不到这条记录。
+         */
+        CourseEnrollmentRepository
+            enrollmentRepository =
+            new InMemoryCourseEnrollmentRepository();
+
+        /*
+         * =========================
+         * 7. 历史修读 Repository
+         * =========================
+         */
+        CourseHistoryRepository historyRepository =
+            new InMemoryCourseHistoryRepository();
+
+        /*
+         * =========================
+         * 8. 学籍 Repository
+         * =========================
+         *
+         * 体育课需要读取学生性别。
+         *
+         * 当前直接复用现有
+         * StudentMemoryRepository。
+         */
+        StudentMemoryRepository
+            studentRepository =
+            new StudentMemoryRepository();
+
+        /*
+         * =========================
+         * 9. 学生性别适配 Repository
+         * =========================
+         */
+        StudentGenderRepository genderRepository =
+            new StudentProfileGenderRepository(
+                studentRepository);
+
+        /*
+         * =========================
+         * 10. 保存批次 Service
+         * =========================
+         */
+        this.batchService =
+            batchService;
+
+        /*
+         * =========================
+         * 11. 体育课程 Service
+         * =========================
+         *
+         * 要先创建体育 Service，
+         * 因为 CourseSelectionService
+         * 后面需要使用它。
+         */
+        this.peCourseService =
+            new PeCourseService(
+                batchService,
+                peCourseRepository,
+                planRepository,
+                substitutionRepository,
+                generalCourseRepository,
+                enrollmentRepository,
+                genderRepository);
+        /*
+         * =========================
+         * 通选课程 Service
+         * =========================
+         */
+        this.generalCourseService =
+            new GeneralCourseService(
+                batchService,
+                generalCourseRepository,
+                planRepository,
+                substitutionRepository,
+                peCourseRepository,
+                enrollmentRepository);
+        /*
+         * =========================
+         * 12. 方案内课程 Service
+         * =========================
+         *
+         * peCourseRepository 用于：
+         *
+         * 体育课已选后，
+         * 方案内页面也能检测时间冲突。
+         */
+        this.planService =
+            new CoursePlanService(
+                batchService,
+                planRepository,
+                generalCourseRepository,
+                substitutionRepository,
+                peCourseRepository,
+                enrollmentRepository,
+                historyRepository);
+        /*
+         * =========================
+         * 13. 方案外课程 Service
+         * =========================
+         *
+         * 同样加入体育课程，
+         * 用于跨页面时间冲突检测。
+         */
+        this.substitutionService =
+            new CourseSubstitutionService(
+                batchService,
+                substitutionRepository,
+                planRepository,
+                peCourseRepository,
+                generalCourseRepository,
+                enrollmentRepository,
+                historyRepository);
+        /*
+         * =========================
+         * 14. 选课 Service
+         * =========================
+         *
+         * 当前支持：
+         *
+         * - 方案内课程
+         * - 方案外课程
+         * - 体育课程
+         */
+        this.selectionService =
+            new CourseSelectionService(
+                batchService,
+                planRepository,
+                substitutionRepository,
+                peCourseService,
+                generalCourseService,
+                enrollmentRepository,
+                historyRepository);
+        /*
+         * =========================
+         * 15. 已选课程 / 退课 Service
+         * =========================
+         *
+         * peCourseRepository 用于
+         * 把体育选课记录解析回
+         * CourseInfo / OfferingInfo。
+         */
+        this.enrollmentService =
+            new CourseEnrollmentService(
+                batchService,
+                planRepository,
+                substitutionRepository,
+                peCourseRepository,
+                generalCourseRepository,
+                enrollmentRepository);
+    }
+
+    /**
+     * 测试或依赖注入使用的构造器。
+     */
+    CourseServerModule(
+        CourseBatchService batchService,
+        CoursePlanService planService,
+        CourseSubstitutionService substitutionService,
+        PeCourseService peCourseService,
+        GeneralCourseService generalCourseService,
+        CourseSelectionService selectionService,
+        CourseEnrollmentService enrollmentService) {
+
+        this.batchService =
+            Objects.requireNonNull(
+                batchService,
+                "batchService must not be null");
+
+        this.planService =
+            Objects.requireNonNull(
+                planService,
+                "planService must not be null");
+
+        this.substitutionService =
+            Objects.requireNonNull(
+                substitutionService,
+                "substitutionService must not be null");
+
+        this.peCourseService =
+            Objects.requireNonNull(
+                peCourseService,
+                "peCourseService must not be null");
+        this.generalCourseService =
+            Objects.requireNonNull(
+                generalCourseService,
+                "generalCourseService must not be null");
+        this.selectionService =
+            Objects.requireNonNull(
+                selectionService,
+                "selectionService must not be null");
+
+        this.enrollmentService =
+            Objects.requireNonNull(
+                enrollmentService,
+                "enrollmentService must not be null");
+    }
+
+    /**
+     * 模块名称。
+     */
     @Override
     public String id() {
+
         return ModuleNames.COURSE;
     }
 
+    /**
+     * 注册选课模块服务器 Action。
+     */
     @Override
-    public void registerHandlers(ActionRouter router, ServerContext context) {
-        // The module owner registers COURSE.* handlers here after contract review.
+    public void registerHandlers(
+        ActionRouter router,
+        ServerContext context) {
+
+        /*
+         * =========================
+         * 查询选课批次
+         * =========================
+         */
+        router.register(
+            CourseActions.LIST_BATCHES,
+            request ->
+                listBatches(
+                    request,
+                    context));
+
+        /*
+         * =========================
+         * 查询方案内课程
+         * =========================
+         */
+        router.register(
+            CourseActions.LIST_PLAN_COURSES,
+            request ->
+                listPlanCourses(
+                    request,
+                    context));
+
+        /*
+         * =========================
+         * 查询方案外课程
+         * =========================
+         */
+        router.register(
+            CourseActions.LIST_SUBSTITUTE_COURSES,
+            request ->
+                listSubstituteCourses(
+                    request,
+                    context));
+
+        /*
+         * =========================
+         * 查询体育课程
+         * =========================
+         */
+        router.register(
+            CourseActions.LIST_PE_COURSES,
+            request ->
+                listPeCourses(
+                    request,
+                    context));
+        /*
+         * =========================
+         * 查询通选课程
+         * =========================
+         */
+        router.register(
+            CourseActions.LIST_GENERAL_COURSES,
+            request ->
+                listGeneralCourses(
+                    request,
+                    context));
+        /*
+         * =========================
+         * 选择教学班
+         * =========================
+         */
+        router.register(
+            CourseActions.SELECT_COURSE,
+            request ->
+                selectCourse(
+                    request,
+                    context));
+
+        /*
+         * =========================
+         * 查询已选课程
+         * =========================
+         */
+        router.register(
+            CourseActions.LIST_ENROLLMENTS,
+            request ->
+                listEnrollments(
+                    request,
+                    context));
+
+        /*
+         * =========================
+         * 退课
+         * =========================
+         */
+        router.register(
+            CourseActions.DROP_COURSE,
+            request ->
+                dropCourse(
+                    request,
+                    context));
+    }
+
+    /**
+     * 查询当前学期选课批次。
+     */
+    private Response listBatches(
+        Request request,
+        ServerContext context) {
+
+        /*
+         * =========================
+         * 1. 登录检查
+         * =========================
+         */
+        if (context.sessions()
+            .findSession(
+                request.getToken())
+            .isEmpty()) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "Please log in before using the course module.");
+        }
+
+        /*
+         * =========================
+         * 2. 请求数据必须为空
+         * =========================
+         */
+        if (request.getData() != null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "Batch-list data must be empty.");
+        }
+
+        /*
+         * =========================
+         * 3. 返回批次
+         * =========================
+         */
+        return Response.success(
+            request,
+            "Course selection batches loaded.",
+            new ArrayList<>(
+                batchService.listBatches()));
+    }
+
+    /**
+     * 查询方案内课程。
+     */
+    private Response listPlanCourses(
+        Request request,
+        ServerContext context) {
+
+        /*
+         * =========================
+         * 1. 当前登录用户
+         * =========================
+         */
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "Please log in before using the course module.");
+        }
+
+        /*
+         * =========================
+         * 2. BatchRequest
+         * =========================
+         */
+        if (!(request.getData()
+            instanceof BatchRequest
+            batchRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "Plan-course request must contain a BatchRequest.");
+        }
+
+        /*
+         * =========================
+         * 3. 查询方案内课程
+         * =========================
+         */
+        return Response.success(
+            request,
+            "Plan courses loaded.",
+            new ArrayList<>(
+                planService
+                    .listPlanCourses(
+                        batchRequest
+                            .getBatchId(),
+                        session
+                            .getUserId())));
+    }
+
+    /**
+     * 查询方案外课程。
+     */
+    private Response listSubstituteCourses(
+        Request request,
+        ServerContext context) {
+
+        /*
+         * =========================
+         * 1. 当前登录用户
+         * =========================
+         */
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "Please log in before using the course module.");
+        }
+
+        /*
+         * =========================
+         * 2. BatchRequest
+         * =========================
+         */
+        if (!(request.getData()
+            instanceof BatchRequest
+            batchRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "Substitute-course request must contain a BatchRequest.");
+        }
+
+        /*
+         * =========================
+         * 3. 查询方案外课程
+         * =========================
+         */
+        return Response.success(
+            request,
+            "Substitute courses loaded.",
+            new ArrayList<>(
+                substitutionService
+                    .listSubstituteCourses(
+                        batchRequest
+                            .getBatchId(),
+                        session
+                            .getUserId())));
+    }
+
+    /**
+     * 查询体育课程。
+     */
+    private Response listPeCourses(
+        Request request,
+        ServerContext context) {
+
+        /*
+         * =========================
+         * 1. 当前登录用户
+         * =========================
+         */
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "Please log in before using the course module.");
+        }
+
+        /*
+         * =========================
+         * 2. PeCourseListRequest
+         * =========================
+         */
+        if (!(request.getData()
+            instanceof PeCourseListRequest
+            peRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "PE-course request must contain a PeCourseListRequest.");
+        }
+
+        /*
+         * =========================
+         * 3. 查询体育课程
+         * =========================
+         *
+         * session.getUserId()
+         *
+         * 例如：
+         * U-STUDENT-001
+         *
+         * 用于当前选课记录。
+         *
+         *
+         * session.getUsername()
+         *
+         * 例如：
+         * student001
+         *
+         * 当前 demo 中用于查询
+         * StudentMemoryRepository。
+         */
+        return Response.success(
+            request,
+            "PE courses loaded.",
+            new ArrayList<>(
+                peCourseService
+                    .listPeCourses(
+                        peRequest
+                            .getBatchId(),
+                        peRequest
+                            .getSportProject(),
+                        session
+                            .getUserId(),
+                        session
+                            .getUsername())));
+    }
+    /**
+     * 查询通选课程。
+     */
+    private Response listGeneralCourses(
+        Request request,
+        ServerContext context) {
+
+        /*
+         * =========================
+         * 1. 登录检查
+         * =========================
+         */
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "Please log in before using the course module.");
+        }
+
+        /*
+         * =========================
+         * 2. GeneralCourseListRequest
+         * =========================
+         */
+        if (!(request.getData()
+            instanceof GeneralCourseListRequest
+            generalRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "General-course request must contain a GeneralCourseListRequest.");
+        }
+
+        /*
+         * =========================
+         * 3. 查询通选课程
+         * =========================
+         */
+        return Response.success(
+            request,
+            "General courses loaded.",
+            new ArrayList<>(
+                generalCourseService
+                    .listGeneralCourses(
+                        generalRequest
+                            .getBatchId(),
+                        generalRequest
+                            .getGeneralCategory(),
+                        session
+                            .getUserId())));
+    }
+    /**
+     * 学生选择教学班。
+     */
+    private Response selectCourse(
+        Request request,
+        ServerContext context) {
+
+        /*
+         * =========================
+         * 1. 当前登录用户
+         * =========================
+         */
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "Please log in before selecting courses.");
+        }
+
+        /*
+         * =========================
+         * 2. SelectCourseRequest
+         * =========================
+         */
+        if (!(request.getData()
+            instanceof SelectCourseRequest
+            selectRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "Course-selection request is invalid.");
+        }
+
+        /*
+         * =========================
+         * 3. 服务端执行选课
+         * =========================
+         *
+         * userId：
+         *
+         * 用于选课记录。
+         *
+         * studentId：
+         *
+         * 当前使用 username
+         * 对应 StudentMemoryRepository
+         * 中的 studentId。
+         */
+        CourseSelectionResult result =
+            selectionService
+                .selectCourse(
+                    session.getUserId(),
+                    session.getUsername(),
+                    selectRequest
+                        .getBatchId(),
+                    selectRequest
+                        .getOfferingId());
+
+        /*
+         * =========================
+         * 4. 选课失败
+         * =========================
+         */
+        if (!result.success()) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                result.message());
+        }
+
+        /*
+         * =========================
+         * 5. 选课成功
+         * =========================
+         */
+        return Response.success(
+            request,
+            result.message(),
+            null);
+    }
+
+    /**
+     * 查询当前学生已选课程。
+     */
+    private Response listEnrollments(
+        Request request,
+        ServerContext context) {
+
+        /*
+         * =========================
+         * 1. 登录检查
+         * =========================
+         */
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "Please log in before viewing enrollments.");
+        }
+
+        /*
+         * =========================
+         * 2. BatchRequest
+         * =========================
+         */
+        if (!(request.getData()
+            instanceof BatchRequest
+            batchRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "Enrollment request must contain a BatchRequest.");
+        }
+
+        /*
+         * =========================
+         * 3. 查询已选课程
+         * =========================
+         */
+        return Response.success(
+            request,
+            "Enrollments loaded.",
+            new ArrayList<>(
+                enrollmentService
+                    .listEnrollments(
+                        session
+                            .getUserId(),
+                        batchRequest
+                            .getBatchId())));
+    }
+
+    /**
+     * 学生退课。
+     */
+    private Response dropCourse(
+        Request request,
+        ServerContext context) {
+
+        /*
+         * =========================
+         * 1. 登录检查
+         * =========================
+         */
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "Please log in before dropping courses.");
+        }
+
+        /*
+         * =========================
+         * 2. DropCourseRequest
+         * =========================
+         */
+        if (!(request.getData()
+            instanceof DropCourseRequest
+            dropRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "Drop-course request is invalid.");
+        }
+
+        /*
+         * =========================
+         * 3. 服务端执行退课
+         * =========================
+         */
+        CourseDropResult result =
+            enrollmentService
+                .dropCourse(
+                    session.getUserId(),
+                    dropRequest
+                        .getBatchId(),
+                    dropRequest
+                        .getEnrollmentId());
+
+        /*
+         * =========================
+         * 4. 退课失败
+         * =========================
+         */
+        if (!result.success()) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                result.message());
+        }
+
+        /*
+         * =========================
+         * 5. 退课成功
+         * =========================
+         */
+        return Response.success(
+            request,
+            result.message(),
+            null);
     }
 }

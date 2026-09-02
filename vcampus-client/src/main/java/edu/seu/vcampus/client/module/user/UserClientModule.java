@@ -21,6 +21,6 @@ public final class UserClientModule implements ClientModule {
 
     @Override
     public JComponent createView(ClientContext context) {
-        return new LoginPanel(context);
+        return new UserAdminPanel(context);
     }
 }

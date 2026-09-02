@@ -12,6 +12,9 @@ public final class ErrorCodes {
     public static final String AUTH_INVALID_CREDENTIALS = "AUTH_INVALID_CREDENTIALS";
     public static final String AUTH_REQUIRED = "AUTH_REQUIRED";
     public static final String AUTH_FORBIDDEN = "AUTH_FORBIDDEN";
+    public static final String USER_ACCOUNT_NOT_FOUND = "USER_ACCOUNT_NOT_FOUND";
+    public static final String USER_USERNAME_EXISTS = "USER_USERNAME_EXISTS";
+    public static final String USER_SELF_DISABLE_FORBIDDEN = "USER_SELF_DISABLE_FORBIDDEN";
 
     private ErrorCodes() {
     }

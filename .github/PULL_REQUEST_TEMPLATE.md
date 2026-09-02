@@ -10,6 +10,8 @@ Part of #
 
 ## 验收与测试证据
 
+评审人请按照 [README 中的 PR 审查方法](https://github.com/qlaxyy/JAVA-Campus-software/blob/main/README.md#5-如何审查别人的-pull-request) 拉取目标分支、构建并启动客户端和服务器。
+
 - [ ] JDK 25、Maven 3.9.16 下 `mvn clean verify` 通过
 - [ ] 自动测试通过
 - [ ] 正常流程已验证

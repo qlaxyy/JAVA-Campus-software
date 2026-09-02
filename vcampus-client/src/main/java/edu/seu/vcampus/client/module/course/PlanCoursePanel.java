@@ -4,6 +4,8 @@ import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.common.course.BatchRequest;
 import edu.seu.vcampus.common.course.CourseActions;
 import edu.seu.vcampus.common.course.CourseInfo;
+import edu.seu.vcampus.common.course.DropCourseRequest;
+import edu.seu.vcampus.common.course.EnrollmentInfo;
 import edu.seu.vcampus.common.course.OfferingInfo;
 import edu.seu.vcampus.common.course.ScheduleInfo;
 import edu.seu.vcampus.common.course.SelectCourseRequest;
@@ -38,7 +40,7 @@ final class PlanCoursePanel extends JPanel {
 
     private final JPanel coursePanel =
         new JPanel();
-
+    private final Runnable enrollmentChanged;
     private final JLabel statusLabel =
         new JLabel("正在加载方案内课程...");
 
@@ -46,8 +48,25 @@ final class PlanCoursePanel extends JPanel {
         ClientContext context,
         SelectionBatchInfo batch) {
 
+        this(
+            context,
+            batch,
+            () -> {
+            });
+    }
+
+    PlanCoursePanel(
+        ClientContext context,
+        SelectionBatchInfo batch,
+        Runnable enrollmentChanged) {
+
         this.context = context;
         this.batch = batch;
+        this.enrollmentChanged =
+            enrollmentChanged == null
+                ? () -> {
+            }
+                : enrollmentChanged;
 
         initializeView();
         loadCourses();
@@ -273,10 +292,6 @@ final class PlanCoursePanel extends JPanel {
         card.setAlignmentX(
             Component.LEFT_ALIGNMENT);
 
-        /*
-         * 如果课程存在时间冲突，
-         * 在没有展开教学班之前就使用醒目边框提醒。
-         */
         if (hasTimeConflict(course)) {
 
             card.setBorder(
@@ -305,11 +320,6 @@ final class PlanCoursePanel extends JPanel {
                         16)));
         }
 
-        /*
-         * =========================
-         * 课程一级信息
-         * =========================
-         */
         JPanel summaryPanel =
             new JPanel(
                 new BorderLayout(
@@ -367,9 +377,6 @@ final class PlanCoursePanel extends JPanel {
         information.add(
             detailLabel);
 
-        /*
-         * 课程一级时间冲突提示。
-         */
         JLabel conflictLabel =
             createCourseConflictLabel(
                 course);
@@ -405,11 +412,6 @@ final class PlanCoursePanel extends JPanel {
             summaryPanel,
             BorderLayout.NORTH);
 
-        /*
-         * =========================
-         * 教学班列表
-         * =========================
-         */
         JPanel offeringPanel =
             new JPanel();
 
@@ -447,9 +449,6 @@ final class PlanCoursePanel extends JPanel {
             }
         }
 
-        /*
-         * 默认收起。
-         */
         offeringPanel.setVisible(
             false);
 
@@ -457,9 +456,6 @@ final class PlanCoursePanel extends JPanel {
             offeringPanel,
             BorderLayout.CENTER);
 
-        /*
-         * 展开 / 收起教学班。
-         */
         expandButton.addActionListener(
             event -> {
 
@@ -501,9 +497,6 @@ final class PlanCoursePanel extends JPanel {
         card.setAlignmentX(
             Component.LEFT_ALIGNMENT);
 
-        /*
-         * 冲突教学班使用醒目边框。
-         */
         if ("TIME_CONFLICT".equals(
             offering.getAvailabilityStatus())) {
 
@@ -532,9 +525,6 @@ final class PlanCoursePanel extends JPanel {
                         12)));
         }
 
-        /*
-         * 左侧教学班信息。
-         */
         JPanel information =
             new JPanel();
 
@@ -590,9 +580,6 @@ final class PlanCoursePanel extends JPanel {
                     + availabilityText(
                     offering));
 
-        /*
-         * 时间冲突文字也醒目标记。
-         */
         if ("TIME_CONFLICT".equals(
             offering.getAvailabilityStatus())) {
 
@@ -641,10 +628,6 @@ final class PlanCoursePanel extends JPanel {
         information.add(
             availabilityLabel);
 
-        /*
-         * 中文为默认语言，
-         * 双语 / 全英文额外显示。
-         */
         String language =
             offering.getTeachingLanguage();
 
@@ -665,29 +648,36 @@ final class PlanCoursePanel extends JPanel {
             information,
             BorderLayout.CENTER);
 
-        /*
-         * =========================
-         * 选择按钮
-         * =========================
-         */
-        JButton selectButton =
+        JButton actionButton =
             new JButton(
-                selectButtonText(
+                actionButtonText(
                     offering));
 
-        selectButton.setEnabled(
-            canSelect(
+        actionButton.setEnabled(
+            canUseAction(
                 offering));
 
-        selectButton.addActionListener(
-            event ->
-                confirmAndSelect(
-                    course,
-                    offering,
-                    selectButton));
+        actionButton.addActionListener(
+            event -> {
+
+                if (offering.isSelected()) {
+
+                    confirmAndDrop(
+                        course,
+                        offering,
+                        actionButton);
+
+                } else {
+
+                    confirmAndSelect(
+                        course,
+                        offering,
+                        actionButton);
+                }
+            });
 
         card.add(
-            selectButton,
+            actionButton,
             BorderLayout.EAST);
 
         return card;
@@ -784,6 +774,8 @@ final class PlanCoursePanel extends JPanel {
 
                         if (response.isSuccess()) {
 
+                            enrollmentChanged.run();
+
                             JOptionPane.showMessageDialog(
                                 PlanCoursePanel.this,
                                 response.getMessage(),
@@ -799,12 +791,6 @@ final class PlanCoursePanel extends JPanel {
                                 JOptionPane.WARNING_MESSAGE);
                         }
 
-                        /*
-                         * 重新获取服务器最新状态。
-                         *
-                         * 这里不仅更新已选状态和人数，
-                         * 也会重新计算其他课程的时间冲突。
-                         */
                         loadCourses();
 
                     } catch (InterruptedException exception) {
@@ -843,36 +829,330 @@ final class PlanCoursePanel extends JPanel {
     }
 
     /**
+     * 在选课列表中确认并提交退课。
+     */
+    private void confirmAndDrop(
+        CourseInfo course,
+        OfferingInfo offering,
+        JButton actionButton) {
+
+        actionButton.setEnabled(
+            false);
+
+        actionButton.setText(
+            "正在检查...");
+
+        statusLabel.setText(
+            "正在读取选课记录...");
+
+        SwingWorker<Response, Void> worker =
+            new SwingWorker<>() {
+
+                @Override
+                protected Response doInBackground()
+                    throws Exception {
+
+                    return context.send(
+                        CourseActions.LIST_ENROLLMENTS,
+                        new BatchRequest(
+                            batch.getBatchId()));
+                }
+
+                @Override
+                protected void done() {
+
+                    try {
+
+                        Response response =
+                            get();
+
+                        if (!response.isSuccess()) {
+
+                            showDropFailure(
+                                response.getMessage());
+
+                            loadCourses();
+                            return;
+                        }
+
+                        EnrollmentInfo enrollment =
+                            findEnrollment(
+                                response,
+                                offering.getOfferingId());
+
+                        if (enrollment == null) {
+
+                            showDropFailure(
+                                "未找到对应的选课记录，页面将重新刷新。");
+
+                            loadCourses();
+                            return;
+                        }
+
+                        if (!enrollment.isCanDrop()) {
+
+                            showDropFailure(
+                                enrollment.getDropUnavailableReason() == null
+                                    ? "当前课程不可退选。"
+                                    : enrollment.getDropUnavailableReason());
+
+                            loadCourses();
+                            return;
+                        }
+
+                        String message =
+                            "确认退选以下课程吗？\n\n"
+                                + "课程："
+                                + course.getCourseName()
+                                + "（"
+                                + course.getCourseCode()
+                                + "）\n"
+                                + "教学班："
+                                + offering.getClassNo()
+                                + "\n\n"
+                                + "注意：退课后空出的名额可能被其他学生选择，"
+                                + "再次选课不保证成功。";
+
+                        int result =
+                            JOptionPane.showConfirmDialog(
+                                PlanCoursePanel.this,
+                                message,
+                                "确认退课",
+                                JOptionPane.YES_NO_OPTION,
+                                JOptionPane.WARNING_MESSAGE);
+
+                        if (result
+                            != JOptionPane.YES_OPTION) {
+
+                            actionButton.setText(
+                                "退课");
+
+                            actionButton.setEnabled(
+                                true);
+
+                            statusLabel.setText(
+                                "已取消退课");
+
+                            return;
+                        }
+
+                        submitDrop(
+                            enrollment,
+                            actionButton);
+
+                    } catch (InterruptedException exception) {
+
+                        Thread.currentThread()
+                            .interrupt();
+
+                        showDropFailure(
+                            "读取选课记录被中断。");
+
+                        loadCourses();
+
+                    } catch (ExecutionException exception) {
+
+                        Throwable cause =
+                            exception.getCause();
+
+                        showDropFailure(
+                            "无法读取选课记录："
+                                + (cause == null
+                                ? exception.getMessage()
+                                : cause.getMessage()));
+
+                        loadCourses();
+
+                    } catch (IllegalStateException exception) {
+
+                        showDropFailure(
+                            exception.getMessage());
+
+                        loadCourses();
+                    }
+                }
+            };
+
+        worker.execute();
+    }
+
+    /**
+     * 按 offeringId 查找当前学生的选课记录。
+     */
+    private EnrollmentInfo findEnrollment(
+        Response response,
+        long offeringId) {
+
+        if (!(response.getData()
+            instanceof List<?> values)) {
+
+            throw new IllegalStateException(
+                "服务器返回的已选课程数据格式错误。");
+        }
+
+        for (Object value : values) {
+
+            if (!(value
+                instanceof EnrollmentInfo enrollment)) {
+
+                throw new IllegalStateException(
+                    "服务器返回的已选课程数据格式错误。");
+            }
+
+            if (enrollment.getOfferingId()
+                == offeringId) {
+
+                return enrollment;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 提交退课请求。
+     */
+    private void submitDrop(
+        EnrollmentInfo enrollment,
+        JButton actionButton) {
+
+        actionButton.setText(
+            "提交中...");
+
+        statusLabel.setText(
+            "正在提交退课请求...");
+
+        SwingWorker<Response, Void> worker =
+            new SwingWorker<>() {
+
+                @Override
+                protected Response doInBackground()
+                    throws Exception {
+
+                    return context.send(
+                        CourseActions.DROP_COURSE,
+                        new DropCourseRequest(
+                            batch.getBatchId(),
+                            enrollment.getEnrollmentId()));
+                }
+
+                @Override
+                protected void done() {
+
+                    try {
+
+                        Response response =
+                            get();
+
+                        if (response.isSuccess()) {
+
+                            enrollmentChanged.run();
+                        }
+
+                        JOptionPane.showMessageDialog(
+                            PlanCoursePanel.this,
+                            response.getMessage(),
+                            response.isSuccess()
+                                ? "退课成功"
+                                : "退课失败",
+                            response.isSuccess()
+                                ? JOptionPane.INFORMATION_MESSAGE
+                                : JOptionPane.WARNING_MESSAGE);
+
+                    } catch (InterruptedException exception) {
+
+                        Thread.currentThread()
+                            .interrupt();
+
+                        showDropFailure(
+                            "退课请求被中断。");
+
+                    } catch (ExecutionException exception) {
+
+                        Throwable cause =
+                            exception.getCause();
+
+                        showDropFailure(
+                            "无法提交退课请求："
+                                + (cause == null
+                                ? exception.getMessage()
+                                : cause.getMessage()));
+
+                    } finally {
+
+                        loadCourses();
+                    }
+                }
+            };
+
+        worker.execute();
+    }
+
+    private void showDropFailure(
+        String message) {
+
+        JOptionPane.showMessageDialog(
+            this,
+            message,
+            "退课失败",
+            JOptionPane.WARNING_MESSAGE);
+    }
+
+    /**
      * 教学班是否可以点击选择。
      */
     private boolean canSelect(
         OfferingInfo offering) {
 
-        /*
-         * 批次必须正在进行。
-         */
         if (batch.getStatus()
             != SelectionBatchStatus.OPEN) {
 
             return false;
         }
 
-        /*
-         * 当前批次必须允许选课。
-         */
         if (!batch.isAllowSelect()) {
 
             return false;
         }
 
-        /*
-         * 只有 AVAILABLE 才可以选择。
-         *
-         * TIME_CONFLICT / FULL / SELECTED 等
-         * 都会自动禁用。
-         */
         return "AVAILABLE".equals(
             offering.getAvailabilityStatus());
+    }
+
+    /**
+     * 教学班右侧操作是否可以点击。
+     */
+    private boolean canUseAction(
+        OfferingInfo offering) {
+
+        if (offering.isSelected()) {
+
+            return batch.getStatus()
+                == SelectionBatchStatus.OPEN
+                && batch.isAllowDrop();
+        }
+
+        return canSelect(
+            offering);
+    }
+
+    /**
+     * 教学班右侧操作文字。
+     */
+    private String actionButtonText(
+        OfferingInfo offering) {
+
+        if (offering.isSelected()) {
+
+            return batch.getStatus()
+                == SelectionBatchStatus.OPEN
+                && batch.isAllowDrop()
+                ? "退课"
+                : "当前批次不可退";
+        }
+
+        return selectButtonText(
+            offering);
     }
 
     /**
@@ -895,8 +1175,10 @@ final class PlanCoursePanel extends JPanel {
 
         return switch (
             offering.getAvailabilityStatus()) {
+
             case "REQUIREMENT_SATISFIED" ->
                 "培养方案要求已满足";
+
             case "AVAILABLE" ->
                 "选择";
 
@@ -953,18 +1235,13 @@ final class PlanCoursePanel extends JPanel {
                         offering.getAvailabilityStatus()))
                 .count();
 
-        /*
-         * 没有时间冲突。
-         */
         if (conflictCount == 0) {
+
             return null;
         }
 
         String message;
 
-        /*
-         * 所有教学班冲突。
-         */
         if (conflictCount == total) {
 
             message =
@@ -1120,8 +1397,10 @@ final class PlanCoursePanel extends JPanel {
 
         return switch (
             offering.getAvailabilityStatus()) {
+
             case "REQUIREMENT_SATISFIED" ->
                 "培养方案要求已满足";
+
             case "AVAILABLE" ->
                 "可选";
 
@@ -1189,5 +1468,4 @@ final class PlanCoursePanel extends JPanel {
 
         loadCourses();
     }
-
 }

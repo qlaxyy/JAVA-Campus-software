@@ -11,11 +11,11 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
-import java.util.function.Consumer;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.SwingWorker;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridLayout;
@@ -23,161 +23,312 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.function.Consumer;
 
 /**
  * 选课中心首页。
- *
- * 当前第一版负责显示当前学期的选课批次。
  */
-final class CourseCenterPanel extends JPanel {
+final class CourseCenterPanel
+    extends JPanel {
 
-    private static final DateTimeFormatter TIME_FORMAT =
-        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final DateTimeFormatter
+        TIME_FORMAT =
+        DateTimeFormatter.ofPattern(
+            "yyyy-MM-dd HH:mm");
 
     private final ClientContext context;
-    private final Consumer<SelectionBatchInfo> onEnterBatch;
-    private final JPanel batchPanel = new JPanel();
-    private final JLabel statusLabel = new JLabel("正在加载选课批次...");
-    private final JButton refreshButton = new JButton("刷新");
+
+    private final Consumer<SelectionBatchInfo>
+        onEnterBatch;
+
+    private final JPanel batchPanel =
+        new JPanel();
+
+    private final JLabel statusLabel =
+        new JLabel(
+            "正在加载选课批次...");
+
+    private final JButton refreshButton =
+        CourseTheme.quietButton(
+            "刷新");
 
     CourseCenterPanel(
         ClientContext context,
-        Consumer<SelectionBatchInfo> onEnterBatch) {
+        Consumer<SelectionBatchInfo>
+            onEnterBatch) {
 
         this.context = context;
-        this.onEnterBatch = onEnterBatch;
+        this.onEnterBatch =
+            onEnterBatch;
 
         initializeView();
+
         loadBatches();
     }
 
     /**
-     * 初始化界面。
+     * 初始化页面。
      */
     private void initializeView() {
-        setLayout(new BorderLayout(16, 16));
-        setBorder(BorderFactory.createEmptyBorder(
-            20, 24, 20, 24));
 
-        // 顶部标题。
-        JPanel topPanel = new JPanel(new BorderLayout());
+        setLayout(
+            new BorderLayout(
+                0,
+                18));
 
-        JPanel titlePanel = new JPanel();
-        titlePanel.setLayout(new BoxLayout(
-            titlePanel,
-            BoxLayout.Y_AXIS));
+        setBackground(
+            CourseTheme.BACKGROUND);
 
-        JLabel titleLabel = new JLabel("选课中心");
-        titleLabel.setFont(
-            titleLabel.getFont().deriveFont(
-                Font.BOLD,
-                24F));
+        setBorder(
+            BorderFactory.createEmptyBorder(
+                24,
+                28,
+                24,
+                28));
 
-        JLabel subtitleLabel =
-            new JLabel("请选择当前学期的选课批次");
+        /*
+         * =========================
+         * 页面标题
+         * =========================
+         */
+        JPanel header =
+            new JPanel(
+                new BorderLayout(
+                    20,
+                    0));
 
-        titlePanel.add(titleLabel);
-        titlePanel.add(Box.createVerticalStrut(5));
-        titlePanel.add(subtitleLabel);
+        header.setOpaque(
+            false);
 
-        topPanel.add(titlePanel, BorderLayout.WEST);
+        JPanel titleArea =
+            new JPanel();
+
+        titleArea.setOpaque(
+            false);
+
+        titleArea.setLayout(
+            new BoxLayout(
+                titleArea,
+                BoxLayout.Y_AXIS));
+
+        JLabel title =
+            CourseTheme.title(
+                "选课中心");
+
+        JLabel subtitle =
+            CourseTheme.subtitle(
+                "选择当前学期的选课批次，进入课程选择与调整");
+
+        titleArea.add(
+            title);
+
+        titleArea.add(
+            Box.createVerticalStrut(
+                6));
+
+        titleArea.add(
+            subtitle);
+
+        header.add(
+            titleArea,
+            BorderLayout.CENTER);
 
         refreshButton.addActionListener(
-            event -> loadBatches());
+            event ->
+                loadBatches());
 
-        topPanel.add(refreshButton, BorderLayout.EAST);
+        header.add(
+            refreshButton,
+            BorderLayout.EAST);
 
-        add(topPanel, BorderLayout.NORTH);
+        add(
+            header,
+            BorderLayout.NORTH);
 
-        // 批次卡片区域。
-        batchPanel.setLayout(new GridLayout(
-            0,
-            1,
-            0,
-            12));
+        /*
+         * =========================
+         * 批次卡片区域
+         * =========================
+         */
+        batchPanel.setLayout(
+            new GridLayout(
+                0,
+                1,
+                0,
+                14));
+
+        batchPanel.setBackground(
+            CourseTheme.BACKGROUND);
 
         JScrollPane scrollPane =
-            new JScrollPane(batchPanel);
+            new JScrollPane(
+                batchPanel);
 
         scrollPane.setBorder(
-            BorderFactory.createEmptyBorder());
+            BorderFactory
+                .createEmptyBorder());
 
-        scrollPane.getVerticalScrollBar()
-            .setUnitIncrement(12);
+        scrollPane.setBackground(
+            CourseTheme.BACKGROUND);
 
-        add(scrollPane, BorderLayout.CENTER);
+        scrollPane
+            .getViewport()
+            .setBackground(
+                CourseTheme.BACKGROUND);
 
-        // 底部状态栏。
+        scrollPane
+            .getVerticalScrollBar()
+            .setUnitIncrement(
+                16);
+
+        add(
+            scrollPane,
+            BorderLayout.CENTER);
+
+        /*
+         * =========================
+         * 状态文字
+         * =========================
+         */
+        statusLabel.setForeground(
+            CourseTheme.MUTED);
+
+        statusLabel.setFont(
+            statusLabel
+                .getFont()
+                .deriveFont(
+                    13F));
+
         statusLabel.setBorder(
             BorderFactory.createEmptyBorder(
-                4, 2, 0, 2));
+                2,
+                2,
+                0,
+                2));
 
-        add(statusLabel, BorderLayout.SOUTH);
+        add(
+            statusLabel,
+            BorderLayout.SOUTH);
     }
 
     /**
-     * 从服务器加载选课批次。
+     * 加载批次。
      */
     private void loadBatches() {
-        if (context.currentSession().isEmpty()) {
-            statusLabel.setText("登录状态已失效，请重新登录。");
+
+        if (context
+            .currentSession()
+            .isEmpty()) {
+
+            statusLabel.setText(
+                "登录状态已失效，请重新登录。");
+
+            statusLabel.setForeground(
+                CourseTheme.DANGER);
+
             batchPanel.removeAll();
             batchPanel.revalidate();
             batchPanel.repaint();
+
             return;
         }
 
         setBusy(true);
-        statusLabel.setText("正在加载选课批次...");
 
-        SwingWorker<Response, Void> worker =
+        statusLabel.setText(
+            "正在加载选课批次...");
+
+        statusLabel.setForeground(
+            CourseTheme.MUTED);
+
+        SwingWorker<Response, Void>
+            worker =
             new SwingWorker<>() {
 
                 @Override
-                protected Response doInBackground()
+                protected Response
+                doInBackground()
                     throws Exception {
 
                     return context.send(
-                        CourseActions.LIST_BATCHES,
+                        CourseActions
+                            .LIST_BATCHES,
                         null);
                 }
 
                 @Override
                 protected void done() {
-                    try {
-                        Response response = get();
 
-                        if (!response.isSuccess()) {
-                            showError(response.getMessage());
+                    try {
+
+                        Response response =
+                            get();
+
+                        if (!response
+                            .isSuccess()) {
+
+                            showError(
+                                response
+                                    .getMessage());
+
                             return;
                         }
 
-                        List<SelectionBatchInfo> batches =
-                            readBatches(response);
+                        List<SelectionBatchInfo>
+                            batches =
+                            readBatches(
+                                response);
 
-                        renderBatches(batches);
+                        renderBatches(
+                            batches);
 
                         statusLabel.setText(
                             "共加载 "
                                 + batches.size()
                                 + " 个选课批次");
 
-                    } catch (InterruptedException exception) {
-                        Thread.currentThread().interrupt();
-                        showError("加载选课批次被中断。");
+                        statusLabel.setForeground(
+                            CourseTheme.MUTED);
 
-                    } catch (ExecutionException exception) {
+                    } catch (
+                        InterruptedException
+                            exception) {
+
+                        Thread
+                            .currentThread()
+                            .interrupt();
+
+                        showError(
+                            "加载选课批次被中断。");
+
+                    } catch (
+                        ExecutionException
+                            exception) {
+
+                        Throwable cause =
+                            exception
+                                .getCause();
+
                         showError(
                             "无法连接服务器："
-                                + exception
-                                .getCause()
+                                + (cause == null
+                                ? exception
+                                .getMessage()
+                                : cause
+                                .getMessage()));
+
+                    } catch (
+                        IllegalStateException
+                            exception) {
+
+                        showError(
+                            exception
                                 .getMessage());
 
-                    } catch (IllegalStateException exception) {
-                        showError(exception.getMessage());
-
                     } finally {
-                        setBusy(false);
+
+                        setBusy(
+                            false);
                     }
                 }
             };
@@ -186,27 +337,38 @@ final class CourseCenterPanel extends JPanel {
     }
 
     /**
-     * 从 Response 中读取批次列表。
+     * 解析批次列表。
      */
-    private List<SelectionBatchInfo> readBatches(
+    private List<SelectionBatchInfo>
+    readBatches(
         Response response) {
 
-        if (!(response.getData() instanceof List<?> values)) {
-            throw new IllegalStateException(
+        if (!(response.getData()
+            instanceof List<?> values)) {
+
+            throw new
+                IllegalStateException(
                 "服务器返回的选课批次数据格式错误。");
         }
 
-        List<SelectionBatchInfo> result =
+        List<SelectionBatchInfo>
+            result =
             new ArrayList<>();
 
-        for (Object value : values) {
+        for (Object value
+            : values) {
 
-            if (!(value instanceof SelectionBatchInfo batch)) {
-                throw new IllegalStateException(
+            if (!(value
+                instanceof
+                SelectionBatchInfo batch)) {
+
+                throw new
+                    IllegalStateException(
                     "服务器返回的选课批次数据格式错误。");
             }
 
-            result.add(batch);
+            result.add(
+                batch);
         }
 
         return result;
@@ -216,16 +378,28 @@ final class CourseCenterPanel extends JPanel {
      * 显示所有批次。
      */
     private void renderBatches(
-        List<SelectionBatchInfo> batches) {
+        List<SelectionBatchInfo>
+            batches) {
 
         batchPanel.removeAll();
 
         if (batches.isEmpty()) {
+
+            JLabel empty =
+                CourseTheme.subtitle(
+                    "当前学期暂无选课批次。");
+
             batchPanel.add(
-                new JLabel("当前学期暂无选课批次。"));
+                empty);
+
         } else {
-            for (SelectionBatchInfo batch : batches) {
-                batchPanel.add(createBatchCard(batch));
+
+            for (SelectionBatchInfo batch
+                : batches) {
+
+                batchPanel.add(
+                    createBatchCard(
+                        batch));
             }
         }
 
@@ -234,26 +408,42 @@ final class CourseCenterPanel extends JPanel {
     }
 
     /**
-     * 创建一个选课批次卡片。
+     * 批次卡片。
      */
     private JPanel createBatchCard(
         SelectionBatchInfo batch) {
 
-        JPanel card = new JPanel(
-            new BorderLayout(16, 10));
+        CourseTheme.SurfacePanel card =
+            new CourseTheme
+                .SurfacePanel();
+
+        card.setLayout(
+            new BorderLayout(
+                20,
+                0));
 
         card.setBorder(
-            BorderFactory.createCompoundBorder(
-                BorderFactory.createEtchedBorder(),
-                BorderFactory.createEmptyBorder(
-                    16, 18, 16, 18)));
+            BorderFactory.createEmptyBorder(
+                18,
+                20,
+                18,
+                20));
 
-        card.setMaximumSize(
+        card.setPreferredSize(
             new Dimension(
-                Integer.MAX_VALUE,
-                140));
+                0,
+                130));
 
-        JPanel information = new JPanel();
+        /*
+         * =========================
+         * 左侧信息
+         * =========================
+         */
+        JPanel information =
+            new JPanel();
+
+        information.setOpaque(
+            false);
 
         information.setLayout(
             new BoxLayout(
@@ -261,92 +451,225 @@ final class CourseCenterPanel extends JPanel {
                 BoxLayout.Y_AXIS));
 
         JLabel nameLabel =
-            new JLabel(batch.getBatchName());
+            new JLabel(
+                batch.getBatchName());
+
+        nameLabel.setForeground(
+            CourseTheme.TEXT);
 
         nameLabel.setFont(
-            nameLabel.getFont().deriveFont(
-                Font.BOLD,
-                18F));
+            nameLabel
+                .getFont()
+                .deriveFont(
+                    Font.BOLD,
+                    18F));
 
         JLabel semesterLabel =
-            new JLabel(
-                "学期：" + batch.getSemester());
+            createMutedLabel(
+                "学期："
+                    + batch
+                    .getSemester());
 
         JLabel timeLabel =
-            new JLabel(
+            createMutedLabel(
                 "开放时间："
-                    + TIME_FORMAT.format(
-                    batch.getStartTime())
-                    + " ～ "
-                    + TIME_FORMAT.format(
-                    batch.getEndTime()));
+                    + TIME_FORMAT
+                    .format(
+                        batch
+                            .getStartTime())
+                    + "  ～  "
+                    + TIME_FORMAT
+                    .format(
+                        batch
+                            .getEndTime()));
 
         JLabel stateLabel =
             new JLabel(
-                "状态："
-                    + statusText(
+                statusText(
                     batch.getStatus()));
 
-        information.add(nameLabel);
-        information.add(Box.createVerticalStrut(8));
-        information.add(semesterLabel);
-        information.add(Box.createVerticalStrut(4));
-        information.add(timeLabel);
-        information.add(Box.createVerticalStrut(4));
-        information.add(stateLabel);
+        stateLabel.setFont(
+            stateLabel
+                .getFont()
+                .deriveFont(
+                    Font.BOLD,
+                    13F));
 
-        card.add(information, BorderLayout.CENTER);
+        stateLabel.setForeground(
+            statusColor(
+                batch.getStatus()));
 
-        JButton enterButton = new JButton("进入");
+        information.add(
+            nameLabel);
+
+        information.add(
+            Box.createVerticalStrut(
+                10));
+
+        information.add(
+            semesterLabel);
+
+        information.add(
+            Box.createVerticalStrut(
+                5));
+
+        information.add(
+            timeLabel);
+
+        information.add(
+            Box.createVerticalStrut(
+                7));
+
+        information.add(
+            stateLabel);
+
+        card.add(
+            information,
+            BorderLayout.CENTER);
 
         /*
-         * 未开始批次不能进入。
-         *
-         * OPEN 和 ENDED 都允许进入：
-         * ENDED 后续只允许查看，不允许选退课。
+         * =========================
+         * 右侧按钮
+         * =========================
          */
-        enterButton.setEnabled(
-            batch.getStatus()
-                != SelectionBatchStatus.NOT_STARTED);
+        JButton enterButton;
+
+        if (batch.getStatus()
+            == SelectionBatchStatus
+            .NOT_STARTED) {
+
+            enterButton =
+                CourseTheme
+                    .quietButton(
+                        "尚未开始");
+
+            enterButton.setEnabled(
+                false);
+
+        } else {
+
+            enterButton =
+                CourseTheme
+                    .primaryButton(
+                        batch.getStatus()
+                            == SelectionBatchStatus
+                            .ENDED
+                            ? "查看"
+                            : "进入选课");
+        }
+
+        enterButton.setPreferredSize(
+            new Dimension(
+                110,
+                42));
 
         enterButton.addActionListener(
-            event -> enterBatch(batch));
+            event ->
+                onEnterBatch.accept(
+                    batch));
 
-        card.add(enterButton, BorderLayout.EAST);
+        JPanel actionArea =
+            new JPanel(
+                new BorderLayout());
+
+        actionArea.setOpaque(
+            false);
+
+        actionArea.add(
+            enterButton,
+            BorderLayout.CENTER);
+
+        card.add(
+            actionArea,
+            BorderLayout.EAST);
 
         return card;
     }
 
+    private JLabel createMutedLabel(
+        String text) {
 
-    private void enterBatch(
-        SelectionBatchInfo batch) {
+        JLabel label =
+            new JLabel(text);
 
-        onEnterBatch.accept(batch);
+        label.setForeground(
+            CourseTheme.MUTED);
+
+        label.setFont(
+            label.getFont()
+                .deriveFont(
+                    13F));
+
+        return label;
     }
 
+    /**
+     * 批次状态颜色。
+     */
+    private Color statusColor(
+        SelectionBatchStatus status) {
+
+        return switch (status) {
+
+            case OPEN ->
+                CourseTheme.SUCCESS;
+
+            case NOT_STARTED ->
+                CourseTheme.WARNING;
+
+            case ENDED ->
+                CourseTheme.MUTED;
+        };
+    }
+
+    /**
+     * 批次状态中文。
+     */
     private String statusText(
         SelectionBatchStatus status) {
 
         return switch (status) {
-            case NOT_STARTED -> "未开始";
-            case OPEN -> "进行中";
-            case ENDED -> "已结束";
+
+            case NOT_STARTED ->
+                "● 未开始";
+
+            case OPEN ->
+                "● 正在进行";
+
+            case ENDED ->
+                "● 已结束";
         };
     }
 
-    private void setBusy(boolean busy) {
-        refreshButton.setEnabled(!busy);
+    private void setBusy(
+        boolean busy) {
+
+        refreshButton.setEnabled(
+            !busy);
     }
 
-    private void showError(String message) {
+    private void showError(
+        String message) {
+
         batchPanel.removeAll();
 
+        JLabel errorLabel =
+            new JLabel(
+                "选课批次加载失败。");
+
+        errorLabel.setForeground(
+            CourseTheme.DANGER);
+
         batchPanel.add(
-            new JLabel("选课批次加载失败。"));
+            errorLabel);
 
         batchPanel.revalidate();
         batchPanel.repaint();
 
-        statusLabel.setText(message);
+        statusLabel.setText(
+            message);
+
+        statusLabel.setForeground(
+            CourseTheme.DANGER);
     }
 }

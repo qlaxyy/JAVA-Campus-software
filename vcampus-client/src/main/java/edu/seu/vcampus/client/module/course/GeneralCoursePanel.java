@@ -39,7 +39,7 @@ final class GeneralCoursePanel
     private final ClientContext context;
 
     private final SelectionBatchInfo batch;
-
+    private final Runnable onEnrollmentChanged;
     private final JPanel coursePanel =
         new JPanel();
 
@@ -60,16 +60,14 @@ final class GeneralCoursePanel
 
     GeneralCoursePanel(
         ClientContext context,
-        SelectionBatchInfo batch) {
+        SelectionBatchInfo batch,
+        Runnable onEnrollmentChanged) {
 
-        this.context =
-            context;
-
-        this.batch =
-            batch;
+        this.context = context;
+        this.batch = batch;
+        this.onEnrollmentChanged = onEnrollmentChanged;
 
         initializeView();
-
         loadCourses();
     }
 
@@ -78,57 +76,120 @@ final class GeneralCoursePanel
         setLayout(
             new BorderLayout(
                 0,
-                12));
+                14));
+
+        setBackground(
+            CourseTheme.BACKGROUND);
 
         setBorder(
             BorderFactory.createEmptyBorder(
-                16,
-                16,
-                16,
-                16));
+                18,
+                18,
+                18,
+                18));
 
-        JPanel top =
+        /*
+         * =========================
+         * 标题 + 筛选
+         * =========================
+         */
+        JPanel header =
             new JPanel(
-                new BorderLayout());
+                new BorderLayout(
+                    18,
+                    0));
+
+        header.setOpaque(
+            false);
+
+        JPanel titleArea =
+            new JPanel();
+
+        titleArea.setOpaque(
+            false);
+
+        titleArea.setLayout(
+            new BoxLayout(
+                titleArea,
+                BoxLayout.Y_AXIS));
 
         JLabel title =
-            new JLabel(
+            CourseTheme.title(
                 "通选课");
 
-        title.setFont(
-            title.getFont()
-                .deriveFont(
-                    Font.BOLD,
-                    20F));
+        JLabel subtitle =
+            CourseTheme.subtitle(
+                "按照通选类别查看当前开放课程");
 
-        top.add(
-            title,
-            BorderLayout.WEST);
+        titleArea.add(
+            title);
 
-        JPanel filter =
-            new JPanel(
-                new FlowLayout(
-                    FlowLayout.RIGHT));
+        titleArea.add(
+            Box.createVerticalStrut(
+                5));
+
+        titleArea.add(
+            subtitle);
+
+        header.add(
+            titleArea,
+            BorderLayout.CENTER);
+
+        CourseTheme.SurfacePanel filter =
+            new CourseTheme.SurfacePanel();
+
+        filter.setLayout(
+            new FlowLayout(
+                FlowLayout.RIGHT,
+                10,
+                9));
+
+        filter.setBorder(
+            BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(
+                    CourseTheme.BORDER),
+                BorderFactory.createEmptyBorder(
+                    2,
+                    8,
+                    2,
+                    8)));
+
+        JLabel filterLabel =
+            new JLabel(
+                "通选类别");
+
+        filterLabel.setForeground(
+            CourseTheme.MUTED);
+
+        categoryBox.setBackground(
+            Color.WHITE);
 
         filter.add(
-            new JLabel(
-                "通选类别："));
+            filterLabel);
 
         filter.add(
             categoryBox);
 
-        top.add(
+        header.add(
             filter,
             BorderLayout.EAST);
 
         add(
-            top,
+            header,
             BorderLayout.NORTH);
 
+        /*
+         * =========================
+         * 课程列表
+         * =========================
+         */
         coursePanel.setLayout(
             new BoxLayout(
                 coursePanel,
                 BoxLayout.Y_AXIS));
+
+        coursePanel.setBackground(
+            CourseTheme.BACKGROUND);
 
         JScrollPane scroll =
             new JScrollPane(
@@ -138,13 +199,41 @@ final class GeneralCoursePanel
             BorderFactory
                 .createEmptyBorder());
 
-        scroll.getVerticalScrollBar()
+        scroll.setBackground(
+            CourseTheme.BACKGROUND);
+
+        scroll
+            .getViewport()
+            .setBackground(
+                CourseTheme.BACKGROUND);
+
+        scroll
+            .getVerticalScrollBar()
             .setUnitIncrement(
-                12);
+                14);
 
         add(
             scroll,
             BorderLayout.CENTER);
+
+        /*
+         * 状态栏。
+         */
+        statusLabel.setForeground(
+            CourseTheme.MUTED);
+
+        statusLabel.setFont(
+            statusLabel
+                .getFont()
+                .deriveFont(
+                    13F));
+
+        statusLabel.setBorder(
+            BorderFactory.createEmptyBorder(
+                2,
+                2,
+                0,
+                2));
 
         add(
             statusLabel,
@@ -331,11 +420,13 @@ final class GeneralCoursePanel
     private JPanel createCourseCard(
         CourseInfo course) {
 
-        JPanel card =
-            new JPanel(
-                new BorderLayout(
-                    0,
-                    10));
+        CourseTheme.SurfacePanel card =
+            new CourseTheme.SurfacePanel();
+
+        card.setLayout(
+            new BorderLayout(
+                0,
+                10));
 
         card.setAlignmentX(
             Component.LEFT_ALIGNMENT);
@@ -344,39 +435,48 @@ final class GeneralCoursePanel
             course)) {
 
             card.setBorder(
-                BorderFactory
-                    .createCompoundBorder(
-                        BorderFactory
-                            .createLineBorder(
-                                new Color(
-                                    190,
-                                    45,
-                                    45),
-                                2),
-                        BorderFactory
-                            .createEmptyBorder(
-                                14,
-                                16,
-                                14,
-                                16)));
+                BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(
+                        CourseTheme.DANGER,
+                        2),
+                    BorderFactory.createEmptyBorder(
+                        15,
+                        18,
+                        15,
+                        18)));
 
         } else {
 
             card.setBorder(
-                BorderFactory
-                    .createCompoundBorder(
-                        BorderFactory
-                            .createEtchedBorder(),
-                        BorderFactory
-                            .createEmptyBorder(
-                                14,
-                                16,
-                                14,
-                                16)));
+                BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(
+                        CourseTheme.BORDER),
+                    BorderFactory.createEmptyBorder(
+                        15,
+                        18,
+                        15,
+                        18)));
         }
+
+        /*
+         * =========================
+         * 课程摘要
+         * =========================
+         */
+        JPanel summary =
+            new JPanel(
+                new BorderLayout(
+                    16,
+                    0));
+
+        summary.setOpaque(
+            false);
 
         JPanel information =
             new JPanel();
+
+        information.setOpaque(
+            false);
 
         information.setLayout(
             new BoxLayout(
@@ -387,36 +487,66 @@ final class GeneralCoursePanel
             new JLabel(
                 course.getCourseName());
 
+        name.setForeground(
+            CourseTheme.TEXT);
+
         name.setFont(
             name.getFont()
                 .deriveFont(
                     Font.BOLD,
                     17F));
 
+        JLabel code =
+            new JLabel(
+                "课程号："
+                    + course.getCourseCode());
+
+        code.setForeground(
+            CourseTheme.MUTED);
+
+        JLabel detail =
+            new JLabel(
+                "学分："
+                    + course.getCredits()
+                    + "    类型："
+                    + course.getCourseType());
+
+        detail.setForeground(
+            CourseTheme.MUTED);
+
+        JLabel selected =
+            new JLabel(
+                course.isSelected()
+                    ? "● 已选"
+                    : "● 未选");
+
+        selected.setFont(
+            selected.getFont()
+                .deriveFont(
+                    Font.BOLD,
+                    13F));
+
+        selected.setForeground(
+            course.isSelected()
+                ? CourseTheme.SUCCESS
+                : CourseTheme.MUTED);
+
         information.add(
             name);
 
         information.add(
             Box.createVerticalStrut(
-                6));
+                7));
 
         information.add(
-            new JLabel(
-                "课程号："
-                    + course
-                    .getCourseCode()));
+            code);
 
         information.add(
             Box.createVerticalStrut(
-                3));
+                4));
 
         information.add(
-            new JLabel(
-                "学分："
-                    + course.getCredits()
-                    + "    类型："
-                    + course
-                    .getCourseType()));
+            detail);
 
         JLabel conflictLabel =
             createConflictLabel(
@@ -424,9 +554,12 @@ final class GeneralCoursePanel
 
         if (conflictLabel != null) {
 
+            conflictLabel.setForeground(
+                CourseTheme.DANGER);
+
             information.add(
                 Box.createVerticalStrut(
-                    6));
+                    7));
 
             information.add(
                 conflictLabel);
@@ -434,42 +567,114 @@ final class GeneralCoursePanel
 
         information.add(
             Box.createVerticalStrut(
-                3));
+                6));
 
         information.add(
-            new JLabel(
-                course.isSelected()
-                    ? "状态：已选"
-                    : "状态：未选"));
+            selected);
+
+        summary.add(
+            information,
+            BorderLayout.CENTER);
+
+        JButton expand =
+            new JButton(
+                "展开教学班");
+
+        CourseTheme.styleQuietButton(
+            expand);
+
+        summary.add(
+            expand,
+            BorderLayout.EAST);
 
         card.add(
-            information,
+            summary,
             BorderLayout.NORTH);
 
+        /*
+         * =========================
+         * 教学班区域
+         * =========================
+         */
         JPanel offeringPanel =
             new JPanel();
+
+        offeringPanel.setOpaque(
+            false);
 
         offeringPanel.setLayout(
             new BoxLayout(
                 offeringPanel,
                 BoxLayout.Y_AXIS));
 
-        for (OfferingInfo offering
-            : course.getOfferings()) {
+        offeringPanel.setBorder(
+            BorderFactory.createEmptyBorder(
+                12,
+                8,
+                0,
+                8));
+
+        if (course.getOfferings()
+            .isEmpty()) {
+
+            JLabel empty =
+                new JLabel(
+                    "本课程当前没有教学班。");
+
+            empty.setForeground(
+                CourseTheme.MUTED);
 
             offeringPanel.add(
-                createOfferingCard(
-                    course,
-                    offering));
+                empty);
 
-            offeringPanel.add(
-                Box.createVerticalStrut(
-                    8));
+        } else {
+
+            for (OfferingInfo offering
+                : course.getOfferings()) {
+
+                offeringPanel.add(
+                    createOfferingCard(
+                        course,
+                        offering));
+
+                offeringPanel.add(
+                    Box.createVerticalStrut(
+                        8));
+            }
         }
+
+        /*
+         * 通选课现在也和其他课程一样：
+         * 默认收起。
+         */
+        offeringPanel.setVisible(
+            false);
 
         card.add(
             offeringPanel,
             BorderLayout.CENTER);
+
+        expand.addActionListener(
+            event -> {
+
+                boolean visible =
+                    !offeringPanel
+                        .isVisible();
+
+                offeringPanel.setVisible(
+                    visible);
+
+                expand.setText(
+                    visible
+                        ? "收起教学班"
+                        : "展开教学班");
+
+                card.revalidate();
+                card.repaint();
+
+                coursePanel.revalidate();
+                coursePanel.repaint();
+            });
 
         return card;
     }
@@ -481,52 +686,56 @@ final class GeneralCoursePanel
         CourseInfo course,
         OfferingInfo offering) {
 
-        JPanel card =
-            new JPanel(
-                new BorderLayout(
-                    16,
-                    0));
+        CourseTheme.SurfacePanel card =
+            new CourseTheme.SurfacePanel(
+                new Color(
+                    249,
+                    251,
+                    250),
+                14);
+
+        card.setLayout(
+            new BorderLayout(
+                18,
+                0));
 
         card.setAlignmentX(
             Component.LEFT_ALIGNMENT);
 
+        String availabilityStatus =
+            offering.getAvailabilityStatus();
+
         if ("TIME_CONFLICT".equals(
-            offering
-                .getAvailabilityStatus())) {
+            availabilityStatus)) {
 
             card.setBorder(
-                BorderFactory
-                    .createCompoundBorder(
-                        BorderFactory
-                            .createLineBorder(
-                                new Color(
-                                    190,
-                                    45,
-                                    45)),
-                        BorderFactory
-                            .createEmptyBorder(
-                                10,
-                                12,
-                                10,
-                                12)));
+                BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(
+                        CourseTheme.DANGER),
+                    BorderFactory.createEmptyBorder(
+                        12,
+                        14,
+                        12,
+                        14)));
 
         } else {
 
             card.setBorder(
-                BorderFactory
-                    .createCompoundBorder(
-                        BorderFactory
-                            .createEtchedBorder(),
-                        BorderFactory
-                            .createEmptyBorder(
-                                10,
-                                12,
-                                10,
-                                12)));
+                BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(
+                        CourseTheme.BORDER),
+                    BorderFactory.createEmptyBorder(
+                        12,
+                        14,
+                        12,
+                        14)));
         }
 
         JPanel info =
             new JPanel();
+
+        info.setOpaque(
+            false);
 
         info.setLayout(
             new BoxLayout(
@@ -535,9 +744,11 @@ final class GeneralCoursePanel
 
         JLabel classLabel =
             new JLabel(
-                "教学班："
-                    + offering
-                    .getClassNo());
+                "教学班 "
+                    + offering.getClassNo());
+
+        classLabel.setForeground(
+            CourseTheme.TEXT);
 
         classLabel.setFont(
             classLabel.getFont()
@@ -545,85 +756,98 @@ final class GeneralCoursePanel
                     Font.BOLD,
                     15F));
 
+        JLabel teacher =
+            new JLabel(
+                "教师："
+                    + teacherText(
+                    offering));
+
+        JLabel schedule =
+            new JLabel(
+                "上课时间："
+                    + scheduleText(
+                    offering));
+
+        JLabel location =
+            new JLabel(
+                "地点："
+                    + nullableText(
+                    offering.getLocationName())
+                    + "    校区："
+                    + nullableText(
+                    offering.getCampusName()));
+
+        JLabel capacity =
+            new JLabel(
+                "人数："
+                    + offering.getSelectedCount()
+                    + " / "
+                    + offering.getCapacity()
+                    + "    剩余："
+                    + offering.getRemainingCount());
+
+        teacher.setForeground(
+            CourseTheme.MUTED);
+
+        schedule.setForeground(
+            CourseTheme.MUTED);
+
+        location.setForeground(
+            CourseTheme.MUTED);
+
+        capacity.setForeground(
+            CourseTheme.MUTED);
+
+        JLabel status =
+            new JLabel(
+                "● "
+                    + availabilityText(
+                    offering));
+
+        status.setFont(
+            status.getFont()
+                .deriveFont(
+                    Font.BOLD,
+                    13F));
+
+        status.setForeground(
+            availabilityColor(
+                availabilityStatus));
+
         info.add(
             classLabel);
 
         info.add(
             Box.createVerticalStrut(
-                5));
+                7));
 
         info.add(
-            new JLabel(
-                "教师："
-                    + teacherText(
-                    offering)));
+            teacher);
 
         info.add(
             Box.createVerticalStrut(
-                3));
+                4));
 
         info.add(
-            new JLabel(
-                "上课时间："
-                    + scheduleText(
-                    offering)));
+            schedule);
 
         info.add(
             Box.createVerticalStrut(
-                3));
+                4));
 
         info.add(
-            new JLabel(
-                "地点："
-                    + nullableText(
-                    offering
-                        .getLocationName())
-                    + "    校区："
-                    + nullableText(
-                    offering
-                        .getCampusName())));
+            location);
 
         info.add(
             Box.createVerticalStrut(
-                3));
+                4));
 
         info.add(
-            new JLabel(
-                "人数："
-                    + offering
-                    .getSelectedCount()
-                    + " / "
-                    + offering
-                    .getCapacity()
-                    + "    剩余："
-                    + offering
-                    .getRemainingCount()));
+            capacity);
 
         info.add(
             Box.createVerticalStrut(
-                3));
-
-        JLabel status =
-            new JLabel(
-                "状态："
-                    + availabilityText(
-                    offering));
-
-        if ("TIME_CONFLICT".equals(
-            offering
-                .getAvailabilityStatus())) {
-
-            status.setForeground(
-                new Color(
-                    190,
-                    45,
-                    45));
-
-            status.setFont(
-                status.getFont()
-                    .deriveFont(
-                        Font.BOLD));
-        }
+                6));
 
         info.add(
             status);
@@ -634,32 +858,97 @@ final class GeneralCoursePanel
 
         /*
          * =========================
-         * 选择按钮
+         * 选课 / 退课按钮
          * =========================
          */
-        JButton selectButton =
+        JButton actionButton =
             new JButton(
-                selectButtonText(
+                actionButtonText(
                     offering));
 
-        selectButton.setEnabled(
-            canSelect(
-                offering));
+        boolean actionable =
+            canUseAction(
+                offering);
 
-        selectButton.addActionListener(
-            event ->
-                confirmAndSelect(
-                    course,
-                    offering,
-                    selectButton));
+        if (actionable) {
+
+            CourseTheme.stylePrimaryButton(
+                actionButton);
+
+        } else {
+
+            CourseTheme.styleQuietButton(
+                actionButton);
+        }
+
+        actionButton.setEnabled(
+            actionable);
+
+        actionButton.addActionListener(
+            event -> {
+
+                if (offering.isSelected()) {
+
+                    CourseDropSupport.confirmAndDrop(
+                        this,
+                        context,
+                        batch,
+                        course,
+                        offering,
+                        actionButton,
+                        statusLabel,
+                        this::loadCourses);
+
+                } else {
+
+                    confirmAndSelect(
+                        course,
+                        offering,
+                        actionButton);
+                }
+            });
 
         card.add(
-            selectButton,
+            actionButton,
             BorderLayout.EAST);
 
         return card;
     }
+    /**
+     * 当前教学班是否可以执行选课或退课。
+     */
+    private boolean canUseAction(
+        OfferingInfo offering) {
 
+        if (offering.isSelected()) {
+
+            return batch.getStatus()
+                == SelectionBatchStatus.OPEN
+                && batch.isAllowDrop();
+        }
+
+        return canSelect(
+            offering);
+    }
+
+    /**
+     * 教学班右侧操作按钮文字。
+     */
+    private String actionButtonText(
+        OfferingInfo offering) {
+
+        if (offering.isSelected()) {
+
+            return batch.getStatus()
+                == SelectionBatchStatus.OPEN
+                && batch.isAllowDrop()
+                ? "退课"
+                : "当前批次不可退";
+        }
+
+        return selectButtonText(
+            offering);
+    }
     /**
      * 确认选课。
      */
@@ -709,7 +998,39 @@ final class GeneralCoursePanel
             offering,
             button);
     }
+    /**
+     * 通选教学班状态颜色。
+     */
+    private Color availabilityColor(
+        String status) {
 
+        if (status == null) {
+            return CourseTheme.MUTED;
+        }
+
+        return switch (status) {
+
+            case "AVAILABLE",
+                 "SELECTED" ->
+                CourseTheme.SUCCESS;
+
+            case "TIME_CONFLICT" ->
+                CourseTheme.DANGER;
+
+            case "FULL",
+                 "NOT_ELIGIBLE" ->
+                CourseTheme.WARNING;
+
+            case "COURSE_ALREADY_SELECTED" ->
+                CourseTheme.PRIMARY_DARK;
+
+            case "OFFERING_CLOSED" ->
+                CourseTheme.MUTED;
+
+            default ->
+                CourseTheme.MUTED;
+        };
+    }
     /**
      * 提交选课。
      */
@@ -742,7 +1063,6 @@ final class GeneralCoursePanel
                 protected void done() {
 
                     try {
-
                         Response response =
                             get();
 
@@ -761,6 +1081,8 @@ final class GeneralCoursePanel
                          * Server 状态是最终权威。
                          */
                         loadCourses();
+
+
 
                     } catch (InterruptedException exception) {
 

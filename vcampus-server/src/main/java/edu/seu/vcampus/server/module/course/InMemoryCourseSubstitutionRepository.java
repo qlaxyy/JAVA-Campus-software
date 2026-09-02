@@ -54,7 +54,7 @@ final class InMemoryCourseSubstitutionRepository
 
         OfferingInfo firstOffering =
             new OfferingInfo(
-                3001L,
+                2001L,
                 "01",
                 List.of(
                     "赵老师"
@@ -81,7 +81,7 @@ final class InMemoryCourseSubstitutionRepository
 
         OfferingInfo secondOffering =
             new OfferingInfo(
-                3002L,
+                2002L,
                 "02",
                 List.of(
                     "孙老师"

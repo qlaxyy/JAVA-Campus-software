@@ -55,13 +55,14 @@ final class CourseBatchPanel extends JPanel {
             new BorderLayout(
                 0,
                 16));
-
+        setBackground(
+            CourseTheme.BACKGROUND);
         setBorder(
             BorderFactory.createEmptyBorder(
-                20,
-                24,
-                20,
-                24));
+                22,
+                26,
+                22,
+                26));
 
         /*
          * 顶部批次信息。
@@ -85,11 +86,20 @@ final class CourseBatchPanel extends JPanel {
     private JPanel createHeader(
         Runnable goBack) {
 
-        JPanel header =
-            new JPanel(
-                new BorderLayout(
-                    16,
-                    0));
+        CourseTheme.SurfacePanel header =
+            new CourseTheme.SurfacePanel();
+
+        header.setLayout(
+            new BorderLayout(
+                18,
+                0));
+
+        header.setBorder(
+            BorderFactory.createEmptyBorder(
+                16,
+                18,
+                16,
+                18));
 
         /*
          * =========================
@@ -97,8 +107,8 @@ final class CourseBatchPanel extends JPanel {
          * =========================
          */
         JButton backButton =
-            new JButton(
-                "返回选课中心");
+            CourseTheme.quietButton(
+                "← 返回选课中心");
 
         backButton.addActionListener(
             event ->
@@ -115,7 +125,8 @@ final class CourseBatchPanel extends JPanel {
          */
         JPanel information =
             new JPanel();
-
+        information.setOpaque(
+            false);
         information.setLayout(
             new BoxLayout(
                 information,
@@ -127,7 +138,8 @@ final class CourseBatchPanel extends JPanel {
         JLabel nameLabel =
             new JLabel(
                 batch.getBatchName());
-
+        nameLabel.setForeground(
+            CourseTheme.TEXT);
         nameLabel.setFont(
             nameLabel
                 .getFont()
@@ -142,7 +154,8 @@ final class CourseBatchPanel extends JPanel {
             new JLabel(
                 "学期："
                     + batch.getSemester());
-
+        semesterLabel.setForeground(
+            CourseTheme.MUTED);
         /*
          * 开放时间。
          */
@@ -154,7 +167,8 @@ final class CourseBatchPanel extends JPanel {
                     + " ～ "
                     + TIME_FORMAT.format(
                     batch.getEndTime()));
-
+        timeLabel.setForeground(
+            CourseTheme.MUTED);
         /*
          * 当前状态。
          */
@@ -163,7 +177,25 @@ final class CourseBatchPanel extends JPanel {
                 "状态："
                     + statusText(
                     batch.getStatus()));
+        statusLabel.setFont(
+            statusLabel
+                .getFont()
+                .deriveFont(
+                    Font.BOLD,
+                    13F));
 
+        statusLabel.setForeground(
+            switch (batch.getStatus()) {
+
+                case OPEN ->
+                    CourseTheme.SUCCESS;
+
+                case NOT_STARTED ->
+                    CourseTheme.WARNING;
+
+                case ENDED ->
+                    CourseTheme.MUTED;
+            });
         information.add(
             nameLabel);
 
@@ -202,7 +234,15 @@ final class CourseBatchPanel extends JPanel {
 
         JTabbedPane tabs =
             new JTabbedPane();
-
+        /*
+         * =========================
+         * 我的课表
+         * =========================
+         */
+        TimetablePanel timetablePanel =
+            new TimetablePanel(
+                context,
+                batch);
         /*
          * =========================
          * 1. 方案内课程
@@ -211,7 +251,8 @@ final class CourseBatchPanel extends JPanel {
         PlanCoursePanel planPanel =
             new PlanCoursePanel(
                 context,
-                batch);
+                batch,
+                timetablePanel::reload);
 
         /*
          * =========================
@@ -221,7 +262,8 @@ final class CourseBatchPanel extends JPanel {
         SubstituteCoursePanel substitutePanel =
             new SubstituteCoursePanel(
                 context,
-                batch);
+                batch,
+                timetablePanel::reload);
 
         /*
          * =========================
@@ -238,7 +280,8 @@ final class CourseBatchPanel extends JPanel {
             pePanel =
                 new PeCoursePanel(
                     context,
-                    batch);
+                    batch,
+                    timetablePanel::reload);
 
         } else {
 
@@ -266,7 +309,8 @@ final class CourseBatchPanel extends JPanel {
             generalPanel =
                 new GeneralCoursePanel(
                     context,
-                    batch);
+                    batch,
+                    timetablePanel::reload);
 
         } else {
 
@@ -282,8 +326,20 @@ final class CourseBatchPanel extends JPanel {
         SelectedCoursePanel selectedPanel =
             new SelectedCoursePanel(
                 context,
-                batch);
+                batch,
+                timetablePanel::reload);
 
+        /*
+         * =========================
+         * 全校课程查询
+         * =========================
+         *
+         * 这个页面与具体批次类型无关，
+         * 只是当前学期课程目录查询。
+         */
+        CourseSearchPanel searchPanel =
+            new CourseSearchPanel(
+                context);
         /*
          * =========================
          * 加入方案内
@@ -329,6 +385,9 @@ final class CourseBatchPanel extends JPanel {
          * =========================
          */
         tabs.addTab(
+            "我的课表",
+            timetablePanel);
+        tabs.addTab(
             "已选课程",
             selectedPanel);
 
@@ -339,9 +398,7 @@ final class CourseBatchPanel extends JPanel {
          */
         tabs.addTab(
             "全校课程查询",
-            createPlaceholder(
-                "全校课程查询"));
-
+            searchPanel);
         /*
          * =========================
          * 标签切换刷新
@@ -391,9 +448,20 @@ final class CourseBatchPanel extends JPanel {
                      * 已选。
                      */
                 } else if (selected
+                    == timetablePanel) {
+
+                    timetablePanel.reload();
+
+
+                } else if (selected
                     == selectedPanel) {
 
                     selectedPanel.reload();
+                }
+                else if (selected
+                    == searchPanel) {
+
+                    searchPanel.reload();
                 }
             });
 

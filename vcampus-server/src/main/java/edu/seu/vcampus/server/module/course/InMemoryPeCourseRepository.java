@@ -31,7 +31,7 @@ final class InMemoryPeCourseRepository
 
         OfferingInfo offering =
             new OfferingInfo(
-                4001L,
+                14001L,
                 "01",
                 List.of(
                     "周老师"
@@ -71,7 +71,7 @@ final class InMemoryPeCourseRepository
 
         PeOfferingRule rule =
             new PeOfferingRule(
-                4001L,
+                14001L,
                 PeGenderRestriction.MALE_ONLY,
                 null,
                 null,
@@ -95,7 +95,7 @@ final class InMemoryPeCourseRepository
 
         OfferingInfo offering =
             new OfferingInfo(
-                4002L,
+                14002L,
                 "01",
                 List.of(
                     "吴老师"
@@ -135,7 +135,7 @@ final class InMemoryPeCourseRepository
 
         PeOfferingRule rule =
             new PeOfferingRule(
-                4002L,
+                14002L,
                 PeGenderRestriction.FEMALE_ONLY,
                 null,
                 null,
@@ -165,7 +165,7 @@ final class InMemoryPeCourseRepository
 
         OfferingInfo offering =
             new OfferingInfo(
-                4003L,
+                14003L,
                 "01",
                 List.of(
                     "郑老师"
@@ -203,16 +203,9 @@ final class InMemoryPeCourseRepository
                 )
             );
 
-        /*
-         * 原始人数：
-         *
-         * 男 18 / 20
-         * 女 12 / 20
-         * 总计 30 / 40
-         */
         PeOfferingRule rule =
             new PeOfferingRule(
-                4003L,
+                14003L,
                 PeGenderRestriction.MIXED_SPLIT,
                 20,
                 20,
@@ -237,7 +230,7 @@ final class InMemoryPeCourseRepository
 
         OfferingInfo offering =
             new OfferingInfo(
-                4004L,
+                14004L,
                 "01",
                 List.of(
                     "许老师"
@@ -277,7 +270,7 @@ final class InMemoryPeCourseRepository
 
         PeOfferingRule rule =
             new PeOfferingRule(
-                4004L,
+                14004L,
                 PeGenderRestriction.UNRESTRICTED,
                 null,
                 null,

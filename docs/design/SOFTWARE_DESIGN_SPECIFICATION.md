@@ -556,9 +556,19 @@ classDiagram
 
 负责人：葛丰玮。后续按 4.3 节结构补充商品、购物车、订单、库存并发、接口、数据库、图表和测试。
 
-## 10. 医院子系统设计说明（待负责人材料汇总）
+## 10. 医院子系统设计说明（已补充医生申请链路，其余待负责人材料汇总）
 
-负责人：廖俊杰。后续按 4.3 节结构补充患者、医生和管理员模式，号源预约、接口、数据库、图表和测试。
+负责人：廖俊杰。当前已有患者、医生和管理员模式，以及医生新增申请审批链路。全局 `Role` 不包含医生。申请明确分为关联已有账号和新建外来医生：已有账号在提交时精确校验，外来医生不填写账号名，批准后由用户模块生成唯一 `Role.USER` 账号，再以 `userId` 激活医院医生档案。医院管理员不能直接创建账号或激活医生身份。号源预约等其余内容后续按 4.3 节补充。
+
+医生申请相关网络接口：
+
+| Action | 调用者 | 请求 data | 成功响应 data |
+|---|---|---|---|
+| `HOSPITAL.SUBMIT_DOCTOR_APPLICATION` | 医院管理员 | `SubmitDoctorApplicationRequest` | `DoctorApplicationView` |
+| `HOSPITAL.LIST_DOCTOR_APPLICATIONS` | 医院管理员或超级管理员 | `null` | `DoctorApplicationListResponse` |
+| `HOSPITAL.REVIEW_DOCTOR_APPLICATION` | 超级管理员 | `ReviewDoctorApplicationRequest` | `DoctorApplicationView` |
+
+申请状态为 `PENDING`、`APPROVED` 或 `REJECTED`。已审核申请不能重复处理；医生编号在有效档案以及待审核/已通过申请中不得重复。关联已有账号必须在提交时找到并锁定准确账号；外来医生批准后生成唯一登录账号，初始密码为 `123456`。禁止把碰巧同名的登录账号自动认定为同一个人。申请和专业档案在正式启动时写入 Access，测试使用内存 Repository。
 
 ## 11. 公共模块设计说明
 
@@ -685,6 +695,7 @@ Swing 组件必须在事件分派线程中创建和更新。登录网络请求�
 - `DemoUserAccounts` 只在空库中初始化公开测试账号；
 - 账号资料和 `AdminScope` 修改会跨服务器重启保留；
 - `InMemoryAuthenticationService` 在内存中保存会话；
+- `AccessHospitalRepository` 保存医生新增申请和已审核医生档案；
 - 服务器重启后全部 token 会失效，用户需要重新登录。
 
 自动化测试仍使用 `InMemoryUserRepository`，防止测试修改正式数据库。
@@ -765,6 +776,7 @@ flowchart LR
 |---|---|
 | `AuthenticationIntegrationTest` | 正确登录、会话查询、退出、退出后 token 失效、错误密码、子系统管理员范围。 |
 | `LoginPanelTest` | 登录界面控件、开发测试账号展示、账号和密码非空校验。 |
+| `DoctorOnboardingIntegrationTest` | 医院管理员分类提交、越权拦截、已有账号精确绑定、外来医生账号自动生成、账号碰撞防护，以及 Access 重启后医生资格保留。 |
 
 ### 16.2 登录模块验收条件
 

@@ -113,7 +113,7 @@ final class HospitalModePanel extends JPanel {
                 patientButton));
         modes.add(modeCard(
                 "医生模式",
-                "账号需要登记在医院医生名单中",
+                "账号需要绑定有效医院医生档案",
                 "我的排班<br>待接诊患者<br>患者就诊背景信息<br>诊断与处置",
                 doctorButton));
         modes.add(modeCard(

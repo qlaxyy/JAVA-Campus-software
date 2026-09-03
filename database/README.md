@@ -8,9 +8,9 @@
 - 虚构且可重复初始化的演示数据或脚本。
 - 不提交个人电脑上的 `.accdb`、真实学号、联系方式、病历、明文密码或其他隐私数据。
 
-用户账号模块已经通过 UCanAccess/JDBC 接入 Access：正式启动服务器时会自动创建
-`database/vCampus.accdb` 和用户账号表，空库会初始化公开测试账号。生成的 `.accdb`
-仍不提交 Git。其他子系统继续按数据字典逐步接入同一个数据库。
+用户账号模块以及医院的医生申请/档案已经通过 UCanAccess/JDBC 接入 Access：正式启动服务器时会自动创建
+`database/vCampus.accdb`、用户账号表、医生申请表和医生档案表，空库会初始化公开测试账号。生成的 `.accdb`
+仍不提交 Git。其他业务表继续按数据字典逐步接入同一个数据库。
 
 ## 2. 数据归属
 
@@ -21,7 +21,7 @@
 | 选课系统 | [course.md](schema/course.md) | 课程、开课、选课、成绩 | `userId`、`studentId` |
 | 图书馆 | [library.md](schema/library.md) | 图书、馆藏、借阅记录 | `userId`、`studentId` |
 | 商店 | [shop.md](schema/shop.md) | 商品、库存、购物车、订单 | `userId` |
-| 医院 | [hospital.md](schema/hospital.md) | 科室、医生、排班、号源、预约 | `userId`、`studentId` |
+| 医院 | [hospital.md](schema/hospital.md) | 医生申请、医生档案、科室、排班、号源、预约 | `userId`、`studentId` |
 
 规则：
 

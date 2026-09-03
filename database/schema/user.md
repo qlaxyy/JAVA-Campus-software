@@ -75,13 +75,13 @@
 | 用户名 | 角色 | 管理范围 | 用途 |
 |---|---|---|---|
 | `student001` | `USER` | 无 | 普通账号；学籍资格由学籍子系统数据决定 |
-| `teacher001` | `USER` | 无 | 普通账号；当前医院医生名单包含其 `userId` |
+| `teacher001` | `USER` | 无 | 普通账号；当前医院有效医生档案绑定其 `userId` |
 | `admin` | `SUPER_ADMIN` | 隐式全部 | 用户管理与全局管理流程 |
 | `studentadmin` | `USER` | `STUDENT` | 学籍管理授权 |
 | `courseadmin` | `USER` | `COURSE` | 选课管理授权 |
 | `libraryadmin` | `USER` | `LIBRARY` | 图书馆管理授权 |
 | `shopadmin` | `USER` | `SHOP` | 商店管理授权 |
-| `hospitaladmin` | `USER` | `HOSPITAL` | 医院管理授权；当前不在医院医生名单中 |
+| `hospitaladmin` | `USER` | `HOSPITAL` | 医院管理授权；可提交医生申请但不能审核 |
 
 空的 `vCampus.accdb` 首次启动时会写入这些虚构账号；已有数据时不会重复初始化或覆盖修改。不能提交真实个人信息或密码。
 
@@ -97,6 +97,8 @@
 | `USER.ADMIN_RESET_PASSWORD` | `SUPER_ADMIN` | 重置账号密码并清除该账号已有会话 |
 
 上述 Action 已通过 `UserRepository` 使用 Access。第一版不提供创建其他超级管理员或修改全局角色；Action 和 DTO 保持不变。
+
+医院申请分为两类。关联已有校园账号时，医院在提交阶段通过内部 `AccountProvisioning` 精确查询账号并锁定其 `userId`；找不到或已禁用时拒绝提交。新建外来医生时不接收医院填写的账号名，超级管理员批准后由用户模块生成唯一登录账号，以初始密码 `123456` 创建 `Role.USER` 账号并返回新 `userId`。禁止根据“填写的账号名碰巧存在”自动复用账户。
 
 批量导入 CSV 使用 UTF-8 编码，第一行为 `username,displayName`。初始密码统一为
 `123456`，文件中不保存密码和管理范围。服务器会再次检查已有账号和文件内重复账号；

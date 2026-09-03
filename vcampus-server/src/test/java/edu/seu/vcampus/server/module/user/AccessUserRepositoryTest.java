@@ -10,6 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
+import java.sql.Connection;
+import java.sql.Statement;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -67,6 +69,23 @@ class AccessUserRepositoryTest {
                 () -> repository.saveAll(List.of(first, duplicate)));
 
         assertTrue(repository.findAll().isEmpty());
+    }
+
+    @Test
+    void normalizesAbandonedTeacherAndDoctorRoleValues() throws Exception {
+        Path databasePath = temporaryDirectory.resolve("legacy-roles.accdb");
+        AccessUserRepository repository = repository(databasePath);
+        repository.save(account("U-LEGACY-001", "legacydoctor"));
+        try (Connection connection = new AccessDatabase(databasePath).openConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate(
+                    "UPDATE tblUser SET roleCode = 'DOCTOR' WHERE userId = 'U-LEGACY-001'");
+        }
+
+        UserAccount migrated = repository(databasePath)
+                .findById("U-LEGACY-001").orElseThrow();
+
+        assertEquals(Role.USER, migrated.role());
     }
 
     private AccessUserRepository repository(Path path) {

@@ -1,138 +1,205 @@
 # JAVA Virtual Campus（虚拟校园）
 
-本仓库用于 6 人小组完成 Java 专业技能实训项目。范围为全部必做模块加医院选做模块：
+6 人 Java 实训项目：用户管理、学生学籍、选课、图书馆、商店，以及选做医院模块。
 
-1. 用户管理（注册/注销、登录/登出、授权）
-2. 学生学籍管理
-3. 选课系统
-4. 图书馆
-5. 商店
-6. 医院（选做）
-
-项目采用 Java C/S 架构，团队统一使用 JDK 25；客户端使用 Swing，客户端与服务器端通过 Socket 通信，服务器端支持多客户端并发，验收数据库以课程要求的 Access 为准。
-
-## 开发入口：先看这里
-
-无论手写还是使用 AI 生成代码，开始开发前都必须先确认以下内容：
-
-1. **[团队开发通知（固定入口）](docs/团队开发通知.md)**：当前轮次、时间、完成标准和最新通知。
-2. **[需求基线](docs/01-需求基线.md)**：必须实现什么、哪些内容不做。
-3. **[总体架构与接口约定](docs/03-总体架构与接口约定.md)**：分层、Action、DTO、错误码、数据库和并发规则。
-4. **[GitHub 协作规范](docs/05-GitHub协作规范.md)**：Issue、分支、Pull Request 和评审规则。
-5. **[成员并行开发开工指南](docs/12-成员并行开发开工指南.md)**：每个人能改哪些目录、第一轮怎样交付。
-6. **[开发期基础登录与会话](docs/13-开发期基础登录与会话.md)**：其他模块怎样复用登录状态和服务器权限校验。
-
-今后的轮次通知统一更新在“团队开发通知”页面，群内只需转发该固定链接。
-
-## 项目结构（已确定，未经评审不要改变）
+技术基线：**JDK 25 + Maven 3.9.16 + IntelliJ IDEA Community + Swing + Socket + Access/JDBC**。
 
 ```text
-JAVA-Campus-software/
-├─ pom.xml                 Maven 父工程和统一版本约束
-├─ vcampus-common/         客户端/服务器共享的协议、Action、DTO、角色和错误码
-├─ vcampus-client/         Swing 页面、ClientContext、网络客户端
-├─ vcampus-server/         Socket、线程池、业务服务、权限校验和未来 DAO
-├─ database/
-│  ├─ schema/              六模块数据字典和表归属
-│  └─ seed/                虚构演示数据与初始化说明
-├─ docs/
-│  ├─ modules/             六模块设计文档
-│  ├─ decisions/           架构决策 ADR
-│  ├─ progress/            当前状态、推进日志、风险和追踪记录
-│  ├─ design/              软件设计说明书持续草稿
-│  ├─ testing/             测试计划持续草稿
-│  └─ 课程原始材料/        教师原始要求
-├─ scripts/                环境检查和公共脚本
-└─ .github/                Issue 与 Pull Request 模板
+vcampus-client  →  vcampus-common  ←  vcampus-server
+   Swing 界面       Action 与 DTO       业务、权限、DAO
 ```
 
-依赖方向固定为：`vcampus-client → vcampus-common ← vcampus-server`。`vcampus-common` 不能依赖 Swing、Socket 实现、DAO 或数据库连接；客户端不能直接访问数据库。
+> 组员日常只需要阅读本页和自己负责的模块 Epic。其他文档用于架构查阅、过程留痕和最终提交。
 
-## 六个模块的固定开发区域
+## 1. 第一次下载并运行
 
-每位负责人原则上只修改自己模块对应的五个位置。点击下表可直接查看当前设计和数据字典：
+先安装 JDK 25、Maven、Git 和 IntelliJ IDEA Community。在自己选择的父目录打开 PowerShell：
 
-| 模块 | 模块设计 | 数据字典 | 包名 `<module>` |
+```powershell
+git clone https://github.com/qlaxyy/JAVA-Campus-software.git
+cd JAVA-Campus-software
+mvn clean verify
+```
+
+`git clone` 只执行一次。看到 `BUILD SUCCESS` 后，打开两个终端。
+
+终端 1：
+
+```powershell
+java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar
+```
+
+首次启动会自动创建 `database/vCampus.accdb`、用户表、医生申请/档案表和 8 个开发期账号。看到
+`Virtual Campus server started on port 8888.` 后保持终端运行。账号修改会保存在
+Access 中；token 会话仍保存在服务器内存，服务器重启后需要重新登录。
+
+终端 2：
+
+```powershell
+java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.vcampus.client.ClientMain
+```
+
+开发期测试账号：
+
+| 用这个账号测试什么 | 服务器中额外登记的资料或权限 | 账户名 | 密码 |
 |---|---|---|---|
-| 用户管理 | [user.md](docs/modules/user.md) | [user.md](database/schema/user.md) | `user` |
-| 学生学籍 | [student.md](docs/modules/student.md) | [student.md](database/schema/student.md) | `student` |
-| 选课系统 | [course.md](docs/modules/course.md) | [course.md](database/schema/course.md) | `course` |
-| 图书馆 | [library.md](docs/modules/library.md) | [library.md](database/schema/library.md) | `library` |
-| 商店 | [shop.md](docs/modules/shop.md) | [shop.md](database/schema/shop.md) | `shop` |
-| 医院 | [hospital.md](docs/modules/hospital.md) | [hospital.md](database/schema/hospital.md) | `hospital` |
+| 普通学生功能 | 无 | `student001` | `123456` |
+| 医生工作台 | 医院有效医生档案绑定了这个账号 | `teacher001` | `123456` |
+| 全系统管理 | 可以管理账号和所有业务模块 | `admin` | `123456` |
+| 学籍管理 | 可以维护学籍数据 | `studentadmin` | `123456` |
+| 选课管理 | 可以维护选课数据 | `courseadmin` | `123456` |
+| 图书馆管理 | 可以维护图书馆数据 | `libraryadmin` | `123456` |
+| 商店管理 | 可以维护商店数据 | `shopadmin` | `123456` |
+| 医院管理 | 可以维护医院数据 | `hospitaladmin` | `123456` |
 
-把 `<module>` 替换为上表包名后，五个可开发区域为：
+这些是公开的虚构测试账号，统一简单密码仅用于联调，不得用于真实系统或复用个人密码。每个人只有一个账号。“学生、教师、医生、患者”都不是全局登录角色，由对应子系统根据 `userId` 查询自己的业务资料。所有已登录账号都可以进入患者模式；`teacher001` 能进入医生模式，是因为医院有效医生档案绑定了它的 `userId`。
+
+登录页只输入账号和密码，不让用户自行选择身份。全局 `Role` 只区分普通账号 `USER` 与超级管理员 `SUPER_ADMIN`；`AdminScope` 表示账号可以管理哪些子系统。客户端隐藏无权操作只用于改善体验，服务器仍会对每个请求独立鉴权。
+
+系统没有全局“用户/管理模式”。每个子系统在模块内部提供自己的模式入口，例如医院管理员可以进入患者和管理员模式；只有绑定有效医生档案的账号才能进入医生模式。医生申请必须明确选择“关联已有校园账号”或“新建外来医生账号”：前者校验并锁定已有账号，后者不填写账号名，由用户模块在超级管理员批准后生成唯一账号。客户端只能发送 Action，实际校验和数据库读写必须经过服务器 Service 与 DAO，禁止 Swing 客户端直接连接 Access。完整规则见 [现行系统设计总览](docs/design/SYSTEM_DESIGN.md)。
+
+当前可复现：登录门禁、模块大厅、登出、PING/PONG、超级管理员账号维护与 CSV 批量导入、学生学籍查询、选课批次列表、医院患者号源查询、医院三模式入口，以及“医院管理员分类申请—超级管理员审核—账号关联/生成—申请记录交付账号—医生档案激活”链路。停止服务器时在服务器终端按 `Ctrl + C`。
+
+批量导入文件使用 UTF-8 CSV，第一行固定为 `username,displayName`。每次最多
+1000 个普通账号，初始密码统一为 `123456`；任何一行错误都会取消整批写入。
+
+如果 8888 端口被占用，可临时改用 8890：
+
+```powershell
+# 服务端
+java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar 8890
+
+# 客户端
+java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.vcampus.client.ClientMain 127.0.0.1 8890
+```
+
+服务器还可接收第二个参数作为数据库路径，例如：
+
+```powershell
+java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar 8888 database\test.accdb
+```
+
+## 2. 以后获取最新正式成果
+
+进入已经克隆的项目根目录（能看到根 `pom.xml` 的目录）：
+
+```powershell
+git switch main
+git status
+git pull --ff-only origin main
+mvn clean verify
+```
+
+如果 `git status` 显示未提交修改，先停止操作并保留终端输出；不要执行 `git reset --hard`，也不要重新克隆覆盖。
+
+## 3. 开发自己的功能
+
+每个具体功能使用一个独立分支。不要在 `main` 上开发或推送业务代码。
+
+```powershell
+git switch main
+git pull --ff-only origin main
+mvn clean verify
+git switch -c feat/<module>-<summary>
+```
+
+示例：`git switch -c feat/library-book-search`
+
+原则上只修改本人模块的以下位置：
 
 ```text
 vcampus-common/src/main/java/edu/seu/vcampus/common/<module>/
 vcampus-client/src/main/java/edu/seu/vcampus/client/module/<module>/
 vcampus-server/src/main/java/edu/seu/vcampus/server/module/<module>/
-docs/modules/<module>.md
 database/schema/<module>.md
 ```
 
-以下属于共享核心，不能由成员或 AI 擅自改动：根 `pom.xml`、公共 `Request/Response`、`CampusClient`、`CampusServer`、`MainFrame`、模块注册表、会话框架、公共错误码和数据库公共结构。确需修改时，先在 Epic 说明原因并单独建立公共契约 Issue/PR。
+根 POM、公共协议、Socket、主界面、模块注册和会话框架属于共享核心。确需修改时，先在 Issue 说明并联系组长。
 
-## 最短开发流程
+## 4. 保存、同步并提交 Pull Request
 
 ```powershell
-git switch main
-git pull origin main
+git status
+git add <本次相关文件>
+git commit -m "feat(<module>): 完成某项功能"
+
+git fetch origin
+git merge origin/main
 mvn clean verify
-git switch -c feat/<module>-<issue编号>-<功能简述>
+git push -u origin <自己的分支名>
 ```
 
-开发完成后必须同步模块设计、数据字典和自动测试，执行 `mvn clean verify`，再创建关联 Issue 的 Pull Request。禁止直接向 `main` 推送业务代码。完整流程见 [贡献指南](CONTRIBUTING.md)。
+若合并 `origin/main` 时出现冲突，不要删除别人的代码或强制覆盖，把冲突文件和终端输出发给组长。
 
-## 完整文档索引
+第一次执行 `git push -u origin <自己的分支名>` 时，Git 会在 GitHub 自动创建同名的远程分支，不需要在网页上再次创建分支。
 
-除上面的开工必读文档外，项目规划和交付资料按以下顺序维护：
+推送完成后，进入 GitHub 仓库的 **Pull requests** 页面，点击 **New pull request**，选择：
 
-1. [共同阅读与首次行动](docs/00-共同阅读与首次行动.md)
-2. [需求基线](docs/01-需求基线.md)
-3. [六人分工](docs/02-六人分工.md)
-4. [总体架构与接口约定](docs/03-总体架构与接口约定.md)
-5. [四周交付计划](docs/04-四周交付计划.md)
-6. [GitHub 协作规范](docs/05-GitHub协作规范.md)
-7. [验收与提交清单](docs/06-验收与提交清单.md)
-8. [会议与进度记录](docs/07-会议与进度记录.md)
-9. [开发环境统一规范](docs/08-开发环境统一规范.md)
-10. [组长统筹与过程留痕](docs/09-组长统筹与过程留痕.md)
-11. [六个模块 Epic 创建清单](docs/10-模块Epic创建清单.md)
-12. [公共工程骨架与运行](docs/11-公共工程骨架与运行.md)
-13. [成员并行开发开工指南](docs/12-成员并行开发开工指南.md)
-14. [开发期基础登录与会话](docs/13-开发期基础登录与会话.md)
+- `base: main`：准备合入的目标分支；
+- `compare: 自己的分支名`：包含本次改动的来源分支。
 
-项目最新推进情况见 [当前状态](docs/progress/CURRENT_STATUS.md) 和 [项目推进日志](docs/progress/PROJECT_LOG.md)。
+确认方向是 **自己的功能分支 → `main`** 后创建 Pull Request，并填写：
 
-持续草稿：[软件设计说明书](docs/design/SOFTWARE_DESIGN_DRAFT.md) · [测试计划](docs/testing/TEST_PLAN_DRAFT.md) · [最终提交资料登记表](docs/delivery/DOCUMENT_REGISTER.md)
+- 写清实现内容、验证方法、测试结果和暂未完成部分；
+- 使用 `Part of #Epic编号` 关联模块 Epic；
+- 界面功能附截图；
+- 邀请至少 1 名非作者评审；
+- 评审通过后使用 Squash merge；
+- 一个模块全部完成前不要关闭模块 Epic。
 
-决策与阶段记录：[ADR 索引](docs/decisions/README.md) · [第 0 周启动报告](docs/progress/2026-08-24-week-0.md)
+提交信息格式为 `<type>(<scope>): <中文简述>`，常用类型：`feat`、`fix`、`docs`、`test`、`refactor`、`build`、`chore`。
 
-课程原始材料保存在 [`docs/课程原始材料`](docs/课程原始材料)，所有成员必须阅读，规划文档不能替代教师原文。
+## 5. 如何审查别人的 Pull Request
 
-## 当前状态
-
-- 阶段：第一轮六模块并行开发
-- 默认分支：`main`（应始终可编译、可演示）
-- 开发方式：Issue → 功能分支 → Pull Request → 评审 → 合并
-- 当前团队动作：公共开发基线已通过 PR #8 合并；各负责人按 [团队开发通知](docs/团队开发通知.md) 在 3—4 天内完成一条自选、低依赖、可演示的端到端功能
-
-## 公共工程快速验证
-
-在仓库根目录运行：
+先确保自己的修改已经提交和推送，然后把 `<目标分支>` 换成 PR 页面顶部 `from` 后的分支名：
 
 ```powershell
+git fetch origin
+git switch <目标分支>
+git pull --ff-only origin <目标分支>
 mvn clean verify
 ```
 
-构建成功后，在 IDEA 中先运行 `vcampus-server` 的 `ServerMain`，再运行 `vcampus-client` 的 `ClientMain`。客户端窗口点击“测试服务器连接”，显示 `连接成功：PONG` 即说明公共链路正常。完整步骤见 [公共工程骨架与运行](docs/11-公共工程骨架与运行.md)。
+再按第 1 节启动服务端和客户端，检查 PR 描述中的正常、异常和界面流程。在 GitHub 的 `Files changed → Review changes` 中选择：
 
-## 重要约束
+- 没有阻塞问题：`Approve`；
+- 必须修改：`Request changes`，并写清复现步骤。
 
-- 禁止直接向 `main` 推送业务代码。
-- 一人主责一个业务模块，但公共规范由全员共同遵守。
-- 跨模块调用只通过已评审的公共接口/消息契约，不能直接依赖其他模块的界面或 DAO。
-- 每个接口、类和公开方法应有 JavaDoc；单个 Java 文件原则上不超过 200 行。
-- 最终产物名称：`vCampusClient.jar`、`vCampusServer.jar`、`vCampus.accdb`。
-- 团队统一使用 JDK 25 和 Maven 3.9.16；首次开发前运行 `scripts/check-environment.ps1`。
+## 6. Issue 怎么用
+
+- 每个负责人只维护自己模块的 Epic 正文：业务想法、范围、页面、Action、DTO、数据表、权限、依赖和验收清单都写在正文。
+- 评论区只汇报**已经实现并验证**的阶段成果，格式为“已实现 / 验证结果 / PR”。
+- 影响多个模块或共享核心的设计，单独创建 `[公共]` Issue。
+- 表字段、主外键和约束写在 `database/schema/<module>.md`。
+
+模块入口：
+
+| 模块 | Epic | 数据字典 | 包名 |
+|---|---|---|---|
+| 用户管理 | [#1](https://github.com/qlaxyy/JAVA-Campus-software/issues/1) | [user.md](database/schema/user.md) | `user` |
+| 学生学籍 | [#2](https://github.com/qlaxyy/JAVA-Campus-software/issues/2) | [student.md](database/schema/student.md) | `student` |
+| 选课系统 | [#3](https://github.com/qlaxyy/JAVA-Campus-software/issues/3) | [course.md](database/schema/course.md) | `course` |
+| 图书馆 | [#6](https://github.com/qlaxyy/JAVA-Campus-software/issues/6) | [library.md](database/schema/library.md) | `library` |
+| 商店 | [#11](https://github.com/qlaxyy/JAVA-Campus-software/issues/11) | [shop.md](database/schema/shop.md) | `shop` |
+| 医院 | [#4](https://github.com/qlaxyy/JAVA-Campus-software/issues/4) | [hospital.md](database/schema/hospital.md) | `hospital` |
+
+## 7. 全组只需遵守的规则
+
+1. 不直接在 `main` 开发或推送业务代码。
+2. 一项具体功能使用一个分支和一个 PR。
+3. 客户端不直连数据库；业务和权限必须在服务器端校验。
+4. 不提交 `target`、`.idea`、个人数据库、真实密码或密钥。
+5. 不使用 `git reset --hard` 处理不理解的问题。
+6. `mvn clean verify` 失败时不得合并 PR。
+7. 修改公共核心或其他成员模块前先沟通。
+
+## 8. 需要时再看的资料
+
+- [系统设计与接口说明](docs/design/SYSTEM_DESIGN.md)
+- [项目范围与分工](docs/PROJECT_SCOPE.md)
+- [项目当前状态](docs/PROJECT_STATUS.md)
+- [质量与交付清单](docs/QUALITY_AND_DELIVERY.md)
+- [当前架构决定](docs/ARCHITECTURE_DECISIONS.md)
+- [教师原始材料](docs/课程原始材料/)
+
+完整阅读顺序见 [文档入口](docs/README.md)。

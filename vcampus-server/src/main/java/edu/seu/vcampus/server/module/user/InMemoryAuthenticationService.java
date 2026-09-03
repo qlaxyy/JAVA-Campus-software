@@ -1,34 +1,53 @@
 package edu.seu.vcampus.server.module.user;
 
 import edu.seu.vcampus.common.user.LoginRequest;
-import edu.seu.vcampus.common.user.PasswordProof;
-import edu.seu.vcampus.common.user.Role;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.security.SessionLookup;
+import edu.seu.vcampus.server.security.AccountProvisioning;
+import edu.seu.vcampus.server.security.ProvisionedAccount;
+import edu.seu.vcampus.common.user.PasswordProof;
+import edu.seu.vcampus.common.user.Role;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.util.Arrays;
 import java.util.Base64;
-import java.util.Map;
+import java.util.Arrays;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * Temporary in-memory demo authentication used before the Access DAO is integrated.
+ * Authentication service with in-memory sessions and a pluggable account repository.
  */
-public final class InMemoryAuthenticationService implements SessionLookup {
+public final class InMemoryAuthenticationService
+        implements SessionLookup, AccountProvisioning {
 
     private static final int TOKEN_BYTES = 32;
 
     private final SecureRandom secureRandom = new SecureRandom();
-    private final Map<String, DemoUser> users = createDemoUsers();
+    private final UserRepository users;
     private final ConcurrentMap<String, SessionInfo> sessions = new ConcurrentHashMap<>();
 
+    /** Creates authentication backed by the public development accounts. */
+    public InMemoryAuthenticationService() {
+        this(DemoUserAccounts.createRepository());
+    }
+
+    InMemoryAuthenticationService(UserRepository users) {
+        this.users = Objects.requireNonNull(users, "users must not be null");
+    }
+
+    UserRepository users() {
+        return users;
+    }
+
     /**
-     * Authenticates a demo account and creates a random session.
+     * Authenticates an enabled account and creates a random session.
      *
      * @param request validated login request
      * @return new session when credentials match
@@ -40,29 +59,37 @@ public final class InMemoryAuthenticationService implements SessionLookup {
                 || !request.getPasswordProof().matches("[0-9a-f]{64}")) {
             return Optional.empty();
         }
-        DemoUser user = users.get(request.getUsername());
-        if (user == null || !proofMatches(user.passwordProof(), request.getPasswordProof())) {
+        UserAccount user = users.findByUsername(request.getUsername()).orElse(null);
+        if (user == null
+                || !user.enabled()
+                || !proofMatches(user.passwordProof(), request.getPasswordProof())) {
             return Optional.empty();
         }
 
         SessionInfo session = new SessionInfo(
                 createToken(),
                 user.userId(),
-                request.getUsername(),
+                user.username(),
                 user.displayName(),
-                user.role());
+                user.role(),
+                user.adminScopes());
         sessions.put(session.getToken(), session);
         return Optional.of(session);
     }
 
     /**
-     * Invalidates a session token.
+     * Invalidates one session token.
      *
      * @param token token to remove
-     * @return {@code true} when an active session was removed
+     * @return whether an active session was removed
      */
     public boolean logout(String token) {
         return token != null && sessions.remove(token) != null;
+    }
+
+    /** Invalidates every active session belonging to an account. */
+    void invalidateUserSessions(String userId) {
+        sessions.entrySet().removeIf(entry -> entry.getValue().getUserId().equals(userId));
     }
 
     @Override
@@ -71,6 +98,75 @@ public final class InMemoryAuthenticationService implements SessionLookup {
             return Optional.empty();
         }
         return Optional.ofNullable(sessions.get(token));
+    }
+
+    @Override
+    public synchronized Optional<ProvisionedAccount> findAccountByUsername(String username) {
+        if (username == null) {
+            return Optional.empty();
+        }
+        String normalized = username.trim().toLowerCase(Locale.ROOT);
+        if (!normalized.matches("[a-z0-9_]{3,32}")) {
+            return Optional.empty();
+        }
+        return users.findByUsername(normalized).map(InMemoryAuthenticationService::toProvisioned);
+    }
+
+    @Override
+    public synchronized ProvisionedAccount createGeneratedRegularAccount(
+            String usernamePrefix,
+            String displayName) {
+        String normalizedPrefix = usernamePrefix == null
+                ? "" : usernamePrefix.trim().toLowerCase(Locale.ROOT);
+        if (!normalizedPrefix.matches("[a-z]{3,12}")) {
+            throw new IllegalArgumentException("usernamePrefix format is invalid");
+        }
+        char[] password = "123456".toCharArray();
+        try {
+            for (int attempt = 0; attempt < 20; attempt++) {
+                String username = normalizedPrefix
+                        + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+                CreateAccountInput input = new CreateAccountInput(
+                        username,
+                        displayName,
+                        PasswordProof.create(username, password));
+                if (users.findByUsername(input.username()).isPresent()) {
+                    continue;
+                }
+                UserAccount created = new UserAccount(
+                        "U-" + UUID.randomUUID().toString().replace("-", ""),
+                        input.username(),
+                        input.displayName(),
+                        Role.USER,
+                        Set.of(),
+                        input.passwordProof(),
+                        true);
+                users.save(created);
+                return toProvisioned(created);
+            }
+            throw new IllegalStateException("Cannot generate a unique login account.");
+        } finally {
+            Arrays.fill(password, '\0');
+        }
+    }
+
+    private static ProvisionedAccount toProvisioned(UserAccount account) {
+        return new ProvisionedAccount(
+                account.userId(), account.username(), account.displayName(), account.enabled());
+    }
+
+    private record CreateAccountInput(
+            String username,
+            String displayName,
+            String passwordProof) {
+        private CreateAccountInput {
+            edu.seu.vcampus.common.user.CreateUserAccountRequest validated =
+                    new edu.seu.vcampus.common.user.CreateUserAccountRequest(
+                            username, displayName, passwordProof, Set.of());
+            username = validated.getUsername();
+            displayName = validated.getDisplayName();
+            passwordProof = validated.getPasswordProof();
+        }
     }
 
     private String createToken() {
@@ -83,37 +179,5 @@ public final class InMemoryAuthenticationService implements SessionLookup {
         return MessageDigest.isEqual(
                 expected.getBytes(StandardCharsets.US_ASCII),
                 actual.getBytes(StandardCharsets.US_ASCII));
-    }
-
-    private static Map<String, DemoUser> createDemoUsers() {
-        return Map.of(
-                "student001", demoUser("U-STUDENT-001", "演示学生", Role.STUDENT, "Student@123"),
-                "teacher001", demoUser("U-TEACHER-001", "演示教师", Role.TEACHER, "Teacher@123"),
-                "admin", demoUser("U-ADMIN-001", "演示管理员", Role.ADMIN, "Admin@123"));
-    }
-
-    private static DemoUser demoUser(
-            String userId,
-            String displayName,
-            Role role,
-            String passwordText) {
-        char[] password = passwordText.toCharArray();
-        try {
-            String username = switch (role) {
-                case STUDENT -> "student001";
-                case TEACHER -> "teacher001";
-                case ADMIN -> "admin";
-            };
-            return new DemoUser(
-                    userId,
-                    displayName,
-                    role,
-                    PasswordProof.create(username, password));
-        } finally {
-            Arrays.fill(password, '\0');
-        }
-    }
-
-    private record DemoUser(String userId, String displayName, Role role, String passwordProof) {
     }
 }

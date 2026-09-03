@@ -22,4 +22,5 @@ public interface ClientModule {
      * @return module root component
      */
     JComponent createView(ClientContext context);
+
 }

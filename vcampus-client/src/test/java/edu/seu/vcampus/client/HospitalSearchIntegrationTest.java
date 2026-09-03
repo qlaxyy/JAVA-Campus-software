@@ -28,7 +28,7 @@ class HospitalSearchIntegrationTest {
                     new CampusClient("127.0.0.1", server.getPort()));
 
             assertTrue(context.login(
-                    "teacher001", "Teacher@123".toCharArray()).isSuccess());
+                    "teacher001", "123456".toCharArray()).isSuccess());
             Response doctorResponse = context.send(HospitalActions.GET_MODE_ACCESS, null);
             HospitalModeAccessView doctorAccess = assertInstanceOf(
                     HospitalModeAccessView.class, doctorResponse.getData());
@@ -37,7 +37,7 @@ class HospitalSearchIntegrationTest {
             assertFalse(doctorAccess.canAccess(HospitalMode.ADMIN));
 
             assertTrue(context.logout().isSuccess());
-            assertTrue(context.login("admin", "Admin@123".toCharArray()).isSuccess());
+            assertTrue(context.login("hospitaladmin", "123456".toCharArray()).isSuccess());
             Response adminResponse = context.send(HospitalActions.GET_MODE_ACCESS, null);
             HospitalModeAccessView adminAccess = assertInstanceOf(
                     HospitalModeAccessView.class, adminResponse.getData());
@@ -58,7 +58,7 @@ class HospitalSearchIntegrationTest {
             assertFalse(beforeLogin.isSuccess());
             assertEquals(ErrorCodes.AUTH_REQUIRED, beforeLogin.getCode());
 
-            assertTrue(context.login("student001", "Student@123".toCharArray()).isSuccess());
+            assertTrue(context.login("student001", "123456".toCharArray()).isSuccess());
 
             Response departmentsResponse = context.send(
                     HospitalActions.LIST_DEPARTMENTS, null);

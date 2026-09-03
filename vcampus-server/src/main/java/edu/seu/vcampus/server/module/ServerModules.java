@@ -10,7 +10,9 @@ import edu.seu.vcampus.server.module.shop.ShopServerModule;
 import edu.seu.vcampus.server.module.student.StudentServerModule;
 import edu.seu.vcampus.server.module.user.UserServerModule;
 import edu.seu.vcampus.server.module.user.InMemoryAuthenticationService;
+import edu.seu.vcampus.server.module.user.UserAuthenticationBootstrap;
 
+import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -27,12 +29,27 @@ public final class ServerModules {
      * @return fully initialized router
      */
     public static ActionRouter createRouter() {
+        return createRouter(
+                new InMemoryAuthenticationService(),
+                new HospitalServerModule());
+    }
+
+    /** Builds the production router with accounts persisted in Access. */
+    public static ActionRouter createPersistentRouter(Path databasePath) {
+        return createRouter(
+                UserAuthenticationBootstrap.createAccessBacked(databasePath),
+                HospitalServerModule.createAccessBacked(databasePath));
+    }
+
+    private static ActionRouter createRouter(
+            InMemoryAuthenticationService authentication,
+            HospitalServerModule hospitalModule) {
         ActionRouter router = new ActionRouter();
-        InMemoryAuthenticationService authentication = new InMemoryAuthenticationService();
-        ServerContext context = new ServerContext(authentication);
+        ServerContext context = new ServerContext(authentication, authentication);
         router.register(Actions.PING, request ->
                 Response.success(request, "Server is reachable.", "PONG"));
-        modules(authentication).forEach(module -> module.registerHandlers(router, context));
+        modules(authentication, hospitalModule)
+                .forEach(module -> module.registerHandlers(router, context));
         return router;
     }
 
@@ -42,16 +59,18 @@ public final class ServerModules {
      * @return immutable six-module list
      */
     public static List<ServerModule> modules() {
-        return modules(new InMemoryAuthenticationService());
+        return modules(new InMemoryAuthenticationService(), new HospitalServerModule());
     }
 
-    private static List<ServerModule> modules(InMemoryAuthenticationService authentication) {
+    private static List<ServerModule> modules(
+            InMemoryAuthenticationService authentication,
+            HospitalServerModule hospitalModule) {
         return List.of(
                 new UserServerModule(authentication),
                 new StudentServerModule(),
                 new CourseServerModule(),
                 new LibraryServerModule(),
                 new ShopServerModule(),
-                new HospitalServerModule());
+                hospitalModule);
     }
 }

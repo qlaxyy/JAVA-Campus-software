@@ -26,6 +26,7 @@
     <maven.compiler.target>25</maven.compiler.target>
     <junit.jupiter.version>5.13.1</junit.jupiter.version>
     <maven.surefire.version>3.5.5</maven.surefire.version>
+    <ucanaccess.version>5.1.7</ucanaccess.version>
   </properties>
 
   <dependencyManagement>
@@ -35,6 +36,11 @@
         <artifactId>junit-jupiter</artifactId>
         <version>${junit.jupiter.version}</version>
         <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.github.spannm</groupId>
+        <artifactId>ucanaccess</artifactId>
+        <version>${ucanaccess.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

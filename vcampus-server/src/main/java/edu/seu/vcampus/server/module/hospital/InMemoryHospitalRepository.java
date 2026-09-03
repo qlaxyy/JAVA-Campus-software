@@ -6,12 +6,16 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Deterministic fake hospital data used before the Access repository is available. */
 final class InMemoryHospitalRepository implements HospitalRepository {
 
-    private final Set<String> activeDoctorUserIds = Set.of("U-TEACHER-001");
+    private final Map<String, DoctorProfile> doctorProfiles = new ConcurrentHashMap<>();
+    private final Map<String, DoctorApplication> doctorApplications =
+            new ConcurrentHashMap<>();
     private final List<HospitalDepartment> departments;
     private final List<HospitalSlot> slots;
 
@@ -23,6 +27,9 @@ final class InMemoryHospitalRepository implements HospitalRepository {
                 new HospitalDepartment("dept-psychology", "心理咨询", true),
                 new HospitalDepartment("dept-dental", "口腔科", true),
                 new HospitalDepartment("dept-eye", "眼科", true));
+        doctorProfiles.put("U-TEACHER-001",
+                new DoctorProfile(
+                        "U-TEACHER-001", "dept-general", "演示医生", true));
         slots = List.of(
                 slot("slot-general-1", "dept-general", "全科门诊",
                         "doctor-chen", "陈医生", "主治医师",
@@ -55,7 +62,28 @@ final class InMemoryHospitalRepository implements HospitalRepository {
 
     @Override
     public boolean isActiveDoctorUser(String userId) {
-        return userId != null && activeDoctorUserIds.contains(userId);
+        DoctorProfile profile = userId == null ? null : doctorProfiles.get(userId);
+        return profile != null && profile.active();
+    }
+
+    @Override
+    public List<DoctorApplication> findDoctorApplications() {
+        return List.copyOf(doctorApplications.values());
+    }
+
+    @Override
+    public Optional<DoctorApplication> findDoctorApplication(String requestId) {
+        return Optional.ofNullable(doctorApplications.get(requestId));
+    }
+
+    @Override
+    public void saveDoctorApplication(DoctorApplication application) {
+        doctorApplications.put(application.requestId(), application);
+    }
+
+    @Override
+    public void saveDoctorProfile(DoctorProfile profile) {
+        doctorProfiles.put(profile.userId(), profile);
     }
 
     @Override

@@ -7,12 +7,14 @@ import edu.seu.vcampus.common.hospital.SearchSlotsRequest;
 import edu.seu.vcampus.common.hospital.SlotAvailability;
 import edu.seu.vcampus.common.hospital.SlotListResponse;
 import edu.seu.vcampus.common.user.Role;
+import edu.seu.vcampus.common.user.AdminScope;
 import edu.seu.vcampus.common.user.SessionInfo;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -29,13 +31,13 @@ class HospitalServiceTest {
             new InMemoryHospitalRepository(FIXED_CLOCK), FIXED_CLOCK);
 
     @Test
-    void calculatesModesFromDoctorBindingAndAdministratorRole() {
+    void calculatesModesFromDoctorListAndHospitalAdminScope() {
         HospitalModeAccessView student = service.getModeAccess(
-                session("U-STUDENT-001", Role.STUDENT));
+                session("U-STUDENT-001", Role.USER));
         HospitalModeAccessView doctor = service.getModeAccess(
-                session("U-TEACHER-001", Role.TEACHER));
+                session("U-TEACHER-001", Role.USER));
         HospitalModeAccessView administrator = service.getModeAccess(
-                session("U-ADMIN-001", Role.ADMIN));
+                session("U-HOSPITAL-ADMIN-001", Role.USER, Set.of(AdminScope.HOSPITAL)));
 
         assertTrue(student.canAccess(HospitalMode.PATIENT));
         assertFalse(student.canAccess(HospitalMode.DOCTOR));
@@ -103,5 +105,9 @@ class HospitalServiceTest {
 
     private static SessionInfo session(String userId, Role role) {
         return new SessionInfo("token-" + userId, userId, "demo", "演示用户", role);
+    }
+    private static SessionInfo session(String userId, Role role, Set<AdminScope> scopes) {
+        return new SessionInfo(
+                "token-" + userId, userId, "demo", "演示用户", role, scopes);
     }
 }

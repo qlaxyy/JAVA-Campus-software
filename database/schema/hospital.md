@@ -2,13 +2,13 @@
 
 > 对应 Epic：[#4 医院模块：医生排班与预约](https://github.com/qlaxyy/JAVA-Campus-software/issues/4)
 >
-> 状态：第一版设计草案，待数据库集成人评审
+> 状态：医生申请和医生档案已接入 Access；科室、排班和预约仍按后续目标设计
 >
 > 设计日期：2026-08-26
 
 ## 1. 文档用途和边界
 
-本文档定义医院模块拥有的数据表、字段、关系、状态、索引、约束和虚构演示数据。第一版只设计 Epic #4 核心需要的四张表：科室、医生、排班/号源和预约。
+本文档定义医院模块拥有的数据表、字段、关系、状态、索引、约束和虚构演示数据。医生申请与医生档案已经实现；科室、排班/号源和预约仍逐步从内存数据迁移。
 
 当前只提交文本数据字典，不创建或提交个人电脑上的二进制 `.accdb` 文件。最终 `vCampus.accdb` 由数据库集成人根据评审后的数据字典统一生成。
 
@@ -37,11 +37,11 @@ tblHospitalDepartment
 
 ### 2.2 主键
 
-主键是每一行独一无二的标识。例如两个医生可能同名，但 `doctorId` 必须不同：
+主键是每一行独一无二的标识。医生档案直接使用全局 `userId` 作为主键，因此即使姓名相同也不会混淆：
 
 ```text
-DOC-001  张医生
-DOC-002  张医生
+U-DOCTOR-001  张医生
+U-DOCTOR-002  张医生
 ```
 
 程序使用 ID 找记录，不依赖可能重复或变化的显示名称。
@@ -70,7 +70,8 @@ tblHospitalDepartment.departmentId
 | 表名 | 业务含义 | 主键 | 重要约束 |
 |---|---|---|---|
 | `tblHospitalDepartment` | 校医院科室 | `departmentId` | 科室代码唯一；使用状态停用 |
-| `tblHospitalDoctor` | 医生资料和可选用户绑定 | `doctorId` | 医生代码唯一；所属科室必须存在 |
+| `tblHospitalDoctor` | 已审核医生的专业档案和账号绑定 | `doctorUserId` | 直接引用唯一的全局账号 |
+| `tblHospitalDoctorApplication` | 医院管理员提交、超级管理员审核的新增医生申请 | `requestId` | 已有账号不得重复绑定有效医生档案 |
 | `tblHospitalSchedule` | 某医生在某科室的一段排班及其容量 | `scheduleId` | 时间合法；容量不低于已预约数；同一医生排班不能重叠 |
 | `tblHospitalAppointment` | 患者对某条排班的预约 | `appointmentId` | 患者和排班必须存在；状态合法；重复预约由服务器事务拒绝 |
 
@@ -119,30 +120,41 @@ tblHospitalDepartment
 - 已被医生或排班引用的科室不物理删除；停用时改为 `INACTIVE`。
 - 停用科室不能创建新排班；已有历史记录保留。
 
-### 4.2 `tblHospitalDoctor`：医生
+### 4.2 `tblHospitalDoctor`：已审核医生档案（已实现）
 
 | 字段 | Access 类型 | 必填 | 默认值 | 说明 |
 |---|---|---:|---|---|
-| `doctorId` | Short Text(36) | 是 | 无 | 主键；稳定医生 ID |
-| `doctorCode` | Short Text(20) | 是 | 无 | 医院内部医生代码；唯一 |
-| `userId` | Short Text(64) | 否 | `null` | 逻辑外键，引用公共用户；用于医生登录绑定 |
+| `doctorUserId` | Short Text(36) | 是 | 无 | 主键和逻辑外键；引用公共用户 `userId` |
 | `departmentId` | Short Text(36) | 是 | 无 | 外键，引用 `tblHospitalDepartment.departmentId` |
-| `doctorName` | Short Text(50) | 是 | 无 | 页面显示姓名；允许不同医生同名 |
-| `doctorTitle` | Short Text(50) | 否 | 空字符串 | 页面显示职称，例如“主治医师” |
-| `introduction` | Long Text | 否 | `null` | 简短介绍；不得包含真实敏感信息 |
-| `status` | Short Text(20) | 是 | `ACTIVE` | `ACTIVE` 或 `INACTIVE` |
-| `createdAt` | Date/Time | 是 | 新建时间 | 创建时间 |
-| `updatedAt` | Date/Time | 是 | 新建时间 | 最近更新时间 |
+| `doctorTitle` | Short Text(50) | 是 | 无 | 页面显示职称，例如“主治医师” |
+| `active` | Yes/No | 是 | `Yes` | 是否具有医生业务资格 |
 
 业务规则：
 
-- `userId` 可以暂时为空，表示医生尚未绑定登录账号。
-- 非空 `userId` 在医院医生表中只能绑定一个医生；具体 Access 唯一空值行为待数据库实验确认，服务器始终再次校验。
-- 不能凭全局账号角色认定是医生；医生模式必须按当前 `userId` 找到状态为 `ACTIVE` 的医院医生记录。
+- 医生档案只在超级管理员批准申请后创建，因此 `doctorUserId` 不允许为空。
+- 全局 `Role` 不包含医生；医生模式必须按当前 `userId` 找到 `active = Yes` 的医生档案。
+- 姓名和登录名由用户模块保存，医院表不重复保存。
 - 停用医生不能创建新排班，但历史排班和预约保留。
-- 医生姓名不是主键，也不要求唯一。
 
-### 4.3 `tblHospitalSchedule`：排班和号源
+### 4.3 `tblHospitalDoctorApplication`：新增医生申请（已实现）
+
+| 字段 | Access 类型 | 必填 | 说明 |
+|---|---|---:|---|
+| `requestId` | Short Text(40) | 是 | 主键，`DAR-` 加 UUID |
+| `applicationType` | Short Text(20) | 是 | `EXISTING_ACCOUNT` 或 `EXTERNAL_DOCTOR` |
+| `username` | Short Text(50) | 是 | 已有账号的登录名；外来医生待批准时保存内部占位值，批准后写入生成的账号名 |
+| `displayName` | Short Text(100) | 是 | 已有账号使用账户原名称；外来医生使用申请姓名 |
+| `departmentId` | Short Text(36) | 是 | 申请进入的科室 |
+| `doctorTitle` | Short Text(50) | 是 | 医生职称 |
+| `requestedByUserId` | Short Text(36) | 是 | 提交申请的医院管理员 |
+| `applicationStatus` | Short Text(20) | 是 | `PENDING`、`APPROVED` 或 `REJECTED` |
+| `targetUserId` | Short Text(36) | 否 | 已有账号提交时即锁定；外来医生批准后写入新账号 ID |
+| `reviewedByUserId` | Short Text(36) | 否 | 审核该申请的超级管理员 |
+| `createdAt` | Date/Time | 是 | 提交时间 |
+
+规则：医院管理员只能提交申请，不能直接写入有效医生档案。关联已有账号时必须明确选择该类型，服务器校验账号存在、启用且尚未绑定医生档案，并在申请中锁定 `userId`。新建外来医生时不接收账号名，超级管理员批准后由用户模块生成唯一账号。医院模块随后用确定的 `userId` 保存医生档案。拒绝不创建账号；已审核申请不能重复处理；禁止因为账号名碰巧重复而自动复用账户。
+
+### 4.4 `tblHospitalSchedule`：排班和号源
 
 第一版把“一名医生在一段时间内可接诊若干人”保存为一行，而不是为每个名额建立一行。例如容量为5表示这一段排班最多接受5条非取消预约。
 
@@ -150,7 +162,7 @@ tblHospitalDepartment
 |---|---|---:|---|---|
 | `scheduleId` | Short Text(36) | 是 | 无 | 主键；对应 `SlotView.scheduleId` |
 | `departmentId` | Short Text(36) | 是 | 无 | 外键，引用排班发生的科室 |
-| `doctorId` | Short Text(36) | 是 | 无 | 外键，引用 `tblHospitalDoctor.doctorId` |
+| `doctorId` | Short Text(36) | 是 | 无 | 后续统一为医生档案的 `doctorUserId`；当前号源演示数据仍使用独立代码 |
 | `startTime` | Date/Time | 是 | 无 | 开始时间 |
 | `endTime` | Date/Time | 是 | 无 | 结束时间，必须晚于开始时间 |
 | `capacity` | Long Integer | 是 | 无 | 总容量，必须大于0 |
@@ -181,7 +193,7 @@ tblHospitalDepartment
 - `bookedCount` 统计 `BOOKED` 和 `COMPLETED` 预约；取消 `BOOKED` 预约时减1，完成预约时不改变。
 - 创建预约时，“检查剩余量、写预约、bookedCount加1”必须在同一个服务器临界区或数据库事务中完成。
 
-### 4.4 `tblHospitalAppointment`：预约
+### 4.5 `tblHospitalAppointment`：预约
 
 | 字段 | Access 类型 | 必填 | 默认值 | 说明 |
 |---|---|---:|---|---|
@@ -220,9 +232,9 @@ BOOKED ─────→ COMPLETED
 |---|---|---|
 | `tblHospitalDoctor.departmentId` | `tblHospitalDepartment.departmentId` | 禁止级联删除；使用科室状态停用 |
 | `tblHospitalSchedule.departmentId` | `tblHospitalDepartment.departmentId` | 禁止级联删除；历史排班保留 |
-| `tblHospitalSchedule.doctorId` | `tblHospitalDoctor.doctorId` | 禁止级联删除；使用医生状态停用 |
+| `tblHospitalSchedule.doctorId` | `tblHospitalDoctor.doctorUserId` | 禁止级联删除；使用医生档案状态停用 |
 | `tblHospitalAppointment.scheduleId` | `tblHospitalSchedule.scheduleId` | 禁止级联删除；预约历史保留 |
-| `tblHospitalDoctor.userId` | 公共用户 `userId` | 逻辑引用；医院模块不得更新用户表 |
+| `tblHospitalDoctor.doctorUserId` | 公共用户 `userId` | 逻辑引用；只通过已审核账号开通流程获得 |
 | `tblHospitalAppointment.patientUserId` | 公共用户 `userId` | 逻辑引用；医院模块不得更新用户表 |
 
 ### 5.2 建议索引
@@ -232,9 +244,9 @@ BOOKED ─────→ COMPLETED
 | `tblHospitalDepartment` | `departmentCode` | 唯一 | 防止科室代码重复 |
 | `tblHospitalDepartment` | `departmentName` | 唯一 | 第一版防止显示名称重复 |
 | `tblHospitalDepartment` | `status` | 普通 | 查询有效科室 |
-| `tblHospitalDoctor` | `doctorCode` | 唯一 | 防止医生代码重复 |
-| `tblHospitalDoctor` | `userId` | 条件唯一/服务器校验 | 防止一个用户绑定多个医生身份 |
-| `tblHospitalDoctor` | `(departmentId, status)` | 组合普通 | 按科室查询有效医生 |
+| `tblHospitalDoctor` | `doctorUserId` | 主键 | 一个账号最多绑定一份医生档案 |
+| `tblHospitalDoctor` | `(departmentId, active)` | 组合普通 | 按科室查询有效医生 |
+| `tblHospitalDoctorApplication` | `applicationStatus` | 普通 | 超级管理员查询待审核申请 |
 | `tblHospitalSchedule` | `(doctorId, startTime)` | 组合唯一 | 防止同一医生同一开始时间重复排班 |
 | `tblHospitalSchedule` | `(departmentId, startTime, status)` | 组合普通 | 按科室和日期查询号源 |
 | `tblHospitalAppointment` | `(patientUserId, status)` | 组合普通 | 查询“我的预约” |
@@ -242,13 +254,13 @@ BOOKED ─────→ COMPLETED
 
 物理删除只允许用于尚未被引用且确认是误建的草稿数据；已产生排班、预约或历史关系的数据一律通过状态停用/关闭/取消。
 
-## 6. 查询号源怎样由四张表得到
+## 6. 查询号源怎样组合业务数据
 
 第一条 `HOSPITAL.SEARCH_SLOTS` 查询主要组合三张表：
 
 ```text
 tblHospitalSchedule
-    │ doctorId
+    │ doctorUserId
     ├────────→ tblHospitalDoctor
     │
     │ departmentId
@@ -261,7 +273,7 @@ tblHospitalSchedule
 |---|---|
 | `scheduleId` | `tblHospitalSchedule.scheduleId` |
 | `departmentId/name` | Schedule 的 departmentId + Department 的 departmentName |
-| `doctorId/name/title` | Schedule 的 doctorId + Doctor 的 name/title |
+| `doctorId/name/title` | Schedule 的 doctorUserId + 用户 displayName + Doctor 的 doctorTitle |
 | `startTime/endTime` | `tblHospitalSchedule` |
 | `capacity` | `tblHospitalSchedule.capacity` |
 | `remaining` | `capacity - bookedCount`，由服务器计算 |

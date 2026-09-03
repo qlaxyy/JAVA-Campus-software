@@ -11,6 +11,12 @@ import edu.seu.vcampus.common.user.UpdateUserAccountRequest;
 import edu.seu.vcampus.common.user.UserAccountListResponse;
 import edu.seu.vcampus.common.user.UserActions;
 import edu.seu.vcampus.common.user.UserAccountView;
+import edu.seu.vcampus.common.hospital.DoctorApplicationListResponse;
+import edu.seu.vcampus.common.hospital.DoctorApplicationStatus;
+import edu.seu.vcampus.common.hospital.DoctorApplicationType;
+import edu.seu.vcampus.common.hospital.DoctorApplicationView;
+import edu.seu.vcampus.common.hospital.HospitalActions;
+import edu.seu.vcampus.common.hospital.ReviewDoctorApplicationRequest;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -46,6 +52,7 @@ public final class UserAdminPanel extends JPanel {
     private final JButton statusButton = new JButton("启用/禁用");
     private final JButton resetButton = new JButton("重置密码");
     private final JButton refreshButton = new JButton("刷新");
+    private final JButton doctorReviewButton = new JButton("医生申请审核");
     private boolean loaded;
 
     public UserAdminPanel(ClientContext context) {
@@ -63,6 +70,7 @@ public final class UserAdminPanel extends JPanel {
         actions.add(editButton);
         actions.add(statusButton);
         actions.add(resetButton);
+        actions.add(doctorReviewButton);
         actions.add(refreshButton);
 
         add(actions, BorderLayout.NORTH);
@@ -75,6 +83,7 @@ public final class UserAdminPanel extends JPanel {
         editButton.addActionListener(event -> editAccount());
         statusButton.addActionListener(event -> changeStatus());
         resetButton.addActionListener(event -> resetPassword());
+        doctorReviewButton.addActionListener(event -> loadDoctorApplications());
         refreshButton.addActionListener(event -> refreshAccounts());
         updateButtons();
 
@@ -224,6 +233,106 @@ public final class UserAdminPanel extends JPanel {
         }
     }
 
+    private void loadDoctorApplications() {
+        runRequest(
+                "正在加载医生申请……",
+                () -> context.send(HospitalActions.LIST_DOCTOR_APPLICATIONS, null),
+                response -> {
+                    if (response.isSuccess()
+                            && response.getData() instanceof DoctorApplicationListResponse data) {
+                        chooseDoctorApplication(data);
+                    } else {
+                        showFailure(response);
+                    }
+                });
+    }
+
+    private void chooseDoctorApplication(DoctorApplicationListResponse response) {
+        List<DoctorApplicationView> pending = response.getApplications().stream()
+                .filter(application -> application.getStatus()
+                        == DoctorApplicationStatus.PENDING)
+                .toList();
+        if (pending.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "当前没有待审核的医生申请。");
+            statusLabel.setText("没有待审核的医生申请");
+            return;
+        }
+        String[] choices = pending.stream()
+                .map(application -> application.getDisplayName()
+                        + "（" + applicationTypeText(application) + "） · "
+                        + application.getDepartmentName() + " · "
+                        + application.getDoctorTitle() + " · "
+                        + application.getRequestId())
+                .toArray(String[]::new);
+        String selected = (String) JOptionPane.showInputDialog(
+                this,
+                "选择一条申请查看并审核：",
+                "医生申请审核",
+                JOptionPane.PLAIN_MESSAGE,
+                null,
+                choices,
+                choices[0]);
+        if (selected == null) {
+            return;
+        }
+        int index = java.util.Arrays.asList(choices).indexOf(selected);
+        DoctorApplicationView application = pending.get(index);
+        Object[] options = {"批准", "拒绝", "取消"};
+        String accountDescription = application.getApplicationType()
+                == DoctorApplicationType.EXISTING_ACCOUNT
+                ? "关联已有账号：" + application.getUsername()
+                : "外来医生：批准后由系统生成唯一登录账号";
+        int decision = JOptionPane.showOptionDialog(
+                this,
+                "类型：" + applicationTypeText(application)
+                        + "\n" + accountDescription
+                        + "\n姓名：" + application.getDisplayName()
+                        + "\n科室：" + application.getDepartmentName()
+                        + "\n职称：" + application.getDoctorTitle()
+                        + "\n\n批准后将绑定医生档案；新账号初始密码为 123456。",
+                "确认审核",
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                options[0]);
+        if (decision == 0 || decision == 1) {
+            reviewDoctorApplication(application.getRequestId(), decision == 0);
+        }
+    }
+
+    private void reviewDoctorApplication(String requestId, boolean approved) {
+        runRequest(
+                approved ? "正在批准医生申请……" : "正在拒绝医生申请……",
+                () -> context.send(
+                        HospitalActions.REVIEW_DOCTOR_APPLICATION,
+                        new ReviewDoctorApplicationRequest(requestId, approved)),
+                response -> {
+                    statusLabel.setText(response.getMessage());
+                    if (response.isSuccess()) {
+                        String message = response.getMessage();
+                        if (approved
+                                && response.getData() instanceof DoctorApplicationView reviewed) {
+                            message += "\n登录账号：" + reviewed.getUsername();
+                            if (reviewed.getApplicationType()
+                                    == DoctorApplicationType.EXTERNAL_DOCTOR) {
+                                message += "\n初始密码：123456";
+                            }
+                        }
+                        JOptionPane.showMessageDialog(this, message);
+                        refreshAccounts();
+                    } else {
+                        showFailure(response);
+                    }
+                });
+    }
+
+    private static String applicationTypeText(DoctorApplicationView application) {
+        return application.getApplicationType() == DoctorApplicationType.EXISTING_ACCOUNT
+                ? "关联已有账号 " + application.getUsername()
+                : "新建外来医生账号";
+    }
+
     private void runMutation(String action, java.io.Serializable data, String progress) {
         runRequest(progress, () -> context.send(action, data), response -> {
             if (response.isSuccess()) {
@@ -268,6 +377,7 @@ public final class UserAdminPanel extends JPanel {
         editButton.setEnabled(enabled);
         statusButton.setEnabled(enabled);
         resetButton.setEnabled(enabled);
+        doctorReviewButton.setEnabled(enabled);
     }
 
     private void showFailure(Response response) {

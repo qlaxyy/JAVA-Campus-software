@@ -22,6 +22,10 @@ public final class ErrorCodes {
     public static final String LIBRARY_ALREADY_BORROWED = "LIBRARY_ALREADY_BORROWED";
     public static final String LIBRARY_OVERDUE_BORROW_EXISTS =
             "LIBRARY_OVERDUE_BORROW_EXISTS";
+    public static final String HOSPITAL_DOCTOR_APPLICATION_NOT_FOUND =
+            "HOSPITAL_DOCTOR_APPLICATION_NOT_FOUND";
+    public static final String HOSPITAL_DOCTOR_APPLICATION_CONFLICT =
+            "HOSPITAL_DOCTOR_APPLICATION_CONFLICT";
 
     private ErrorCodes() {
     }

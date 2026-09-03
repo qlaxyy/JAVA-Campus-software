@@ -30,6 +30,18 @@ final class AccessUserRepository implements UserRepository {
     AccessUserRepository(AccessDatabase database) {
         this.database = database;
         initializeSchema();
+        normalizeLegacyProfessionalRoles();
+    }
+
+    /** Restores data written by the abandoned global TEACHER/DOCTOR role experiment. */
+    private void normalizeLegacyProfessionalRoles() {
+        try (Connection connection = database.openConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("UPDATE tblUser SET roleCode = 'USER' "
+                    + "WHERE roleCode = 'TEACHER' OR roleCode = 'DOCTOR'");
+        } catch (SQLException exception) {
+            throw failure("Cannot normalize legacy professional roles.", exception);
+        }
     }
 
     @Override

@@ -44,7 +44,7 @@ final class UserAdministrationService {
             throw failure(ErrorCodes.USER_USERNAME_EXISTS, "该账户名已经存在。");
         }
         UserAccount account = new UserAccount(
-                "U-" + UUID.randomUUID(),
+                newUserId(),
                 request.getUsername(), request.getDisplayName(), Role.USER,
                 request.getAdminScopes(), request.getPasswordProof(), true);
         repository.save(account);
@@ -75,7 +75,7 @@ final class UserAdministrationService {
 
         List<UserAccount> accounts = rows.stream()
                 .map(row -> new UserAccount(
-                        "U-" + UUID.randomUUID(),
+                        newUserId(),
                         row.getUsername(),
                         row.getDisplayName(),
                         Role.USER,
@@ -144,5 +144,9 @@ final class UserAdministrationService {
 
     private static UserAdministrationException failure(String code, String message) {
         return new UserAdministrationException(code, message);
+    }
+
+    private static String newUserId() {
+        return "U-" + UUID.randomUUID().toString().replace("-", "");
     }
 }

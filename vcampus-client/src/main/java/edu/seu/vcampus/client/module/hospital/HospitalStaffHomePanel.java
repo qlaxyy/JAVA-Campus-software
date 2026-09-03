@@ -52,7 +52,7 @@ final class HospitalStaffHomePanel extends JPanel {
     }
 
     private JPanel createFeatureGrid(List<WorkspaceFeature> features) {
-        JPanel grid = new JPanel(new GridLayout(2, 2, 16, 16));
+        JPanel grid = new JPanel(new GridLayout(0, 2, 16, 16));
         grid.setOpaque(false);
         features.forEach(feature -> grid.add(featureCard(feature)));
         return grid;
@@ -68,14 +68,25 @@ final class HospitalStaffHomePanel extends JPanel {
         JLabel detail = new JLabel("<html><body style='width:220px'>"
                 + feature.description() + "</body></html>");
         detail.setForeground(HospitalTheme.MUTED);
-        JButton state = new JButton("后续实现");
-        state.setEnabled(false);
+        boolean available = feature.action() != null;
+        JButton state = new JButton(available ? feature.actionText() : "后续实现");
+        state.setEnabled(available);
+        if (available) {
+            state.addActionListener(event -> feature.action().run());
+        }
         card.add(title, BorderLayout.NORTH);
         card.add(detail, BorderLayout.CENTER);
         card.add(state, BorderLayout.SOUTH);
         return card;
     }
 
-    record WorkspaceFeature(String title, String description) {
+    record WorkspaceFeature(
+            String title,
+            String description,
+            String actionText,
+            Runnable action) {
+        WorkspaceFeature(String title, String description) {
+            this(title, description, "后续实现", null);
+        }
     }
 }

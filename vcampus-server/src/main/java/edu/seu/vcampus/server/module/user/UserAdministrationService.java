@@ -41,10 +41,10 @@ final class UserAdministrationService {
     synchronized UserAccountView createAccount(CreateUserAccountRequest request) {
         Objects.requireNonNull(request, "request must not be null");
         if (repository.findByUsername(request.getUsername()).isPresent()) {
-            throw failure(ErrorCodes.USER_USERNAME_EXISTS, "该账户名已经存在。");
+            throw failure(ErrorCodes.USER_USERNAME_EXISTS, "该一卡通号已经存在。");
         }
         UserAccount account = new UserAccount(
-                "U-" + UUID.randomUUID(),
+                newUserId(),
                 request.getUsername(), request.getDisplayName(), Role.USER,
                 request.getAdminScopes(), request.getPasswordProof(), true);
         repository.save(account);
@@ -68,14 +68,14 @@ final class UserAdministrationService {
             }
             if (existing.contains(row.getUsername()) || !incoming.add(row.getUsername())) {
                 throw failure(ErrorCodes.USER_USERNAME_EXISTS,
-                        "账号 “" + row.getUsername() + "” 已存在或在文件中重复。第 "
+                        "一卡通号 “" + row.getUsername() + "” 已存在或在文件中重复。第 "
                                 + (index + 1) + " 条数据无效。");
             }
         }
 
         List<UserAccount> accounts = rows.stream()
                 .map(row -> new UserAccount(
-                        "U-" + UUID.randomUUID(),
+                        newUserId(),
                         row.getUsername(),
                         row.getDisplayName(),
                         Role.USER,
@@ -144,5 +144,9 @@ final class UserAdministrationService {
 
     private static UserAdministrationException failure(String code, String message) {
         return new UserAdministrationException(code, message);
+    }
+
+    private static String newUserId() {
+        return "U-" + UUID.randomUUID().toString().replace("-", "");
     }
 }

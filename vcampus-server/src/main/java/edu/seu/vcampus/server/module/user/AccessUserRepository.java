@@ -1,6 +1,8 @@
 package edu.seu.vcampus.server.module.user;
 
 import edu.seu.vcampus.common.user.AdminScope;
+import edu.seu.vcampus.common.user.CampusCardNumber;
+import edu.seu.vcampus.common.user.PasswordProof;
 import edu.seu.vcampus.common.user.Role;
 import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
 
@@ -10,8 +12,11 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Year;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -24,12 +29,130 @@ final class AccessUserRepository implements UserRepository {
 
     private static final String USER_TABLE = "tblUser";
     private static final String SCOPE_TABLE = "tblUserAdminScope";
+    private static final Map<String, String> LEGACY_DEMO_CARD_NUMBERS = Map.of(
+            "student001", "20260001",
+            "teacher001", "20260002",
+            "admin", "20260003",
+            "studentadmin", "20260004",
+            "courseadmin", "20260005",
+            "libraryadmin", "20260006",
+            "shopadmin", "20260007",
+            "hospitaladmin", "20260008");
 
     private final AccessDatabase database;
 
     AccessUserRepository(AccessDatabase database) {
         this.database = database;
         initializeSchema();
+        normalizeLegacyProfessionalRoles();
+        migrateLegacyLoginAccounts();
+    }
+
+    /**
+     * Replaces pre-card-number development login names without changing userId or permissions.
+     * The old development proof included the login name, so migrated accounts receive the
+     * documented development password again.
+     */
+    private void migrateLegacyLoginAccounts() {
+        try (Connection connection = database.openConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                List<LegacyAccount> legacyAccounts = new ArrayList<>();
+                Set<String> usedCardNumbers = new HashSet<>();
+                try (Statement statement = connection.createStatement();
+                     ResultSet result = statement.executeQuery(
+                             "SELECT userId, username FROM tblUser ORDER BY username")) {
+                    while (result.next()) {
+                        String username = result.getString("username");
+                        if (CampusCardNumber.isValid(username)) {
+                            usedCardNumbers.add(username);
+                        } else {
+                            legacyAccounts.add(new LegacyAccount(
+                                    result.getString("userId"), username));
+                        }
+                    }
+                }
+                if (legacyAccounts.isEmpty()) {
+                    connection.commit();
+                    return;
+                }
+
+                Set<String> reservedDemoNumbers = new HashSet<>();
+                for (LegacyAccount account : legacyAccounts) {
+                    String fixed = LEGACY_DEMO_CARD_NUMBERS.get(
+                            account.username().toLowerCase(Locale.ROOT));
+                    if (fixed != null && !usedCardNumbers.contains(fixed)) {
+                        reservedDemoNumbers.add(fixed);
+                    }
+                }
+
+                int year = Year.now().getValue();
+                int nextSequence = usedCardNumbers.stream()
+                        .filter(value -> value.startsWith(Integer.toString(year)))
+                        .mapToInt(CampusCardNumber::sequence)
+                        .max()
+                        .orElse(0) + 1;
+                for (LegacyAccount account : legacyAccounts) {
+                    String cardNumber = LEGACY_DEMO_CARD_NUMBERS.get(
+                            account.username().toLowerCase(Locale.ROOT));
+                    if (cardNumber == null || usedCardNumbers.contains(cardNumber)) {
+                        do {
+                            cardNumber = CampusCardNumber.format(year, nextSequence++);
+                        } while (usedCardNumbers.contains(cardNumber)
+                                || reservedDemoNumbers.contains(cardNumber));
+                    }
+                    migrateLoginAccount(connection, account, cardNumber);
+                    usedCardNumbers.add(cardNumber);
+                }
+                connection.commit();
+            } catch (SQLException | RuntimeException exception) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackFailure) {
+                    exception.addSuppressed(rollbackFailure);
+                }
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            throw failure("Cannot migrate legacy login accounts.", exception);
+        }
+    }
+
+    private void migrateLoginAccount(
+            Connection connection,
+            LegacyAccount account,
+            String cardNumber) throws SQLException {
+        char[] password = "123456".toCharArray();
+        try (PreparedStatement update = connection.prepareStatement(
+                "UPDATE tblUser SET username = ?, passwordProof = ? WHERE userId = ?")) {
+            update.setString(1, cardNumber);
+            update.setString(2, PasswordProof.create(cardNumber, password));
+            update.setString(3, account.userId());
+            update.executeUpdate();
+        } finally {
+            Arrays.fill(password, '\0');
+        }
+        if (tableExists(connection, "tblHospitalDoctorApplication")) {
+            try (PreparedStatement updateApplication = connection.prepareStatement(
+                    "UPDATE tblHospitalDoctorApplication SET username = ? "
+                            + "WHERE targetUserId = ? OR username = ?")) {
+                updateApplication.setString(1, cardNumber);
+                updateApplication.setString(2, account.userId());
+                updateApplication.setString(3, account.username());
+                updateApplication.executeUpdate();
+            }
+        }
+    }
+
+    /** Restores data written by the abandoned global TEACHER/DOCTOR role experiment. */
+    private void normalizeLegacyProfessionalRoles() {
+        try (Connection connection = database.openConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("UPDATE tblUser SET roleCode = 'USER' "
+                    + "WHERE roleCode = 'TEACHER' OR roleCode = 'DOCTOR'");
+        } catch (SQLException exception) {
+            throw failure("Cannot normalize legacy professional roles.", exception);
+        }
     }
 
     @Override
@@ -276,5 +399,8 @@ final class AccessUserRepository implements UserRepository {
     private UserPersistenceException failure(String message, SQLException cause) {
         return new UserPersistenceException(
                 message + " Database: " + database.path(), cause);
+    }
+
+    private record LegacyAccount(String userId, String username) {
     }
 }

@@ -8,9 +8,14 @@
 - 虚构且可重复初始化的演示数据或脚本。
 - 不提交个人电脑上的 `.accdb`、真实学号、联系方式、病历、明文密码或其他隐私数据。
 
-用户账号模块已经通过 UCanAccess/JDBC 接入 Access：正式启动服务器时会自动创建
-`database/vCampus.accdb` 和用户账号表，空库会初始化公开测试账号。生成的 `.accdb`
-仍不提交 Git。其他子系统继续按数据字典逐步接入同一个数据库。
+用户账号模块以及医院的医生申请/档案已经通过 UCanAccess/JDBC 接入 Access：正式启动服务器时会自动创建
+`database/vCampus.accdb`、用户账号表、医生申请表和医生档案表，空库会初始化公开测试账号。生成的 `.accdb`
+仍不提交 Git。其他业务表继续按数据字典逐步接入同一个数据库。
+
+登录账号统一称为“一卡通号”，格式为“4 位年份 + 4 位流水号”，流水号范围为 `0001`—`9999`，例如 `20260001`。`tblUser.username`
+是为兼容现有 Java 接口保留的技术字段名，保存的实际内容是一卡通号。新建外来医生获批时，用户模块读取
+当年现有一卡通号的最大流水号并自动加一；数据库唯一索引负责阻止重复。一卡通号用于登录，跨模块关联仍使用
+不会因账号规则改变而变化的 `userId`。
 
 ## 2. 数据归属
 
@@ -21,7 +26,7 @@
 | 选课系统 | [course.md](schema/course.md) | 课程、开课、选课、成绩 | `userId`、`studentId` |
 | 图书馆 | [library.md](schema/library.md) | 图书、馆藏、借阅记录 | `userId`、`studentId` |
 | 商店 | [shop.md](schema/shop.md) | 商品、库存、购物车、订单 | `userId` |
-| 医院 | [hospital.md](schema/hospital.md) | 科室、医生、排班、号源、预约 | `userId`、`studentId` |
+| 医院 | [hospital.md](schema/hospital.md) | 医生申请、医生档案、科室、排班、号源、预约 | `userId`、`studentId` |
 
 规则：
 

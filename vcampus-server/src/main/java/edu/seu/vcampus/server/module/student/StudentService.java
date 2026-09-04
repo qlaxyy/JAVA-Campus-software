@@ -1,29 +1,57 @@
 package edu.seu.vcampus.server.module.student;
 
-import edu.seu.vcampus.common.student.StudentProfileDto;
-import edu.seu.vcampus.common.student.StudentProfileRequest;
-import edu.seu.vcampus.common.student.StudentProfileResponse;
-import edu.seu.vcampus.common.student.StudentUpdateProfileRequest;
+import edu.seu.vcampus.common.student.*;
 
+import java.util.List;
 import java.util.Optional;
 
-public class StudentService {
-    private final StudentMemoryRepository repository = new StudentMemoryRepository();
+public final class StudentService {
+
+    private final StudentMemoryRepository repository;
+
+    public StudentService() {
+        this.repository = new StudentMemoryRepository();
+    }
+
+    public StudentService(StudentMemoryRepository repository) {
+        this.repository = repository;
+    }
+
+    public Optional<StudentProfileDto> findById(String studentId) {
+        return repository.findByStudentId(studentId);
+    }
 
     public StudentProfileResponse getProfile(StudentProfileRequest req) {
-        if (req == null || req.getStudentId() == null || req.getStudentId().trim().isEmpty()) {
-            return new StudentProfileResponse(false, "学号不能为空", null);
+        StudentProfileResponse resp = new StudentProfileResponse();
+        if (req == null || req.getStudentId() == null) {
+            resp.setFound(false);
+            resp.setMessage("学号不能为空");
+            return resp;
         }
-
-        Optional<StudentProfileDto> profile = repository.findById(req.getStudentId());
-        if (profile.isPresent()) {
-            return new StudentProfileResponse(true, "查询成功", profile.get());
+        Optional<StudentProfileDto> opt = repository.findByStudentId(req.getStudentId());
+        if (opt.isPresent()) {
+            resp.setFound(true);
+            resp.setProfile(opt.get());
         } else {
-            return new StudentProfileResponse(false, "未检索到学号为 [" + req.getStudentId() + "] 的学籍档案", null);
+            resp.setFound(false);
+            resp.setMessage("未查询到对应学籍档案");
         }
+        return resp;
     }
 
     public boolean updateProfile(StudentUpdateProfileRequest req) {
         return repository.updateProfile(req);
+    }
+
+    public StatusChangeDto applyStatusChange(ApplyStatusChangeRequest req) {
+        return repository.createStatusChange(req);
+    }
+
+    public List<StatusChangeDto> listStatusChanges(String studentId) {
+        return repository.listStatusChanges(studentId);
+    }
+
+    public boolean auditStatusChange(Long changeId, boolean approved, String operator) {
+        return repository.auditStatusChange(changeId, approved, operator);
     }
 }

@@ -2,6 +2,7 @@ package edu.seu.vcampus.client.module.user;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.infrastructure.CampusClient;
+import edu.seu.vcampus.common.user.CampusCardNumber;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.JButton;
@@ -17,6 +18,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LoginPanelTest {
@@ -45,21 +47,28 @@ class LoginPanelTest {
         assertTrue(labels.contains("以下账号统一密码：123456"));
         assertFalse(labels.contains("用户登录"));
         assertFalse(labels.contains("开发期基础登录"));
-        assertTrue(labels.contains("普通账号  student001"));
-        assertTrue(labels.contains("医生演示  teacher001"));
-        assertTrue(labels.contains("超级管理员  admin"));
-        assertTrue(labels.contains("学籍管理员  studentadmin"));
-        assertTrue(labels.contains("选课管理员  courseadmin"));
-        assertTrue(labels.contains("图书馆管理员  libraryadmin"));
-        assertTrue(labels.contains("商店管理员  shopadmin"));
-        assertTrue(labels.contains("医院管理员  hospitaladmin"));
+        assertTrue(labels.contains("普通账号  20260001"));
+        assertTrue(labels.contains("医生演示  20260002"));
+        assertTrue(labels.contains("超级管理员  20260003"));
+        assertTrue(labels.contains("学籍管理员  20260004"));
+        assertTrue(labels.contains("选课管理员  20260005"));
+        assertTrue(labels.contains("图书馆管理员  20260006"));
+        assertTrue(labels.contains("商店管理员  20260007"));
+        assertTrue(labels.contains("医院管理员  20260008"));
     }
 
     @Test
     void credentialValidationRejectsMissingInput() {
-        assertEquals("请输入账户名", LoginPanel.validationMessage(" ", "secret".toCharArray()));
-        assertEquals("请输入密码", LoginPanel.validationMessage("student001", new char[0]));
-        assertNull(LoginPanel.validationMessage("student001", "123456".toCharArray()));
+        assertEquals("请输入一卡通号", LoginPanel.validationMessage(" ", "secret".toCharArray()));
+        assertEquals("一卡通号必须是 8 位数字（年份 + 4 位流水号）",
+                LoginPanel.validationMessage("AAA", "secret".toCharArray()));
+        assertEquals("请输入密码", LoginPanel.validationMessage("20260001", new char[0]));
+        assertNull(LoginPanel.validationMessage("20260001", "123456".toCharArray()));
+        assertEquals("20260009", CampusCardNumber.format(2026, 9));
+        assertEquals(9, CampusCardNumber.sequence("20260009"));
+        assertFalse(CampusCardNumber.isValid("20260000"));
+        assertThrows(IllegalArgumentException.class,
+                () -> CampusCardNumber.format(2026, 10_000));
     }
 
     private static List<Component> descendants(JPanel panel) {

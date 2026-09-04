@@ -30,9 +30,9 @@ final class UserAccountEditor {
 
         Map<AdminScope, JCheckBox> boxes = new EnumMap<>(AdminScope.class);
         JPanel form = new JPanel(new GridLayout(0, 1, 4, 4));
-        form.add(new JLabel("账户名（小写字母、数字或下划线）："));
+        form.add(new JLabel("一卡通号（8 位数字：年份 + 4 位流水号）："));
         form.add(username);
-        form.add(new JLabel("显示名称："));
+        form.add(new JLabel("姓名（显示名称）："));
         form.add(displayName);
         form.add(new JLabel("子系统管理权："));
         addScopeBoxes(form, boxes, existing);

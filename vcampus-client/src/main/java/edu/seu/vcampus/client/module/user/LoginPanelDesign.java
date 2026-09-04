@@ -117,7 +117,7 @@ final class LoginPanelDesign {
         constraints.insets = new Insets(0, 0, 6, 0);
         card.add(title, constraints);
 
-        JLabel subtitle = new JLabel("使用统一校园账号进入虚拟校园系统");
+        JLabel subtitle = new JLabel("使用一卡通号进入虚拟校园系统");
         subtitle.setForeground(MUTED);
         subtitle.setFont(subtitle.getFont().deriveFont(14F));
         constraints.gridy = 1;
@@ -126,7 +126,7 @@ final class LoginPanelDesign {
 
         constraints.gridy = 2;
         constraints.insets = new Insets(0, 0, 7, 0);
-        card.add(createFieldLabel("账号"), constraints);
+        card.add(createFieldLabel("一卡通号"), constraints);
 
         styleTextField(usernameField);
         constraints.gridy = 3;
@@ -246,14 +246,14 @@ final class LoginPanelDesign {
         JPanel accounts = new JPanel(new GridLayout(0, 2, 12, 3));
         accounts.setOpaque(false);
         String[] labels = {
-            "普通账号  student001",
-            "医生演示  teacher001",
-            "超级管理员  admin",
-            "学籍管理员  studentadmin",
-            "选课管理员  courseadmin",
-            "图书馆管理员  libraryadmin",
-            "商店管理员  shopadmin",
-            "医院管理员  hospitaladmin"
+            "普通账号  20260001",
+            "医生演示  20260002",
+            "超级管理员  20260003",
+            "学籍管理员  20260004",
+            "选课管理员  20260005",
+            "图书馆管理员  20260006",
+            "商店管理员  20260007",
+            "医院管理员  20260008"
         };
         for (String text : labels) {
             JLabel label = new JLabel(text);

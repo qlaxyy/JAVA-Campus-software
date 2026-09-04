@@ -30,6 +30,9 @@ public final class ErrorCodes {
     public static final String SHOP_OUT_OF_STOCK = "SHOP_OUT_OF_STOCK";
     public static final String SHOP_ORDER_NOT_FOUND = "SHOP_ORDER_NOT_FOUND";
     public static final String SHOP_ORDER_NOT_CANCELLABLE = "SHOP_ORDER_NOT_CANCELLABLE";
+    public static final String LIBRARY_BORROW_RECORD_NOT_FOUND =
+            "LIBRARY_BORROW_RECORD_NOT_FOUND";
+    public static final String LIBRARY_ALREADY_RETURNED = "LIBRARY_ALREADY_RETURNED";
 
     private ErrorCodes() {
     }

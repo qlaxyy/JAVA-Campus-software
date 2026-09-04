@@ -55,6 +55,11 @@ public class StudentView extends JPanel {
     private final JLabel valLevel = new JLabel("-");
     private final JLabel valStatus = new JLabel("-");
 
+    // 选课模块联调核心字段
+    private final JLabel valPlanId = new JLabel("-");
+    private final JLabel valCurrentTerm = new JLabel("-");
+    private final JLabel valCampus = new JLabel("-");
+
     // 补充信息组件
     private final JComboBox<String> cmbPolitical = new JComboBox<>(new String[]{"群众", "共青团员", "中共预备党员", "中共党员"});
     private final JTextField txtPhone = new JTextField(14);
@@ -138,11 +143,14 @@ public class StudentView extends JPanel {
         txtSearchId.setFont(FONT_BODY);
 
         btnSearch.setPreferredSize(new Dimension(95, 32));
-        btnSearch.setBackground(Color.WHITE);
-        btnSearch.setForeground(THEME_BANNER_BG);
+        btnSearch.setBackground(new Color(241, 245, 249));
+        btnSearch.setForeground(Color.BLACK);
         btnSearch.setFont(FONT_BOLD_BODY);
         btnSearch.setFocusPainted(false);
-        btnSearch.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        btnSearch.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(203, 213, 225), 1),
+            BorderFactory.createEmptyBorder(4, 8, 4, 8)
+        ));
 
         bannerRightPanel.add(new JLabel("<html><font color='#ffffff'>学号:</font></html>"));
         bannerRightPanel.add(txtSearchId);
@@ -179,8 +187,8 @@ public class StudentView extends JPanel {
         cardsGrid.add(cardIdentity);
 
         // 卡片 2：在读学业状态
-        JPanel cardStudy = createCardPanel("在读学业信息", "院系、专业与学籍状态");
-        JPanel studyBody = new JPanel(new GridLayout(4, 2, 8, 6));
+        JPanel cardStudy = createCardPanel("在读学业信息", "院系、专业、学期与选课基准");
+        JPanel studyBody = new JPanel(new GridLayout(5, 2, 8, 5));
         studyBody.setOpaque(false);
         addField(studyBody, "所在院系", valDept);
         addField(studyBody, "所学专业", valMajor);
@@ -188,6 +196,9 @@ public class StudentView extends JPanel {
         addField(studyBody, "培养层次", valLevel);
         addField(studyBody, "入学年份", valYear);
         addField(studyBody, "学籍状态", valStatus);
+        addField(studyBody, "培养方案", valPlanId);
+        addField(studyBody, "建议学期", valCurrentTerm);
+        addField(studyBody, "就读校区", valCampus);
         cardStudy.add(studyBody, BorderLayout.CENTER);
         cardsGrid.add(cardStudy);
 
@@ -216,8 +227,75 @@ public class StudentView extends JPanel {
         cardContact.add(contactAction, BorderLayout.SOUTH);
         cardsGrid.add(cardContact);
 
-        // 卡片 4~6：占位
-        cardsGrid.add(createPlaceholderCard("学籍异动申请", "申请转专业、休学与复学流程", "后续开放"));
+        // 卡片 4：学籍异动申请卡片（基于当前会话精准鉴权分发）
+        JPanel cardChange = createCardPanel("学籍异动申请", "申请转专业、休学与复学流程");
+        JButton btnOpenChange = new JButton("办理/查看异动");
+        btnOpenChange.setFont(FONT_SUB);
+        btnOpenChange.setBackground(new Color(224, 231, 255));
+        btnOpenChange.setForeground(Color.BLACK);
+        btnOpenChange.setFocusPainted(false);
+        btnOpenChange.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(199, 210, 254), 1),
+            BorderFactory.createEmptyBorder(6, 12, 6, 12)
+        ));
+
+        btnOpenChange.addActionListener(e -> {
+            String rawId = context.currentSession()
+                .map(s -> s.getUserId() != null ? s.getUserId().trim().toLowerCase() : "")
+                .orElse("");
+
+            if (rawId.startsWith("u-")) {
+                rawId = rawId.substring(2);
+            }
+            rawId = rawId.replace("-", "");
+
+            boolean isTeacher = rawId.contains("teacher");
+            boolean isAdmin = rawId.contains("admin");
+
+            // 1. 教师拦截：无权进入学籍异动
+            if (isTeacher) {
+                JOptionPane.showMessageDialog(this, "权限不足：普通教师无权访问学籍异动管理模块！", "权限受限", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            // 2. 管理员模式：进入全局审批工作台
+            if (isAdmin) {
+                StatusChangeDialog dlg = new StatusChangeDialog(
+                    SwingUtilities.getWindowAncestor(this),
+                    context,
+                    null,
+                    true,
+                    () -> {
+                        if (currentProfile != null) executeQuery();
+                    }
+                );
+                dlg.setVisible(true);
+                return;
+            }
+
+            // 3. 学生端模式：仅限申请与查看本人异动
+            String targetStudentId = rawId;
+            if (currentProfile != null && !rawId.equals(currentProfile.getStudentId())) {
+                JOptionPane.showMessageDialog(this, "权限不足：学生仅能查看与办理本人的学籍异动！", "权限受限", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            StatusChangeDialog dlg = new StatusChangeDialog(
+                SwingUtilities.getWindowAncestor(this),
+                context,
+                targetStudentId,
+                false,
+                () -> {
+                    if (currentProfile != null) executeQuery();
+                }
+            );
+            dlg.setVisible(true);
+        });
+
+        cardChange.add(btnOpenChange, BorderLayout.SOUTH);
+        cardsGrid.add(cardChange);
+
+        // 卡片 5~6：占位
         cardsGrid.add(createPlaceholderCard("学籍证明下载", "在线开具并打印中英文在读证明", "后续开放"));
         cardsGrid.add(createPlaceholderCard("学业毕业审核", "培养方案完成度与学分绩点核算", "后续开放"));
 
@@ -277,6 +355,7 @@ public class StudentView extends JPanel {
         JButton btn = new JButton(btnText);
         btn.setFont(FONT_SUB);
         btn.setEnabled(false);
+        btn.setForeground(new Color(148, 163, 184));
         btn.setPreferredSize(new Dimension(0, 28));
         btn.setBackground(new Color(245, 245, 245));
         card.add(btn, BorderLayout.SOUTH);
@@ -312,9 +391,19 @@ public class StudentView extends JPanel {
     private void styleButton(JButton btn, boolean isPrimary) {
         btn.setFont(FONT_SUB);
         btn.setFocusPainted(false);
+        btn.setForeground(Color.BLACK);
         if (isPrimary) {
-            btn.setBackground(THEME_BANNER_BG);
-            btn.setForeground(Color.WHITE);
+            btn.setBackground(new Color(187, 247, 208));
+            btn.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(134, 239, 172), 1),
+                BorderFactory.createEmptyBorder(4, 10, 4, 10)
+            ));
+        } else {
+            btn.setBackground(new Color(241, 245, 249));
+            btn.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(203, 213, 225), 1),
+                BorderFactory.createEmptyBorder(4, 10, 4, 10)
+            ));
         }
     }
 
@@ -451,16 +540,24 @@ public class StudentView extends JPanel {
         valId.setText(p.getStudentId());
         valName.setText(p.getName());
         valGender.setText(p.getGender());
-        valIdCard.setText(p.getIdCard());
-        valBirth.setText(p.getBirthDate());
-        valEthnicity.setText(p.getEthnicity());
-        valNative.setText(p.getNativePlace());
-        valDept.setText(p.getDepartment());
-        valMajor.setText(p.getMajor());
-        valClass.setText(p.getClassName());
-        valYear.setText(p.getEnrollmentYear());
-        valLevel.setText(p.getEducationLevel());
-        valStatus.setText(p.getStatus());
+        valIdCard.setText(p.getIdCardNumber() != null ? p.getIdCardNumber() : "-");
+        valBirth.setText(p.getBirthDate() != null ? p.getBirthDate() : "-");
+        valEthnicity.setText(p.getEthnicity() != null ? p.getEthnicity() : "-");
+        valNative.setText(p.getNativePlace() != null ? p.getNativePlace() : "-");
+        valDept.setText(p.getDepartment() != null ? p.getDepartment() : "-");
+        valMajor.setText(p.getMajor() != null ? p.getMajor() : "-");
+        valClass.setText(p.getClassName() != null ? p.getClassName() : "-");
+        valYear.setText(p.getEnrollmentYear() != null ? String.valueOf(p.getEnrollmentYear()) : "-");
+        valLevel.setText(p.getSchoolingLength() != null ? (p.getSchoolingLength() + "年制本科") : "本科生");
+        valStatus.setText(p.getAcademicStatus() != null ? p.getAcademicStatus() : "在读");
+
+        valPlanId.setText(p.getPlanId() != null ? "方案 #" + p.getPlanId() : "-");
+        valCurrentTerm.setText(p.getCurrentTerm() != null ? "第 " + p.getCurrentTerm() + " 学期" : "-");
+        String campusName = "-";
+        if (p.getCampusId() != null) {
+            campusName = (p.getCampusId() == 1L) ? "九龙湖校区" : (p.getCampusId() == 2L ? "四牌楼校区" : "丁家桥校区");
+        }
+        valCampus.setText(campusName);
 
         cmbPolitical.setSelectedItem(p.getPoliticalStatus() != null ? p.getPoliticalStatus() : "群众");
         txtPhone.setText(p.getPhone() != null ? p.getPhone() : "");
@@ -484,6 +581,10 @@ public class StudentView extends JPanel {
         valYear.setText("-");
         valLevel.setText("-");
         valStatus.setText("-");
+
+        valPlanId.setText("-");
+        valCurrentTerm.setText("-");
+        valCampus.setText("-");
 
         txtPhone.setText("");
         txtEmail.setText("");

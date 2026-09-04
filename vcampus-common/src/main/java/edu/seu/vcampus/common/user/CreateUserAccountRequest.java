@@ -4,7 +4,6 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
@@ -47,12 +46,7 @@ public final class CreateUserAccountRequest implements Serializable {
     }
 
     static String normalizeUsername(String value) {
-        Objects.requireNonNull(value, "username must not be null");
-        String normalized = value.trim().toLowerCase(Locale.ROOT);
-        if (!normalized.matches("[a-z0-9_]{3,32}")) {
-            throw new IllegalArgumentException("username format is invalid");
-        }
-        return normalized;
+        return CampusCardNumber.normalize(value);
     }
 
     static String requireText(String value, String fieldName) {

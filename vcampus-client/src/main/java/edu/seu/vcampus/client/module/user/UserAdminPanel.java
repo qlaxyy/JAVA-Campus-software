@@ -79,7 +79,8 @@ public final class UserAdminPanel extends JPanel {
 
         addButton.addActionListener(event -> createAccount());
         importButton.addActionListener(event -> importAccounts());
-        importButton.setToolTipText("导入 UTF-8 CSV：username,displayName");
+        importButton.setToolTipText(
+                "导入 UTF-8 CSV：campusCardNumber,displayName");
         editButton.addActionListener(event -> editAccount());
         statusButton.addActionListener(event -> changeStatus());
         resetButton.addActionListener(event -> resetPassword());
@@ -280,8 +281,8 @@ public final class UserAdminPanel extends JPanel {
         Object[] options = {"批准", "拒绝", "取消"};
         String accountDescription = application.getApplicationType()
                 == DoctorApplicationType.EXISTING_ACCOUNT
-                ? "关联已有账号：" + application.getUsername()
-                : "外来医生：批准后由系统生成唯一登录账号";
+                ? "关联已有一卡通号：" + application.getUsername()
+                : "外来医生：批准后由系统生成下一张一卡通号";
         int decision = JOptionPane.showOptionDialog(
                 this,
                 "类型：" + applicationTypeText(application)
@@ -313,7 +314,7 @@ public final class UserAdminPanel extends JPanel {
                         String message = response.getMessage();
                         if (approved
                                 && response.getData() instanceof DoctorApplicationView reviewed) {
-                            message += "\n登录账号：" + reviewed.getUsername();
+                            message += "\n一卡通号：" + reviewed.getUsername();
                             if (reviewed.getApplicationType()
                                     == DoctorApplicationType.EXTERNAL_DOCTOR) {
                                 message += "\n初始密码：123456";
@@ -329,7 +330,7 @@ public final class UserAdminPanel extends JPanel {
 
     private static String applicationTypeText(DoctorApplicationView application) {
         return application.getApplicationType() == DoctorApplicationType.EXISTING_ACCOUNT
-                ? "关联已有账号 " + application.getUsername()
+                ? "关联已有一卡通号 " + application.getUsername()
                 : "新建外来医生账号";
     }
 

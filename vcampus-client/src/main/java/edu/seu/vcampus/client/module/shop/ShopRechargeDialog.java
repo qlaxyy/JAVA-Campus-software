@@ -66,7 +66,7 @@ final class ShopRechargeDialog {
                 try {
                     Response response = get();
                     if (response.isSuccess() && response.getData() instanceof CampusCardView card) {
-                        balance.setText("卡号 " + card.getCardNo() + "　余额 " + ShopMoney.yuan(card.getBalanceFen()));
+                        balance.setText("一卡通号 " + card.getCardNo() + "　余额 " + ShopMoney.yuan(card.getBalanceFen()));
                         return;
                     }
                     balance.setText(response.getMessage());
@@ -99,7 +99,7 @@ final class ShopRechargeDialog {
                         return;
                     }
                     if (response.getData() instanceof CampusCardView card) {
-                        balance.setText("卡号 " + card.getCardNo() + "　余额 " + ShopMoney.yuan(card.getBalanceFen()));
+                        balance.setText("一卡通号 " + card.getCardNo() + "　余额 " + ShopMoney.yuan(card.getBalanceFen()));
                     }
                     if (onChanged != null) {
                         onChanged.run();

@@ -12,7 +12,7 @@
 | `tblProductCategory` | 商品分类 | `categoryId` | `name` 唯一；`status` 停用代替物理删除 |
 | `tblProduct` | 商品 | `productId` | `priceFen>0`；`saleStatus` 为 `ON_SALE`/`OFF_SALE`；描述必填 |
 | `tblProductPhoto` | 商品照片 | `photoId` | 同一商品 1–9 张；本轮存在内存 DTO |
-| `tblCampusCard` | 虚拟校园卡 | `userId` | 演示：`student001` / `shopadmin` 各 100.00 元；本轮内存 |
+| `tblCampusCard` | 虚拟校园卡余额 | `userId` | 通过稳定 `userId` 关联账号；一卡通号直接取用户账号；本轮内存 |
 | `tblCartItem` | 购物车行 | `cartItemId` | 客户端本地；同一 `userId+productId` 唯一 |
 | `tblOrder` | 订单头 | `orderId` | `PAID` / `CANCELLED`；校园卡扣款；本轮内存 |
 | `tblOrderItem` | 订单行 | `orderItemId` | 保存下单时名称与单价快照；本轮内存 |
@@ -62,7 +62,7 @@
 边界：下架「停售纪念本」「过期试吃饼干」，列表接口不得返回。  
 分类编号：1 文具、2 日常用品、3 食品。  
 上架：`SHOP.PUBLISH_PRODUCT` 需商店管理权，照片 1–9 张。  
-校园卡演示：`student001`、`shopadmin` 各 100.00 元。
+校园卡演示：`20260001`、`20260007` 各 100.00 元。商店不再生成第二套卡号，一卡通号直接使用用户模块账号。
 
 ## 6. Socket 动作（校园卡支付端口）
 

@@ -21,8 +21,8 @@ public final class CampusCardView implements Serializable {
      * Creates a wallet snapshot.
      *
      * @param userId owning account
-     * @param username login name
-     * @param cardNo virtual card number
+     * @param username login campus-card number
+     * @param cardNo campus-card number, currently equal to {@code username}
      * @param balanceFen remaining balance in fen
      */
     public CampusCardView(String userId, String username, String cardNo, int balanceFen) {

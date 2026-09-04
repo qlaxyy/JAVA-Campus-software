@@ -93,7 +93,7 @@ class LibraryWorkflowUiTest {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
             ClientContext context = context(server);
-            assertTrue(context.login("student001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
             AtomicReference<JTabbedPane> root = new AtomicReference<>();
             onEdt(() -> root.set((JTabbedPane) new LibraryClientModule().createView(context)));
             JTabbedPane navigation = root.get();

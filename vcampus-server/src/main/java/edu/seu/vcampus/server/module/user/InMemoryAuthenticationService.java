@@ -1,6 +1,7 @@
 package edu.seu.vcampus.server.module.user;
 
 import edu.seu.vcampus.common.user.LoginRequest;
+import edu.seu.vcampus.common.user.CampusCardNumber;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.security.SessionLookup;
 import edu.seu.vcampus.server.security.AccountProvisioning;
@@ -17,7 +18,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.Locale;
+import java.time.Year;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -102,30 +103,29 @@ public final class InMemoryAuthenticationService
 
     @Override
     public synchronized Optional<ProvisionedAccount> findAccountByUsername(String username) {
-        if (username == null) {
+        if (!CampusCardNumber.isValid(username)) {
             return Optional.empty();
         }
-        String normalized = username.trim().toLowerCase(Locale.ROOT);
-        if (!normalized.matches("[a-z0-9_]{3,32}")) {
-            return Optional.empty();
-        }
+        String normalized = CampusCardNumber.normalize(username);
         return users.findByUsername(normalized).map(InMemoryAuthenticationService::toProvisioned);
     }
 
     @Override
-    public synchronized ProvisionedAccount createGeneratedRegularAccount(
-            String usernamePrefix,
-            String displayName) {
-        String normalizedPrefix = usernamePrefix == null
-                ? "" : usernamePrefix.trim().toLowerCase(Locale.ROOT);
-        if (!normalizedPrefix.matches("[a-z]{3,12}")) {
-            throw new IllegalArgumentException("usernamePrefix format is invalid");
-        }
+    public synchronized ProvisionedAccount createGeneratedRegularAccount(String displayName) {
+        int year = Year.now().getValue();
+        int maximumSequence = users.findAll().stream()
+                .map(UserAccount::username)
+                .filter(CampusCardNumber::isValid)
+                .filter(value -> value.startsWith(Integer.toString(year)))
+                .mapToInt(CampusCardNumber::sequence)
+                .max()
+                .orElse(0);
         char[] password = "123456".toCharArray();
         try {
-            for (int attempt = 0; attempt < 20; attempt++) {
-                String username = normalizedPrefix
-                        + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+            for (int sequence = maximumSequence + 1;
+                 sequence <= CampusCardNumber.MAX_SEQUENCE;
+                 sequence++) {
+                String username = CampusCardNumber.format(year, sequence);
                 CreateAccountInput input = new CreateAccountInput(
                         username,
                         displayName,
@@ -144,7 +144,8 @@ public final class InMemoryAuthenticationService
                 users.save(created);
                 return toProvisioned(created);
             }
-            throw new IllegalStateException("Cannot generate a unique login account.");
+            throw new IllegalStateException(
+                    "The campus-card sequence for " + year + " is exhausted.");
         } finally {
             Arrays.fill(password, '\0');
         }

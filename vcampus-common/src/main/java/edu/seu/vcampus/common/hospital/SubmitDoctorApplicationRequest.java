@@ -2,8 +2,8 @@ package edu.seu.vcampus.common.hospital;
 
 import java.io.Serial;
 import java.io.Serializable;
+import edu.seu.vcampus.common.user.CampusCardNumber;
 import java.util.Objects;
-import java.util.Locale;
 
 /** Hospital-administrator request for adding or binding one doctor. */
 public final class SubmitDoctorApplicationRequest implements Serializable {
@@ -60,12 +60,7 @@ public final class SubmitDoctorApplicationRequest implements Serializable {
     public String getDoctorTitle() { return doctorTitle; }
 
     private static String normalizeUsername(String value) {
-        String normalized = requireText(value, "username", 32)
-                .toLowerCase(Locale.ROOT);
-        if (!normalized.matches("[a-z0-9_]{3,32}")) {
-            throw new IllegalArgumentException("username format is invalid");
-        }
-        return normalized;
+        return CampusCardNumber.normalize(value);
     }
 
     private static String requireText(String value, String field, int maxLength) {

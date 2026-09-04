@@ -30,8 +30,8 @@ class ShopCampusCardCheckoutIntegrationTest {
     void studentAndShopAdminStartWithOneHundredYuan() throws Exception {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
-            assertEquals(10_000, balance("student001", server.getPort()));
-            assertEquals(10_000, balance("shopadmin", server.getPort()));
+            assertEquals(10_000, balance("20260001", server.getPort()));
+            assertEquals(10_000, balance("20260007", server.getPort()));
         }
     }
 
@@ -39,7 +39,7 @@ class ShopCampusCardCheckoutIntegrationTest {
     void campusCardPayDeductsBalanceAndListsOrder() throws Exception {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
-            ClientContext student = login("student001", server.getPort());
+            ClientContext student = login("20260001", server.getPort());
             Response paid = student.send(
                     ShopActions.CREATE_ORDER,
                     new CreateOrderRequest(
@@ -53,6 +53,7 @@ class ShopCampusCardCheckoutIntegrationTest {
 
             CampusCardView card = assertInstanceOf(
                     CampusCardView.class, student.send(ShopActions.GET_CAMPUS_CARD, null).getData());
+            assertEquals("20260001", card.getCardNo());
             assertEquals(9600, card.getBalanceFen());
 
             ListOrdersResponse orders = assertInstanceOf(
@@ -65,7 +66,7 @@ class ShopCampusCardCheckoutIntegrationTest {
     void insufficientBalanceAsksToRecharge() throws Exception {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
-            ClientContext student = login("student001", server.getPort());
+            ClientContext student = login("20260001", server.getPort());
             Response paid = student.send(
                     ShopActions.CREATE_ORDER,
                     new CreateOrderRequest(
@@ -82,7 +83,7 @@ class ShopCampusCardCheckoutIntegrationTest {
     void rechargeThenCancelRefundsCampusCard() throws Exception {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
-            ClientContext student = login("student001", server.getPort());
+            ClientContext student = login("20260001", server.getPort());
             student.send(ShopActions.RECHARGE_CAMPUS_CARD, new RechargeCampusCardRequest(2000));
             Response paid = student.send(
                     ShopActions.CREATE_ORDER,
@@ -104,7 +105,7 @@ class ShopCampusCardCheckoutIntegrationTest {
     void studentCannotListSales() throws Exception {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
-            ClientContext student = login("student001", server.getPort());
+            ClientContext student = login("20260001", server.getPort());
             Response response = student.send(ShopActions.LIST_SALES, null);
             assertFalse(response.isSuccess());
             assertEquals(ErrorCodes.AUTH_FORBIDDEN, response.getCode());

@@ -28,7 +28,7 @@ public final class ServerContext {
 
             @Override
             public edu.seu.vcampus.server.security.ProvisionedAccount
-                    createGeneratedRegularAccount(String prefix, String displayName) {
+                    createGeneratedRegularAccount(String displayName) {
                 throw new IllegalStateException("Account provisioning is unavailable.");
             }
         });

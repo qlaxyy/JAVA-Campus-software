@@ -141,8 +141,7 @@ final class HospitalService {
                 throw conflict("要关联的校园账号已被禁用。请先处理账号状态。");
             }
         } else {
-            account = accounts.createGeneratedRegularAccount(
-                    "doctor", application.displayName());
+            account = accounts.createGeneratedRegularAccount(application.displayName());
         }
         repository.saveDoctorProfile(new DoctorProfile(
                 account.userId(), application.departmentId(),

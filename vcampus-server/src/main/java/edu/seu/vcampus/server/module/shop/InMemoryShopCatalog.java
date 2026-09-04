@@ -71,6 +71,67 @@ public final class InMemoryShopCatalog {
         return product;
     }
 
+    /**
+     * Finds a catalog row by id.
+     *
+     * @param productId catalog key
+     * @return matching product, if any
+     */
+    public synchronized java.util.Optional<ProductSummaryDto> findById(long productId) {
+        for (ProductSummaryDto product : products) {
+            if (product.getProductId() == productId) {
+                return java.util.Optional.of(product);
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
+    /**
+     * Decrements remaining stock for an on-sale product.
+     *
+     * @param productId catalog key
+     * @param quantity units to reserve
+     * @return {@code true} when stock was reduced
+     */
+    public synchronized boolean decrementStock(long productId, int quantity) {
+        if (quantity < 1) {
+            return false;
+        }
+        for (int index = 0; index < products.size(); index++) {
+            ProductSummaryDto product = products.get(index);
+            if (product.getProductId() != productId) {
+                continue;
+            }
+            if (product.getSaleStatus() != ProductSaleStatus.ON_SALE
+                    || product.getStockQty() < quantity) {
+                return false;
+            }
+            products.set(index, product.withStockQty(product.getStockQty() - quantity));
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Restores stock after a cancelled order.
+     *
+     * @param productId catalog key
+     * @param quantity units to return
+     */
+    public synchronized void incrementStock(long productId, int quantity) {
+        if (quantity < 1) {
+            return;
+        }
+        for (int index = 0; index < products.size(); index++) {
+            ProductSummaryDto product = products.get(index);
+            if (product.getProductId() != productId) {
+                continue;
+            }
+            products.set(index, product.withStockQty(product.getStockQty() + quantity));
+            return;
+        }
+    }
+
     private static boolean matchesKeyword(ProductSummaryDto product, String needle) {
         return product.getName().toLowerCase(Locale.ROOT).contains(needle)
                 || product.getDescription().toLowerCase(Locale.ROOT).contains(needle);

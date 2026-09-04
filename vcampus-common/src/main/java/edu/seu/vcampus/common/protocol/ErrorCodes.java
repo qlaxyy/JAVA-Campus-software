@@ -26,6 +26,10 @@ public final class ErrorCodes {
             "HOSPITAL_DOCTOR_APPLICATION_NOT_FOUND";
     public static final String HOSPITAL_DOCTOR_APPLICATION_CONFLICT =
             "HOSPITAL_DOCTOR_APPLICATION_CONFLICT";
+    public static final String SHOP_INSUFFICIENT_BALANCE = "SHOP_INSUFFICIENT_BALANCE";
+    public static final String SHOP_OUT_OF_STOCK = "SHOP_OUT_OF_STOCK";
+    public static final String SHOP_ORDER_NOT_FOUND = "SHOP_ORDER_NOT_FOUND";
+    public static final String SHOP_ORDER_NOT_CANCELLABLE = "SHOP_ORDER_NOT_CANCELLABLE";
     public static final String LIBRARY_BORROW_RECORD_NOT_FOUND =
             "LIBRARY_BORROW_RECORD_NOT_FOUND";
     public static final String LIBRARY_ALREADY_RETURNED = "LIBRARY_ALREADY_RETURNED";

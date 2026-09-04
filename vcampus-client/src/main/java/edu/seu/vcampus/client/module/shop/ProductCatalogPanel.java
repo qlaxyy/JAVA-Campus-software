@@ -23,7 +23,9 @@ import java.awt.GridLayout;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.HierarchyEvent;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
@@ -56,10 +58,12 @@ final class ProductCatalogPanel extends JPanel {
     private final JPanel grid = new JPanel();
     private final JPanel pager = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 0));
     private List<ProductSummaryDto> catalog = List.of();
+    private List<ProductSummaryDto> sourceCatalog = List.of();
     private int pageIndex = 1;
     private ShopCatalogGrid.Plan plan = new ShopCatalogGrid.Plan(2, 2, 200, 4);
     private int renderedPage = -1;
-    private int renderedCount = -1;
+    private List<ProductSummaryDto> renderedCatalog = List.of();
+    private int queryGeneration;
 
     ProductCatalogPanel(ClientContext context, Consumer<ProductSummaryDto> onAdd) {
         this.context = context;
@@ -76,6 +80,7 @@ final class ProductCatalogPanel extends JPanel {
         add(createFooter(), BorderLayout.SOUTH);
         keywordField.addActionListener(event -> query(true));
         searchButton.addActionListener(event -> query(true));
+        categoryBox.addActionListener(event -> query(true));
         densityBox.addActionListener(event -> {
             pageIndex = 1;
             renderPage();
@@ -94,20 +99,34 @@ final class ProductCatalogPanel extends JPanel {
         query(true);
     }
 
+    void reload() {
+        query(false);
+    }
+
     private JPanel createSearchBar() {
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        keywordField.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(ShopPalette.LINE),
+                BorderFactory.createEmptyBorder(6, 8, 6, 8)));
+
+        JPanel searchGroup = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+        searchGroup.setOpaque(false);
+        searchGroup.add(keywordField);
+        searchGroup.add(searchButton);
+
+        JPanel filters = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        filters.setOpaque(false);
+        filters.add(categoryBox);
+        filters.add(densityBox);
+
+        int sixChars = getFontMetrics(ShopPalette.bodyFont()).stringWidth("文字文字文字");
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, sixChars, 0));
         bar.setOpaque(true);
         bar.setBackground(ShopPalette.CARD);
         bar.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(ShopPalette.LINE),
                 BorderFactory.createEmptyBorder(6, 10, 6, 10)));
-        keywordField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(ShopPalette.LINE),
-                BorderFactory.createEmptyBorder(6, 8, 6, 8)));
-        bar.add(keywordField);
-        bar.add(categoryBox);
-        bar.add(densityBox);
-        bar.add(searchButton);
+        bar.add(searchGroup);
+        bar.add(filters);
         return bar;
     }
 
@@ -131,19 +150,19 @@ final class ProductCatalogPanel extends JPanel {
         if (resetPage) {
             pageIndex = 1;
         }
-        searchButton.setEnabled(false);
-        statusLabel.setText("正在搜索……");
-        CategoryChoice choice = (CategoryChoice) categoryBox.getSelectedItem();
-        ListProductsRequest filter = new ListProductsRequest(
-                keywordField.getText(), choice == null ? null : choice.categoryId());
+        applyLocalFilter();
+        int generation = ++queryGeneration;
         new SwingWorker<Response, Void>() {
             @Override
             protected Response doInBackground() throws Exception {
-                return context.send(ShopActions.LIST_PRODUCTS, filter);
+                return context.send(ShopActions.LIST_PRODUCTS, ListProductsRequest.allOnSale());
             }
 
             @Override
             protected void done() {
+                if (generation != queryGeneration) {
+                    return;
+                }
                 try {
                     showResponse(get());
                 } catch (InterruptedException exception) {
@@ -151,28 +170,65 @@ final class ProductCatalogPanel extends JPanel {
                     statusLabel.setText("搜索已中断");
                 } catch (ExecutionException exception) {
                     statusLabel.setText("无法连接服务器，请先启动服务端并登录。");
-                } finally {
-                    searchButton.setEnabled(true);
                 }
             }
         }.execute();
     }
 
+    private void applyLocalFilter() {
+        if (sourceCatalog.isEmpty()) {
+            return;
+        }
+        catalog = matching(sourceCatalog, keywordField.getText(), selectedCategoryId());
+        renderedCatalog = List.of();
+        renderPage();
+    }
+
+    private Long selectedCategoryId() {
+        CategoryChoice choice = (CategoryChoice) categoryBox.getSelectedItem();
+        return choice == null ? null : choice.categoryId();
+    }
+
+    private static List<ProductSummaryDto> matching(
+            List<ProductSummaryDto> products, String keyword, Long categoryId) {
+        String needle = keyword == null || keyword.isBlank()
+                ? null
+                : keyword.trim().toLowerCase(Locale.ROOT);
+        List<ProductSummaryDto> matches = new ArrayList<>();
+        for (ProductSummaryDto product : products) {
+            if (categoryId != null && product.getCategoryId() != categoryId) {
+                continue;
+            }
+            if (needle != null
+                    && !product.getName().toLowerCase(Locale.ROOT).contains(needle)
+                    && !product.getDescription().toLowerCase(Locale.ROOT).contains(needle)) {
+                continue;
+            }
+            matches.add(product);
+        }
+        return List.copyOf(matches);
+    }
+
     private void showResponse(Response response) {
         if (!response.isSuccess()) {
-            catalog = List.of();
-            renderPage();
+            if (sourceCatalog.isEmpty()) {
+                catalog = List.of();
+                renderPage();
+            }
             statusLabel.setText(response.getMessage());
             return;
         }
         if (!(response.getData() instanceof ListProductsResponse payload)) {
-            catalog = List.of();
-            renderPage();
+            if (sourceCatalog.isEmpty()) {
+                catalog = List.of();
+                renderPage();
+            }
             statusLabel.setText("返回数据格式不正确");
             return;
         }
         catalog = payload.getProducts();
-        renderPage();
+        sourceCatalog = catalog;
+        applyLocalFilter();
     }
 
     private void renderPage() {
@@ -183,14 +239,14 @@ final class ProductCatalogPanel extends JPanel {
         int safePage = ShopCatalogPages.clampPage(pageIndex, catalog.size(), next.pageSize());
         if (next.equals(plan)
                 && safePage == renderedPage
-                && catalog.size() == renderedCount
+                && catalog == renderedCatalog
                 && grid.getComponentCount() == plan.pageSize()) {
             return;
         }
         plan = next;
         pageIndex = safePage;
         renderedPage = pageIndex;
-        renderedCount = catalog.size();
+        renderedCatalog = catalog;
 
         grid.removeAll();
         grid.setLayout(new GridLayout(plan.rows(), plan.columns(), ShopCatalogGrid.GAP, ShopCatalogGrid.GAP));

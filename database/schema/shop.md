@@ -12,9 +12,10 @@
 | `tblProductCategory` | 商品分类 | `categoryId` | `name` 唯一；`status` 停用代替物理删除 |
 | `tblProduct` | 商品 | `productId` | `priceFen>0`；`saleStatus` 为 `ON_SALE`/`OFF_SALE`；描述必填 |
 | `tblProductPhoto` | 商品照片 | `photoId` | 同一商品 1–9 张；本轮存在内存 DTO |
-| `tblCartItem` | 购物车行 | `cartItemId` | 同一 `userId+productId` 唯一；本轮未实现 |
-| `tblOrder` | 订单头 | `orderId` | 状态机见下；本轮未实现 |
-| `tblOrderItem` | 订单行 | `orderItemId` | 保存下单时名称与单价快照；本轮未实现 |
+| `tblCampusCard` | 虚拟校园卡 | `userId` | 演示：`student001` / `shopadmin` 各 100.00 元；本轮内存 |
+| `tblCartItem` | 购物车行 | `cartItemId` | 客户端本地；同一 `userId+productId` 唯一 |
+| `tblOrder` | 订单头 | `orderId` | `PAID` / `CANCELLED`；校园卡扣款；本轮内存 |
+| `tblOrderItem` | 订单行 | `orderItemId` | 保存下单时名称与单价快照；本轮内存 |
 
 ## 3. 字段字典
 
@@ -60,9 +61,18 @@
 正常：文具中性笔 3.50 元数量 120，含照片与描述；日常用品抽纸；食品矿泉水。  
 边界：下架「停售纪念本」「过期试吃饼干」，列表接口不得返回。  
 分类编号：1 文具、2 日常用品、3 食品。  
-上架：`SHOP.PUBLISH_PRODUCT` 需商店管理权，照片 1–9 张。
+上架：`SHOP.PUBLISH_PRODUCT` 需商店管理权，照片 1–9 张。  
+校园卡演示：`student001`、`shopadmin` 各 100.00 元。
 
-## 6. 待评审问题
+## 6. Socket 动作（校园卡支付端口）
+
+- `SHOP.GET_CAMPUS_CARD`：查询当前登录人虚拟校园卡。
+- `SHOP.RECHARGE_CAMPUS_CARD`：充值 10–100 元。
+- `SHOP.CREATE_ORDER`：仅 `CAMPUS_CARD`；余额不足返回 `SHOP_INSUFFICIENT_BALANCE`，文案「余额不足，请充值！」。
+- `SHOP.LIST_ORDERS` / `SHOP.CANCEL_ORDER`：我的订单与退款。
+- `SHOP.LIST_SALES`：商店管理员成交列表。
+
+## 7. 待评审问题
 
 - Access 驱动与事务能力待 ADR-0004。
-- 购物车与订单表待第二、三刀再细化状态流转。
+- 校园卡与订单仍为内存实现，尚未写入个人 `.accdb`。

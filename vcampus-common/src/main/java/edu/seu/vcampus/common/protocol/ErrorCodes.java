@@ -26,6 +26,9 @@ public final class ErrorCodes {
             "HOSPITAL_DOCTOR_APPLICATION_NOT_FOUND";
     public static final String HOSPITAL_DOCTOR_APPLICATION_CONFLICT =
             "HOSPITAL_DOCTOR_APPLICATION_CONFLICT";
+    public static final String LIBRARY_BORROW_RECORD_NOT_FOUND =
+            "LIBRARY_BORROW_RECORD_NOT_FOUND";
+    public static final String LIBRARY_ALREADY_RETURNED = "LIBRARY_ALREADY_RETURNED";
 
     private ErrorCodes() {
     }

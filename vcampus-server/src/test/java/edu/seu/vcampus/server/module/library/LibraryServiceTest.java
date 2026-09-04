@@ -143,6 +143,15 @@ class LibraryServiceTest {
         InMemoryBookRepository books = new InMemoryBookRepository();
         BorrowRecordRepository failingRecords = new BorrowRecordRepository() {
             @Override
+            public List<BorrowRecord> findByUserId(String userId) { return List.of(); }
+
+            @Override
+            public Optional<BorrowRecord> findById(String recordId) { return Optional.empty(); }
+
+            @Override
+            public void update(BorrowRecord record) { throw new UnsupportedOperationException(); }
+
+            @Override
             public List<BorrowRecord> findBorrowedByUserId(String userId) {
                 return List.of();
             }

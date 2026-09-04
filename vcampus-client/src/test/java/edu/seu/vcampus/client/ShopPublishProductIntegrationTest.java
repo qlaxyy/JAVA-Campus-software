@@ -78,6 +78,49 @@ class ShopPublishProductIntegrationTest {
         }
     }
 
+    @Test
+    void shopAdminCanUpdateProductAndReadListingLog() throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext admin = new ClientContext(new CampusClient("127.0.0.1", server.getPort()));
+            assertTrue(admin.login("shopadmin", "123456".toCharArray()).isSuccess());
+
+            Response updated = admin.send(
+                    ShopActions.UPDATE_PRODUCT,
+                    new edu.seu.vcampus.common.shop.UpdateProductRequest(
+                            8L,
+                            "矿泉水 550ml",
+                            "冰柜常温都有。上课带走方便，瓶身轻。",
+                            250,
+                            5));
+            assertTrue(updated.isSuccess());
+            ProductSummaryDto product = assertInstanceOf(ProductSummaryDto.class, updated.getData());
+            assertEquals(250, product.getPriceFen());
+            assertEquals(205, product.getStockQty());
+
+            Response listings = admin.send(ShopActions.LIST_LISTINGS, null);
+            edu.seu.vcampus.common.shop.ListListingsResponse payload = assertInstanceOf(
+                    edu.seu.vcampus.common.shop.ListListingsResponse.class, listings.getData());
+            assertTrue(payload.getRecords().size() >= 9);
+            assertEquals("调整", payload.getRecords().getFirst().getAction());
+        }
+    }
+
+    @Test
+    void studentCannotUpdateProduct() throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext student = new ClientContext(new CampusClient("127.0.0.1", server.getPort()));
+            assertTrue(student.login("student001", "123456".toCharArray()).isSuccess());
+            Response response = student.send(
+                    ShopActions.UPDATE_PRODUCT,
+                    new edu.seu.vcampus.common.shop.UpdateProductRequest(
+                            8L, "矿泉水 550ml", "描述", 200, 0));
+            assertFalse(response.isSuccess());
+            assertEquals(ErrorCodes.AUTH_FORBIDDEN, response.getCode());
+        }
+    }
+
     private static byte[] samplePhoto() throws Exception {
         BufferedImage image = new BufferedImage(80, 80, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = image.createGraphics();

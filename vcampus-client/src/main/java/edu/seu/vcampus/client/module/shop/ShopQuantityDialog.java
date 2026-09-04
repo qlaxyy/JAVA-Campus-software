@@ -23,6 +23,10 @@ final class ShopQuantityDialog {
     }
 
     static OptionalInt choose(Window owner, ProductSummaryDto product) {
+        return choose(owner, product, "下一步，去付款");
+    }
+
+    static OptionalInt choose(Window owner, ProductSummaryDto product, String confirmText) {
         int stock = Math.max(1, product.getStockQty());
         JDialog dialog = new JDialog(owner, "选择数量", JDialog.DEFAULT_MODALITY_TYPE);
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
@@ -54,7 +58,7 @@ final class ShopQuantityDialog {
         body.add(spinner);
 
         int[] chosen = {0};
-        JButton next = ShopPalette.accentButton("下一步，去付款");
+        JButton next = ShopPalette.accentButton(confirmText);
         next.addActionListener(event -> {
             chosen[0] = ((Number) spinner.getValue()).intValue();
             dialog.dispose();

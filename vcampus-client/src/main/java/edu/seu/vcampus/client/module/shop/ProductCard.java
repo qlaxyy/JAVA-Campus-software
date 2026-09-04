@@ -34,7 +34,11 @@ final class ProductCard extends JPanel {
     private final PhotoPane photo;
     private final OverlayPane overlay;
 
-    ProductCard(ProductSummaryDto product, Consumer<ProductSummaryDto> onAdd, int cellSize) {
+    ProductCard(
+            ProductSummaryDto product,
+            Consumer<ProductSummaryDto> onWant,
+            Consumer<ProductSummaryDto> onAddToCart,
+            int cellSize) {
         setLayout(new BorderLayout());
         setOpaque(false);
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -45,14 +49,14 @@ final class ProductCard extends JPanel {
 
         JLayeredPane layers = new JLayeredPane();
         PhotoPane photo = new PhotoPane(product);
-        OverlayPane overlay = new OverlayPane(product, onAdd);
+        OverlayPane overlay = new OverlayPane(product, onWant);
         layers.add(photo, JLayeredPane.DEFAULT_LAYER);
         layers.add(overlay, JLayeredPane.PALETTE_LAYER);
         add(layers, BorderLayout.CENTER);
         addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
-                openDetail(product, onAdd);
+                openDetail(product, onWant, onAddToCart);
             }
         });
         this.layers = layers;
@@ -70,9 +74,12 @@ final class ProductCard extends JPanel {
         overlay.setBounds(0, Math.max(0, height - overlayHeight), width, overlayHeight);
     }
 
-    private void openDetail(ProductSummaryDto product, Consumer<ProductSummaryDto> onAdd) {
+    private void openDetail(
+            ProductSummaryDto product,
+            Consumer<ProductSummaryDto> onWant,
+            Consumer<ProductSummaryDto> onAddToCart) {
         ProductDetailDialog dialog = new ProductDetailDialog(
-                SwingUtilities.getWindowAncestor(this), product, onAdd);
+                SwingUtilities.getWindowAncestor(this), product, onWant, onAddToCart);
         dialog.setVisible(true);
     }
 

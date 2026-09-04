@@ -54,7 +54,7 @@ final class InMemoryCourseSubstitutionRepository
 
         OfferingInfo firstOffering =
             new OfferingInfo(
-                2001L,
+                9001L,
                 "01",
                 List.of(
                     "赵老师"

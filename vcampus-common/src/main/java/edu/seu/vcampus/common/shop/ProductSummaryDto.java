@@ -117,6 +117,26 @@ public final class ProductSummaryDto implements Serializable {
         return saleStatus;
     }
 
+    /**
+     * Returns a copy with a different remaining quantity.
+     *
+     * @param stockQty remaining quantity
+     * @return updated catalog row
+     */
+    public ProductSummaryDto withStockQty(int stockQty) {
+        return new ProductSummaryDto(
+                productId,
+                categoryId,
+                categoryName,
+                name,
+                description,
+                sellerName,
+                priceFen,
+                stockQty,
+                saleStatus,
+                photos);
+    }
+
     /** @return product photos in display order */
     public List<byte[]> getPhotos() {
         return List.copyOf(photos);

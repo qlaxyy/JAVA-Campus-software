@@ -12,6 +12,7 @@ import javax.swing.SwingConstants;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.GridLayout;
 import java.awt.Window;
 import java.util.List;
 import java.util.function.Consumer;
@@ -70,31 +71,39 @@ final class ProductDetailDialog extends JDialog {
         title.setFont(new Font("SansSerif", Font.BOLD, 16));
         title.setForeground(ShopPalette.TEXT);
 
-        JLabel meta = new JLabel(product.getCategoryName()
-                + " · 数量 " + product.getStockQty()
-                + " · " + product.getSellerName());
-        meta.setForeground(ShopPalette.MUTED);
+        JLabel category = new JLabel("分类：" + product.getCategoryName());
+        category.setForeground(ShopPalette.MUTED);
+        JLabel quantity = new JLabel("数量：" + product.getStockQty());
+        quantity.setForeground(ShopPalette.MUTED);
+        JLabel seller = new JLabel("卖家：" + product.getSellerName());
+        seller.setForeground(ShopPalette.MUTED);
 
-        JLabel description = new JLabel("<html><body style='width:300px'>"
+        JPanel facts = new JPanel(new GridLayout(0, 1, 0, 4));
+        facts.setOpaque(false);
+        facts.add(category);
+        facts.add(quantity);
+        facts.add(seller);
+
+        JLabel description = new JLabel("<html><body style='width:300px'><b>描述</b><br>"
                 + escape(product.getDescription()).replace("\n", "<br>")
                 + "</body></html>");
         description.setForeground(ShopPalette.TEXT);
 
-        JButton want = ShopPalette.accentButton(product.getStockQty() > 0 ? "加入购物车" : "暂时缺货");
+        JButton want = ShopPalette.accentButton(product.getStockQty() > 0 ? "我想要" : "暂时缺货");
         want.setEnabled(product.getStockQty() > 0);
         want.addActionListener(event -> {
-            onAdd.accept(product);
             dispose();
+            onAdd.accept(product);
         });
 
         JPanel copy = new JPanel(new BorderLayout(0, 10));
         copy.setOpaque(false);
         copy.setBorder(BorderFactory.createEmptyBorder(16, 18, 16, 18));
-        JPanel north = new JPanel(new BorderLayout(0, 6));
+        JPanel north = new JPanel(new BorderLayout(0, 8));
         north.setOpaque(false);
         north.add(price, BorderLayout.NORTH);
         north.add(title, BorderLayout.CENTER);
-        north.add(meta, BorderLayout.SOUTH);
+        north.add(facts, BorderLayout.SOUTH);
         copy.add(north, BorderLayout.NORTH);
         copy.add(description, BorderLayout.CENTER);
         copy.add(want, BorderLayout.SOUTH);

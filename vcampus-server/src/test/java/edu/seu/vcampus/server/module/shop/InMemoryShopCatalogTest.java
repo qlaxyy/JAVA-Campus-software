@@ -56,4 +56,12 @@ class InMemoryShopCatalogTest {
         assertEquals("矿泉水 550ml", food.getFirst().getName());
         assertEquals("面包 1 个", food.get(1).getName());
     }
+
+    @Test
+    void decrementStockReducesQuantity() {
+        assertTrue(catalog.decrementStock(8, 3));
+        assertEquals(197, catalog.findById(8).orElseThrow().getStockQty());
+        catalog.incrementStock(8, 3);
+        assertEquals(200, catalog.findById(8).orElseThrow().getStockQty());
+    }
 }

@@ -2,10 +2,13 @@ package edu.seu.vcampus.client.module.shop;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.common.shop.ListOrdersResponse;
 import edu.seu.vcampus.common.shop.ListProductsRequest;
 import edu.seu.vcampus.common.shop.ListProductsResponse;
 import edu.seu.vcampus.common.shop.ProductSummaryDto;
 import edu.seu.vcampus.common.shop.ShopActions;
+import edu.seu.vcampus.common.shop.ShopOrderDto;
+import edu.seu.vcampus.common.shop.ShopOrderStatus;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -66,7 +69,7 @@ final class ShopAdminPanel extends JPanel {
         actions.setOpaque(false);
         actions.add(primaryAction("发布闲置", this::openPublish));
         actions.add(actionButton("刷新目录", this::reload));
-        actions.add(actionButton("调整库存", () -> notice("调整库存")));
+        actions.add(actionButton("成交订单", this::showSales));
         header.add(titles, BorderLayout.WEST);
         header.add(actions, BorderLayout.EAST);
         return header;
@@ -92,12 +95,41 @@ final class ShopAdminPanel extends JPanel {
         dialog.setVisible(true);
     }
 
-    private void notice(String feature) {
-        JOptionPane.showMessageDialog(
-                this,
-                feature + " 将在管理接口提交中接入。当前页面用于区分管理员工作台。",
-                "商家中心",
-                JOptionPane.INFORMATION_MESSAGE);
+    private void showSales() {
+        new SwingWorker<Response, Void>() {
+            @Override
+            protected Response doInBackground() throws Exception {
+                return context.send(ShopActions.LIST_SALES, null);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    Response response = get();
+                    if (!response.isSuccess() || !(response.getData() instanceof ListOrdersResponse payload)) {
+                        JOptionPane.showMessageDialog(ShopAdminPanel.this, response.getMessage(), "成交订单", JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+                    StringBuilder text = new StringBuilder();
+                    for (ShopOrderDto order : payload.getOrders()) {
+                        text.append(order.getOrderId())
+                                .append("  ")
+                                .append(order.getBuyerName())
+                                .append("  ")
+                                .append(order.getStatus() == ShopOrderStatus.PAID ? "已付款" : "已取消")
+                                .append("  ")
+                                .append(ShopMoney.yuan(order.getTotalFen()))
+                                .append('\n');
+                    }
+                    if (text.isEmpty()) {
+                        text.append("还没有成交订单。");
+                    }
+                    JOptionPane.showMessageDialog(ShopAdminPanel.this, text.toString(), "成交订单", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception exception) {
+                    JOptionPane.showMessageDialog(ShopAdminPanel.this, "无法连接服务器", "成交订单", JOptionPane.WARNING_MESSAGE);
+                }
+            }
+        }.execute();
     }
 
     private void reload() {

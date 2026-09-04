@@ -1,6 +1,7 @@
 package edu.seu.vcampus.server.module.library;
 
 import edu.seu.vcampus.common.library.BookBorrowRequest;
+import edu.seu.vcampus.common.library.BookReturnRequest;
 import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BookSearchResult;
 import edu.seu.vcampus.common.library.LibraryActions;
@@ -15,6 +16,7 @@ import edu.seu.vcampus.server.module.ServerModule;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.ArrayList;
 
 /** Server entry point owned by the library module. */
 public final class LibraryServerModule implements ServerModule {
@@ -43,6 +45,9 @@ public final class LibraryServerModule implements ServerModule {
         router.register(
                 LibraryActions.BORROW_BOOK,
                 request -> borrowBook(request, context));
+        router.register(LibraryActions.RETURN_BOOK, request -> returnBook(request, context));
+        router.register(LibraryActions.GET_BORROW_RECORDS,
+                request -> getBorrowRecords(request, context));
     }
 
     private Response searchBooks(Request request, ServerContext context) {
@@ -109,5 +114,40 @@ public final class LibraryServerModule implements ServerModule {
         InMemoryBorrowRecordRepository borrowRecordRepository =
                 new InMemoryBorrowRecordRepository();
         return new LibraryService(bookRepository, borrowRecordRepository);
+    }
+
+    private Response getBorrowRecords(Request request, ServerContext context) {
+        Optional<SessionInfo> session = context.sessions().findSession(request.getToken());
+        if (session.isEmpty()) {
+            return Response.failure(request.getRequestId(), ErrorCodes.AUTH_REQUIRED,
+                    "Please log in before viewing borrow records.");
+        }
+        if (request.getData() != null) {
+            return Response.failure(request.getRequestId(), ErrorCodes.COMMON_INVALID_REQUEST,
+                    "Personal borrow records do not accept a user identifier or filter payload.");
+        }
+        return Response.success(request, "Borrow records loaded.",
+                new ArrayList<>(service.getBorrowRecords(session.orElseThrow().getUserId())));
+    }
+
+    private Response returnBook(Request request, ServerContext context) {
+        Optional<SessionInfo> session = context.sessions().findSession(request.getToken());
+        if (session.isEmpty()) {
+            return Response.failure(request.getRequestId(), ErrorCodes.AUTH_REQUIRED,
+                    "Please log in before returning a library book.");
+        }
+        if (!(request.getData() instanceof BookReturnRequest returnRequest)) {
+            return Response.failure(request.getRequestId(), ErrorCodes.COMMON_INVALID_REQUEST,
+                    "Book-return data is invalid.");
+        }
+        try {
+            service.returnBook(session.orElseThrow().getUserId(), returnRequest);
+            return Response.success(request, "Book returned successfully.", null);
+        } catch (LibraryBusinessException exception) {
+            return Response.failure(request.getRequestId(), exception.code(), exception.getMessage());
+        } catch (IllegalArgumentException exception) {
+            return Response.failure(request.getRequestId(), ErrorCodes.COMMON_INVALID_ARGUMENT,
+                    exception.getMessage());
+        }
     }
 }

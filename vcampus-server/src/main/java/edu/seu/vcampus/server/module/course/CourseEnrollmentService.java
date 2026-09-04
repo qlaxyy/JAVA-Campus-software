@@ -187,7 +187,108 @@ final class CourseEnrollmentService {
         return CourseDropResult.success(
             "退课成功。");
     }
+    /**
+     * 教务老师查询指定学生的全部已选课程。
+     *
+     * 管理员不受学生退课时间限制，
+     * 所以返回的课程全部允许退课。
+     */
+    List<EnrollmentInfo> listAdminEnrollments(
+        String studentId) {
 
+        if (studentId == null
+            || studentId.isBlank()) {
+
+            return List.of();
+        }
+
+        List<CourseEnrollmentRecord> records =
+            enrollmentRepository
+                .findSelectedEnrollments(
+                    studentId.trim());
+
+        List<EnrollmentInfo> result =
+            new ArrayList<>();
+
+        for (CourseEnrollmentRecord record
+            : records) {
+
+            CourseAndOffering resolved =
+                resolveCourseAndOffering(
+                    record);
+
+            if (resolved == null) {
+
+                continue;
+            }
+
+            CourseInfo course =
+                resolved.course();
+
+            OfferingInfo offering =
+                resolved.offering();
+
+            result.add(
+                new EnrollmentInfo(
+                    record.enrollmentId(),
+                    offering.getOfferingId(),
+                    course.getCourseCode(),
+                    course.getCourseName(),
+                    offering.getClassNo(),
+                    offering.getTeacherNames(),
+                    offering.getSchedules(),
+                    offering.getLocationName(),
+                    course.getCredits(),
+                    course.getCourseType(),
+                    true,
+                    null));
+        }
+
+        return result;
+    }
+
+    /**
+     * 教务老师强制退课。
+     *
+     * 不检查选课批次状态和学生退课时间。
+     */
+    synchronized CourseDropResult forceDropCourse(
+        String studentId,
+        long enrollmentId) {
+
+        if (studentId == null
+            || studentId.isBlank()) {
+
+            return CourseDropResult.failure(
+                "学生学号不能为空。");
+        }
+
+        CourseEnrollmentRecord record =
+            enrollmentRepository
+                .findSelectedEnrollment(
+                    studentId.trim(),
+                    enrollmentId);
+
+        if (record == null) {
+
+            return CourseDropResult.failure(
+                "选课记录不存在。");
+        }
+
+        boolean dropped =
+            enrollmentRepository.drop(
+                studentId.trim(),
+                enrollmentId);
+
+        if (!dropped) {
+
+            return CourseDropResult.failure(
+                "强制退课失败。");
+        }
+
+        return CourseDropResult.success(
+            "强制退课成功。");
+    }
     /**
      * 根据选课记录解析课程。
      *

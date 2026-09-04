@@ -22,7 +22,8 @@ import java.util.Set;
  * 4. 通选课程
  */
 final class CourseSelectionService {
-
+    private CourseOfferingAdministrationService
+        offeringAdministrationService;
     private final CourseBatchService
         batchService;
 
@@ -85,7 +86,16 @@ final class CourseSelectionService {
             Objects.requireNonNull(
                 historyRepository);
     }
+    /**
+     * 接入教务教学班设置。
+     */
+    void setOfferingAdministrationService(
+        CourseOfferingAdministrationService service) {
 
+        this.offeringAdministrationService =
+            Objects.requireNonNull(
+                service);
+    }
     /**
      * 选择教学班。
      */
@@ -344,6 +354,39 @@ final class CourseSelectionService {
 
         /*
          * =========================
+         * 应用教务设置并进行强制校验
+         * =========================
+         *
+         * 必须放在体育课和通选课重新确定
+         * targetOffering 之后，否则设置结果
+         * 会被 visibleOffering 覆盖。
+         */
+        /*
+         * 体育课和通选课可能会重新赋值 targetOffering，
+         * 因此教务设置必须在它们之后应用。
+         */
+        if (offeringAdministrationService
+            == null) {
+
+            return CourseSelectionResult.failure(
+                "教学班设置服务未初始化。");
+        }
+
+        targetOffering =
+            offeringAdministrationService
+                .applyStudentSettings(
+                    batchId,
+                    targetOffering);
+
+        if ("OFFERING_CLOSED".equals(
+            targetOffering
+                .getAvailabilityStatus())) {
+
+            return CourseSelectionResult.failure(
+                "当前教学班已关闭，不可选课。");
+        }
+        /*
+         * =========================
          * 7. 普通课程历史修读资格
          * =========================
          *
@@ -526,7 +569,173 @@ final class CourseSelectionService {
         return CourseSelectionResult.success(
             "选课成功。");
     }
+    /**
+     * 教务老师为指定学生强制选课。
+     *
+     * 强制选课不检查：
+     *
+     * - 选课批次是否开放
+     * - 课程容量
+     * - 时间冲突
+     * - 体育课性别限制
+     * - 历史修读及重修条件
+     *
+     * 但课程、教学班和批次必须真实存在，
+     * 并且不能重复选择同一门课程。
+     */
+    /**
+     * 教务端查询指定批次的全部课程和教学班。
+     */
+    List<CourseInfo> listAllCoursesForAdmin(
+        long batchId) {
 
+        if (batchService.findBatch(
+            batchId) == null) {
+
+            return List.of();
+        }
+
+        List<CourseInfo> courses =
+            new ArrayList<>();
+
+        courses.addAll(
+            planRepository.findPlanCourses(
+                batchId));
+
+        courses.addAll(
+            substitutionRepository
+                .findSubstituteCourses(
+                    batchId));
+
+        courses.addAll(
+            peCourseService.findRawCourses(
+                batchId));
+
+        courses.addAll(
+            generalCourseService.findRawCourses(
+                batchId));
+
+        return List.copyOf(
+            courses);
+    }
+    synchronized CourseSelectionResult forceSelectCourse(
+        String studentId,
+        long batchId,
+        long offeringId) {
+
+        if (studentId == null
+            || studentId.isBlank()) {
+
+            return CourseSelectionResult.failure(
+                "学生学号不能为空。");
+        }
+
+        String cleanStudentId =
+            studentId.trim();
+
+        SelectionBatchInfo batch =
+            batchService.findBatch(
+                batchId);
+
+        if (batch == null) {
+
+            return CourseSelectionResult.failure(
+                "选课批次不存在。");
+        }
+
+        /*
+         * 汇总该批次的全部课程。
+         */
+        List<CourseInfo> courses =
+            new ArrayList<>();
+
+        courses.addAll(
+            planRepository.findPlanCourses(
+                batchId));
+
+        courses.addAll(
+            substitutionRepository
+                .findSubstituteCourses(
+                    batchId));
+
+        courses.addAll(
+            peCourseService.findRawCourses(
+                batchId));
+
+        courses.addAll(
+            generalCourseService.findRawCourses(
+                batchId));
+
+        /*
+         * 查找目标课程和教学班。
+         */
+        CourseInfo targetCourse =
+            null;
+
+        OfferingInfo targetOffering =
+            null;
+
+        for (CourseInfo course
+            : courses) {
+
+            for (OfferingInfo offering
+                : course.getOfferings()) {
+
+                if (offering.getOfferingId()
+                    == offeringId) {
+
+                    targetCourse =
+                        course;
+
+                    targetOffering =
+                        offering;
+
+                    break;
+                }
+            }
+
+            if (targetOffering != null) {
+
+                break;
+            }
+        }
+
+        if (targetCourse == null
+            || targetOffering == null) {
+
+            return CourseSelectionResult.failure(
+                "课程或教学班不存在。");
+        }
+
+        /*
+         * 即使是强制选课，也不能重复选择
+         * 同一门课程的两个教学班。
+         */
+        for (OfferingInfo offering
+            : targetCourse.getOfferings()) {
+
+            if (enrollmentRepository
+                .isOfferingSelected(
+                    cleanStudentId,
+                    offering.getOfferingId())) {
+
+                return CourseSelectionResult.failure(
+                    "该学生已经选择了这门课程。");
+            }
+        }
+
+        /*
+         * 学号作为课程模块内部的学生标识。
+         */
+        enrollmentRepository.select(
+            cleanStudentId,
+            cleanStudentId,
+            batchId,
+            offeringId);
+
+        return CourseSelectionResult.success(
+            "强制选课成功。");
+    }
     /**
      * 在课程中找到教学班。
      */

@@ -35,7 +35,7 @@ class LibraryServerModuleTest {
     @BeforeEach
     void setUp() {
         SessionInfo session = new SessionInfo(
-                TOKEN, "U-001", "student001", "演示学生", Role.USER);
+                TOKEN, "U-001", "20260001", "演示学生", Role.USER);
         ServerContext context = new ServerContext(token ->
                 TOKEN.equals(token) ? Optional.of(session) : Optional.empty());
         books = new InMemoryBookRepository();

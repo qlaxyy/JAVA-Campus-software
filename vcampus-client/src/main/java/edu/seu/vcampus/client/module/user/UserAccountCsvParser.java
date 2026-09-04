@@ -16,7 +16,7 @@ import java.util.Set;
 /** Reads the documented UTF-8 account-import CSV format. */
 final class UserAccountCsvParser {
 
-    private static final String USERNAME_HEADER = "username";
+    private static final String USERNAME_HEADER = "campusCardNumber";
     private static final String DISPLAY_NAME_HEADER = "displayName";
 
     private UserAccountCsvParser() {
@@ -54,7 +54,7 @@ final class UserAccountCsvParser {
                 || !USERNAME_HEADER.equalsIgnoreCase(fields.get(0).trim())
                 || !DISPLAY_NAME_HEADER.equalsIgnoreCase(fields.get(1).trim())) {
             throw new IllegalArgumentException(
-                    "CSV 第一行必须是 username,displayName。");
+                    "CSV 第一行必须是 campusCardNumber,displayName。");
         }
     }
 

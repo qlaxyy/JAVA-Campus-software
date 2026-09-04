@@ -9,20 +9,18 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * In-memory virtual campus cards. Demo wallets for student001 and shopadmin start at 100 yuan.
+ * In-memory virtual campus-card wallets. The login campus-card number is reused as card number.
  */
 final class InMemoryCampusCardStore {
 
     static final int DEMO_BALANCE_FEN = 10_000;
 
     private final Map<String, CampusCardView> cards = new HashMap<>();
-    private int nextCardSeq = 3;
-
     InMemoryCampusCardStore() {
         cards.put("U-STUDENT-001", new CampusCardView(
-                "U-STUDENT-001", "student001", "6232 0001 0001", DEMO_BALANCE_FEN));
+                "U-STUDENT-001", "20260001", "20260001", DEMO_BALANCE_FEN));
         cards.put("U-SHOP-ADMIN-001", new CampusCardView(
-                "U-SHOP-ADMIN-001", "shopadmin", "6232 0001 0002", DEMO_BALANCE_FEN));
+                "U-SHOP-ADMIN-001", "20260007", "20260007", DEMO_BALANCE_FEN));
     }
 
     synchronized CampusCardView view(SessionInfo session) {
@@ -34,7 +32,7 @@ final class InMemoryCampusCardStore {
         CampusCardView created = new CampusCardView(
                 session.getUserId(),
                 session.getUsername(),
-                "6232 0001 " + String.format("%04d", nextCardSeq++),
+                session.getUsername(),
                 0);
         cards.put(session.getUserId(), created);
         return created;

@@ -30,7 +30,7 @@ class LibrarySearchIntegrationTest {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
-            Response login = context.login("student001", "123456".toCharArray());
+            Response login = context.login("20260001", "123456".toCharArray());
             assertTrue(login.isSuccess());
 
             Response search = context.send(
@@ -49,7 +49,7 @@ class LibrarySearchIntegrationTest {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(context.login("student001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
 
             Response borrow = context.send(
                     LibraryActions.BORROW_BOOK,
@@ -70,8 +70,8 @@ class LibrarySearchIntegrationTest {
     void borrowQueryReturnAndHistorySurviveSocketSerialization() throws Exception {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
-            ClientContext context = login(server, "student001");
-            ClientContext otherUser = login(server, "teacher001");
+            ClientContext context = login(server, "20260001");
+            ClientContext otherUser = login(server, "20260002");
             assertTrue(context.send(LibraryActions.BORROW_BOOK, new BookBorrowRequest("B001")).isSuccess());
             Response query = context.send(LibraryActions.GET_BORROW_RECORDS, null);
             assertTrue(query.isSuccess());

@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 final class UserAccountTableModel extends AbstractTableModel {
 
     private static final String[] COLUMNS = {
-        "账户名", "显示名称", "状态", "全局角色", "管理范围"
+        "一卡通号", "姓名（显示名称）", "状态", "全局角色", "管理范围"
     };
     private final List<UserAccountView> accounts = new ArrayList<>();
 

@@ -31,7 +31,7 @@ class ShopPublishProductIntegrationTest {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
             ClientContext admin = new ClientContext(new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(admin.login("shopadmin", "123456".toCharArray()).isSuccess());
+            assertTrue(admin.login("20260007", "123456".toCharArray()).isSuccess());
 
             Response published = admin.send(
                     ShopActions.PUBLISH_PRODUCT,
@@ -48,7 +48,7 @@ class ShopPublishProductIntegrationTest {
             assertEquals("按键灵敏，适合期末带去考场。", created.getDescription());
 
             ClientContext student = new ClientContext(new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(student.login("student001", "123456".toCharArray()).isSuccess());
+            assertTrue(student.login("20260001", "123456".toCharArray()).isSuccess());
             Response listed = student.send(ShopActions.LIST_PRODUCTS, ListProductsRequest.allOnSale());
             ListProductsResponse payload = assertInstanceOf(ListProductsResponse.class, listed.getData());
             assertEquals(9, payload.getProducts().size());
@@ -61,7 +61,7 @@ class ShopPublishProductIntegrationTest {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
             ClientContext student = new ClientContext(new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(student.login("student001", "123456".toCharArray()).isSuccess());
+            assertTrue(student.login("20260001", "123456".toCharArray()).isSuccess());
 
             Response response = student.send(
                     ShopActions.PUBLISH_PRODUCT,

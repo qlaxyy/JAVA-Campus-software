@@ -55,10 +55,10 @@ final class PublishProductDialog extends JDialog {
     private final JTextField priceField = new JTextField();
     private final JSpinner quantitySpinner = new JSpinner(new SpinnerNumberModel(1, 1, 9999, 1));
     private final JLabel statusLabel = new JLabel("至少 1 张照片，最多 9 张");
-    private final JButton publishButton = ShopPalette.accentButton("确认发布");
+    private final JButton publishButton = ShopPalette.accentButton("确认上架");
 
     PublishProductDialog(Window owner, ClientContext context, Runnable onPublished) {
-        super(owner, "发布闲置", ModalityType.DOCUMENT_MODAL);
+        super(owner, "上架商品", ModalityType.DOCUMENT_MODAL);
         this.context = context;
         this.onPublished = onPublished;
         setLayout(new BorderLayout());
@@ -142,12 +142,12 @@ final class PublishProductDialog extends JDialog {
             try {
                 byte[] compressed = ShopPhotoSupport.compressFile(file);
                 if (compressed.length > ProductSummaryDto.MAX_PHOTO_BYTES) {
-                    JOptionPane.showMessageDialog(this, "图片过大：" + file.getName(), "发布闲置", JOptionPane.WARNING_MESSAGE);
+                    JOptionPane.showMessageDialog(this, "图片过大：" + file.getName(), "上架商品", JOptionPane.WARNING_MESSAGE);
                     continue;
                 }
                 photos.add(compressed);
             } catch (Exception exception) {
-                JOptionPane.showMessageDialog(this, "无法使用图片：" + file.getName(), "发布闲置", JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(this, "无法使用图片：" + file.getName(), "上架商品", JOptionPane.WARNING_MESSAGE);
             }
         }
         refreshPhotoStrip();

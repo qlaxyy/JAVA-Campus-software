@@ -124,6 +124,19 @@ public final class ProductSummaryDto implements Serializable {
      * @return updated catalog row
      */
     public ProductSummaryDto withStockQty(int stockQty) {
+        return withCatalog(name, description, priceFen, stockQty);
+    }
+
+    /**
+     * Returns a copy with edited merchant fields.
+     *
+     * @param name product title
+     * @param description seller copy
+     * @param priceFen unit price
+     * @param stockQty remaining quantity
+     * @return updated catalog row
+     */
+    public ProductSummaryDto withCatalog(String name, String description, int priceFen, int stockQty) {
         return new ProductSummaryDto(
                 productId,
                 categoryId,

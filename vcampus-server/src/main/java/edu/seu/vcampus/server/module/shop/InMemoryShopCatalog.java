@@ -1,11 +1,15 @@
 package edu.seu.vcampus.server.module.shop;
 
+import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.shop.ListProductsRequest;
 import edu.seu.vcampus.common.shop.ProductSaleStatus;
 import edu.seu.vcampus.common.shop.ProductSummaryDto;
 import edu.seu.vcampus.common.shop.PublishProductRequest;
+import edu.seu.vcampus.common.shop.ShopListingRecordDto;
 import edu.seu.vcampus.common.shop.ShopCategories;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -17,9 +21,30 @@ import java.util.Objects;
 public final class InMemoryShopCatalog {
 
     private static final String CAMPUS_SELLER = "校园商店";
+    private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final List<ProductSummaryDto> products = new ArrayList<>(seed());
+    private final List<ShopListingRecordDto> listings = new ArrayList<>();
     private long nextId = 11L;
+    private long nextListingId = 1L;
+
+    public InMemoryShopCatalog() {
+        for (ProductSummaryDto product : products) {
+            if (product.getSaleStatus() == ProductSaleStatus.ON_SALE) {
+                appendListing(
+                        product,
+                        "上架",
+                        "上架 " + product.getName()
+                                + "，单价 "
+                                + formatYuan(product.getPriceFen())
+                                + "，库存 "
+                                + product.getStockQty()
+                                + " 件",
+                        CAMPUS_SELLER,
+                        "2026-08-20 09:00:00");
+            }
+        }
+    }
 
     /**
      * Lists on-sale products matching an optional name/description and category filter.
@@ -68,7 +93,75 @@ public final class InMemoryShopCatalog {
                 ProductSaleStatus.ON_SALE,
                 request.getPhotos());
         products.add(product);
+        appendListing(
+                product,
+                "上架",
+                "上架 " + product.getName()
+                        + "，单价 "
+                        + formatYuan(product.getPriceFen())
+                        + "，库存 "
+                        + product.getStockQty()
+                        + " 件",
+                sellerName,
+                LocalDateTime.now().format(CLOCK));
         return product;
+    }
+
+    /**
+     * Updates title, description, price and optional extra stock for an on-sale product.
+     *
+     * @param productId catalog key
+     * @param name title
+     * @param description seller copy
+     * @param priceFen unit price
+     * @param addStockQty extra units
+     * @param operatorName merchant display name
+     * @return updated row
+     */
+    public synchronized ProductSummaryDto update(
+            long productId,
+            String name,
+            String description,
+            int priceFen,
+            int addStockQty,
+            String operatorName) {
+        for (int index = 0; index < products.size(); index++) {
+            ProductSummaryDto current = products.get(index);
+            if (current.getProductId() != productId) {
+                continue;
+            }
+            if (current.getSaleStatus() != ProductSaleStatus.ON_SALE) {
+                throw new ShopBusinessException(
+                        ErrorCodes.SHOP_PRODUCT_NOT_FOUND,
+                        "只能修改在售商品。");
+            }
+            int stock = current.getStockQty() + Math.max(0, addStockQty);
+            ProductSummaryDto updated = current.withCatalog(name, description, priceFen, stock);
+            products.set(index, updated);
+            appendListing(
+                    updated,
+                    "调整",
+                    changeDetail(current, updated, addStockQty),
+                    operatorName,
+                    LocalDateTime.now().format(CLOCK));
+            return updated;
+        }
+        throw new ShopBusinessException(
+                ErrorCodes.SHOP_PRODUCT_NOT_FOUND,
+                "商品不存在。");
+    }
+
+    /**
+     * Lists merchant listing records, newest first.
+     *
+     * @return listing log
+     */
+    public synchronized List<ShopListingRecordDto> listListings() {
+        List<ShopListingRecordDto> newestFirst = new ArrayList<>();
+        for (int index = listings.size() - 1; index >= 0; index--) {
+            newestFirst.add(listings.get(index));
+        }
+        return List.copyOf(newestFirst);
     }
 
     /**
@@ -192,5 +285,48 @@ public final class InMemoryShopCatalog {
                 stock,
                 ProductSaleStatus.OFF_SALE,
                 ShopDemoPhotos.forProduct(category, name));
+    }
+
+    private void appendListing(
+            ProductSummaryDto product,
+            String action,
+            String detail,
+            String operatorName,
+            String createdAt) {
+        listings.add(new ShopListingRecordDto(
+                nextListingId++,
+                product.getProductId(),
+                product.getName(),
+                action,
+                detail,
+                operatorName,
+                createdAt));
+    }
+
+    private static String changeDetail(
+            ProductSummaryDto before,
+            ProductSummaryDto after,
+            int addStockQty) {
+        List<String> parts = new ArrayList<>();
+        if (before.getPriceFen() != after.getPriceFen()) {
+            parts.add("价格 " + formatYuan(before.getPriceFen()) + " → " + formatYuan(after.getPriceFen()));
+        }
+        if (addStockQty > 0) {
+            parts.add("补货 +" + addStockQty + "，库存现为 " + after.getStockQty());
+        }
+        if (!before.getName().equals(after.getName())) {
+            parts.add("标题改为「" + after.getName() + "」");
+        }
+        if (!before.getDescription().equals(after.getDescription())) {
+            parts.add("已更新描述");
+        }
+        if (parts.isEmpty()) {
+            return "保存了商品资料，内容未变化";
+        }
+        return String.join("；", parts);
+    }
+
+    private static String formatYuan(int fen) {
+        return "¥" + String.format("%.2f", fen / 100.0);
     }
 }

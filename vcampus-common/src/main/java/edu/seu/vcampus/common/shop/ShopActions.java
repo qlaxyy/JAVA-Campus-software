@@ -18,6 +18,8 @@ public final class ShopActions {
     public static final String LIST_ORDERS = ActionNames.of(ModuleNames.SHOP, "LIST_ORDERS");
     public static final String CANCEL_ORDER = ActionNames.of(ModuleNames.SHOP, "CANCEL_ORDER");
     public static final String LIST_SALES = ActionNames.of(ModuleNames.SHOP, "LIST_SALES");
+    public static final String UPDATE_PRODUCT = ActionNames.of(ModuleNames.SHOP, "UPDATE_PRODUCT");
+    public static final String LIST_LISTINGS = ActionNames.of(ModuleNames.SHOP, "LIST_LISTINGS");
 
     private ShopActions() {
     }

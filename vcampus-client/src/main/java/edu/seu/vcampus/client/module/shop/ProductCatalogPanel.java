@@ -48,7 +48,8 @@ final class ProductCatalogPanel extends JPanel {
     };
 
     private final ClientContext context;
-    private final Consumer<ProductSummaryDto> onAdd;
+    private final Consumer<ProductSummaryDto> onWant;
+    private final Consumer<ProductSummaryDto> onAddToCart;
     private final JTextField keywordField = new JTextField(16);
     private final JComboBox<CategoryChoice> categoryBox = new JComboBox<>(CATEGORIES);
     private final JComboBox<DensityChoice> densityBox = new JComboBox<>(DENSITIES);
@@ -65,9 +66,13 @@ final class ProductCatalogPanel extends JPanel {
     private List<ProductSummaryDto> renderedCatalog = List.of();
     private int queryGeneration;
 
-    ProductCatalogPanel(ClientContext context, Consumer<ProductSummaryDto> onAdd) {
+    ProductCatalogPanel(
+            ClientContext context,
+            Consumer<ProductSummaryDto> onWant,
+            Consumer<ProductSummaryDto> onAddToCart) {
         this.context = context;
-        this.onAdd = onAdd;
+        this.onWant = onWant;
+        this.onAddToCart = onAddToCart;
         setLayout(new BorderLayout(0, 8));
         setBackground(ShopPalette.PAGE);
         setBorder(BorderFactory.createEmptyBorder(8, 8, 4, 8));
@@ -253,7 +258,7 @@ final class ProductCatalogPanel extends JPanel {
         grid.setPreferredSize(new Dimension(plan.gridWidth(), plan.gridHeight()));
         List<ProductSummaryDto> visible = ShopCatalogPages.slice(catalog, pageIndex, plan.pageSize());
         for (ProductSummaryDto product : visible) {
-            grid.add(new ProductCard(product, onAdd, plan.cellSize()));
+            grid.add(new ProductCard(product, onWant, onAddToCart, plan.cellSize()));
         }
         while (grid.getComponentCount() < plan.pageSize()) {
             JPanel empty = new JPanel();

@@ -6,7 +6,9 @@ import edu.seu.vcampus.common.protocol.Request;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.user.LoginRequest;
 import edu.seu.vcampus.common.user.BatchCreateUserAccountsRequest;
+import edu.seu.vcampus.common.user.ChangePasswordRequest;
 import edu.seu.vcampus.common.user.CreateUserAccountRequest;
+import edu.seu.vcampus.common.user.CreateGeneratedUserAccountRequest;
 import edu.seu.vcampus.common.user.ResetUserPasswordRequest;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.common.user.UpdateUserAccountRequest;
@@ -49,8 +51,12 @@ public final class UserServerModule implements ServerModule {
         router.register(UserActions.LOGIN, this::login);
         router.register(UserActions.LOGOUT, this::logout);
         router.register(UserActions.CURRENT_SESSION, this::currentSession);
+        router.register(UserActions.CHANGE_PASSWORD, this::changePassword);
         router.register(UserActions.ADMIN_LIST_ACCOUNTS, this::listAccounts);
         router.register(UserActions.ADMIN_CREATE_ACCOUNT, this::createAccount);
+        router.register(UserActions.ADMIN_PREVIEW_NEXT_ACCOUNT, this::previewNextAccount);
+        router.register(UserActions.ADMIN_CREATE_GENERATED_ACCOUNT,
+                this::createGeneratedAccount);
         router.register(UserActions.ADMIN_BATCH_CREATE_ACCOUNTS, this::createAccounts);
         router.register(UserActions.ADMIN_UPDATE_ACCOUNT, this::updateAccount);
         router.register(UserActions.ADMIN_UPDATE_STATUS, this::updateStatus);
@@ -85,6 +91,26 @@ public final class UserServerModule implements ServerModule {
                 .orElseGet(() -> authenticationRequired(request));
     }
 
+    private Response changePassword(Request request) {
+        if (!(request.getData() instanceof ChangePasswordRequest data)) {
+            return invalidPasswordRequest(request);
+        }
+        Optional<SessionInfo> session = authentication.findSession(request.getToken());
+        if (session.isEmpty()) {
+            return authenticationRequired(request);
+        }
+        if (!authentication.changePassword(
+                session.get().getUserId(),
+                data.getCurrentPasswordProof(),
+                data.getNewPasswordProof())) {
+            return Response.failure(
+                    request.getRequestId(),
+                    ErrorCodes.AUTH_INVALID_CREDENTIALS,
+                    "当前密码不正确。");
+        }
+        return Response.success(request, "密码修改成功，请重新登录。", null);
+    }
+
     private Response listAccounts(Request request) {
         Response denied = administrationFailure(request);
         if (denied != null) {
@@ -104,6 +130,29 @@ public final class UserServerModule implements ServerModule {
         }
         return executeAdministration(
                 request, "账号创建成功。", () -> administration.createAccount(data));
+    }
+
+    private Response previewNextAccount(Request request) {
+        Response denied = administrationFailure(request);
+        if (denied != null) {
+            return denied;
+        }
+        return executeAdministration(
+                request, "下一张一卡通号已生成。",
+                administration::previewNextAccountNumber);
+    }
+
+    private Response createGeneratedAccount(Request request) {
+        if (!(request.getData() instanceof CreateGeneratedUserAccountRequest data)) {
+            return invalidRequest(request);
+        }
+        Response denied = administrationFailure(request);
+        if (denied != null) {
+            return denied;
+        }
+        return executeAdministration(
+                request, "账号创建成功。",
+                () -> administration.createGeneratedAccount(data));
     }
 
     private Response createAccounts(Request request) {
@@ -192,6 +241,13 @@ public final class UserServerModule implements ServerModule {
                 request.getRequestId(),
                 ErrorCodes.COMMON_INVALID_REQUEST,
                 "账号管理请求数据无效。");
+    }
+
+    private Response invalidPasswordRequest(Request request) {
+        return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "修改密码请求数据无效。");
     }
 
     private Response authenticationRequired(Request request) {

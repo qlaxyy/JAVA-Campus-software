@@ -4,6 +4,7 @@ import edu.seu.vcampus.client.infrastructure.CampusClient;
 import edu.seu.vcampus.common.protocol.Request;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.user.LoginRequest;
+import edu.seu.vcampus.common.user.ChangePasswordRequest;
 import edu.seu.vcampus.common.user.PasswordProof;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.common.user.UserActions;
@@ -80,6 +81,26 @@ public final class ClientContext {
             return send(UserActions.LOGOUT, null);
         } finally {
             session.clear();
+        }
+    }
+
+    /** Changes the current account password and clears the invalidated local session. */
+    public Response changePassword(char[] currentPassword, char[] newPassword)
+            throws IOException {
+        SessionInfo current = session.current().orElseThrow(
+                () -> new IllegalStateException("No authenticated session."));
+        try {
+            ChangePasswordRequest request = new ChangePasswordRequest(
+                    PasswordProof.create(current.getUsername(), currentPassword),
+                    PasswordProof.create(current.getUsername(), newPassword));
+            Response response = send(UserActions.CHANGE_PASSWORD, request);
+            if (response.isSuccess()) {
+                session.clear();
+            }
+            return response;
+        } finally {
+            Arrays.fill(currentPassword, '\0');
+            Arrays.fill(newPassword, '\0');
         }
     }
 

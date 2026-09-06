@@ -63,7 +63,7 @@
 
 - `tblUser.username` 建唯一索引。
 - `tblUserAdminScope.userId + moduleCode` 建联合唯一索引。
-- `USER` 可以存在零到多条范围记录；`SUPER_ADMIN` 不写范围记录时也由角色隐式覆盖所有业务模块。
+- `USER` 只能存在零或一条范围记录，即一个普通账号最多管理一个子系统；`SUPER_ADMIN` 不依赖范围记录，由角色隐式覆盖所有业务模块。
 - 只有 `SUPER_ADMIN` 可以新增管理员、分配/撤销范围、修改角色、启停账号和重置他人密码。
 - 至少保留一个 `ACTIVE` 的 `SUPER_ADMIN`；禁止停用自己、删除自己或撤销最后一个启用超级管理员。
 - 管理员只能发起密码重置，不能查看或恢复原密码。
@@ -89,14 +89,17 @@
 
 | Action | 调用者 | 作用 |
 |---|---|---|
+| `USER.CHANGE_PASSWORD` | 任意已登录账号 | 校验当前密码后修改自己的密码，并清除该账号全部已有会话 |
 | `USER.ADMIN_LIST_ACCOUNTS` | `SUPER_ADMIN` | 按用户名、角色、状态查询账号 |
-| `USER.ADMIN_CREATE_ACCOUNT` | `SUPER_ADMIN` | 创建普通账号并设置初始管理范围 |
+| `USER.ADMIN_PREVIEW_NEXT_ACCOUNT` | `SUPER_ADMIN` | 预览按当年最大流水号加一得到的下一张一卡通号 |
+| `USER.ADMIN_CREATE_GENERATED_ACCOUNT` | `SUPER_ADMIN` | 由服务器重新计算并生成一卡通号，创建普通账号并设置 0–1 个管理范围 |
+| `USER.ADMIN_CREATE_ACCOUNT` | `SUPER_ADMIN` | 兼容旧客户端的指定一卡通号创建接口；新版界面不再调用 |
 | `USER.ADMIN_BATCH_CREATE_ACCOUNTS` | `SUPER_ADMIN` | 原子批量创建不含管理权限的普通账号，最多 1000 个 |
 | `USER.ADMIN_UPDATE_ACCOUNT` | `SUPER_ADMIN` | 修改显示名称和子系统管理范围 |
 | `USER.ADMIN_UPDATE_STATUS` | `SUPER_ADMIN` | 启用或停用账号，不物理删除 |
 | `USER.ADMIN_RESET_PASSWORD` | `SUPER_ADMIN` | 重置账号密码并清除该账号已有会话 |
 
-上述 Action 已通过 `UserRepository` 使用 Access。第一版不提供创建其他超级管理员或修改全局角色；Action 和 DTO 保持不变。
+上述 Action 已通过 `UserRepository` 使用 Access。创建和编辑普通账号时，客户端提示“选择 0–1 个权限”，服务器也会拒绝同时提交多个管理范围。第一版不提供创建其他超级管理员或修改全局角色。
 
 医院申请分为两类。关联已有校园账号时，医院在提交阶段通过内部 `AccountProvisioning` 精确查询一卡通号并锁定其 `userId`；找不到或已禁用时拒绝提交。新建外来医生时不接收医院填写的一卡通号，超级管理员批准后由用户模块以“当前年份 + 当年最大流水号加一”生成唯一一卡通号，以初始密码 `123456` 创建 `Role.USER` 账号并返回新 `userId`。禁止根据姓名或碰巧重复的输入自动复用账户。
 

@@ -4,6 +4,7 @@ import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.user.BatchCreateUserAccountsRequest;
 import edu.seu.vcampus.common.user.CreateUserAccountRequest;
+import edu.seu.vcampus.common.user.CreateGeneratedUserAccountRequest;
 import edu.seu.vcampus.common.user.PasswordProof;
 import edu.seu.vcampus.common.user.ResetUserPasswordRequest;
 import edu.seu.vcampus.common.user.UpdateUserStatusRequest;
@@ -28,6 +29,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingWorker;
+import javax.swing.SwingUtilities;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
@@ -125,22 +127,48 @@ public final class UserAdminPanel extends JPanel {
                 });
     }
     private void createAccount() {
-        UserAccountFormData form = UserAccountEditor.show(this, null);
+        runRequest(
+                "正在生成下一张一卡通号……",
+                () -> context.send(UserActions.ADMIN_PREVIEW_NEXT_ACCOUNT, null),
+                response -> {
+                    if (response.isSuccess() && response.getData() instanceof String username) {
+                        SwingUtilities.invokeLater(() -> showCreateAccountDialog(username));
+                    } else {
+                        showFailure(response);
+                    }
+                });
+    }
+
+    private void showCreateAccountDialog(String generatedUsername) {
+        UserAccountFormData form = UserAccountEditor.showForCreate(this, generatedUsername);
         if (form == null) {
             return;
         }
-        char[] password = "123456".toCharArray();
         try {
-            CreateUserAccountRequest request = new CreateUserAccountRequest(
-                    form.username(),
-                    form.displayName(),
-                    PasswordProof.create(form.username(), password),
-                    form.scopes());
-            runMutation(UserActions.ADMIN_CREATE_ACCOUNT, request, "正在创建账号……");
+            CreateGeneratedUserAccountRequest request =
+                    new CreateGeneratedUserAccountRequest(
+                            form.displayName(), form.scopes());
+            runRequest(
+                    "正在创建账号……",
+                    () -> context.send(UserActions.ADMIN_CREATE_GENERATED_ACCOUNT, request),
+                    response -> {
+                        if (response.isSuccess()
+                                && response.getData() instanceof UserAccountView created) {
+                            statusLabel.setText("账号创建成功，一卡通号："
+                                    + created.getUsername());
+                            JOptionPane.showMessageDialog(
+                                    this,
+                                    "账号创建成功\n一卡通号：" + created.getUsername()
+                                            + "\n初始密码：123456",
+                                    "新增账号",
+                                    JOptionPane.INFORMATION_MESSAGE);
+                            SwingUtilities.invokeLater(this::refreshAccounts);
+                        } else {
+                            showFailure(response);
+                        }
+                    });
         } catch (IllegalArgumentException exception) {
             showValidationError(exception.getMessage());
-        } finally {
-            Arrays.fill(password, '\0');
         }
     }
 

@@ -8,8 +8,10 @@ import edu.seu.vcampus.common.user.UserActions;
 import edu.seu.vcampus.common.user.AdminScope;
 import edu.seu.vcampus.common.user.BatchCreateUserAccountsRequest;
 import edu.seu.vcampus.common.user.CreateUserAccountRequest;
+import edu.seu.vcampus.common.user.CreateGeneratedUserAccountRequest;
 import edu.seu.vcampus.common.user.PasswordProof;
 import edu.seu.vcampus.common.user.UserAccountListResponse;
+import edu.seu.vcampus.common.user.UserAccountView;
 import edu.seu.vcampus.common.user.UpdateUserStatusRequest;
 import edu.seu.vcampus.common.user.UpdateUserAccountRequest;
 import edu.seu.vcampus.common.user.ResetUserPasswordRequest;
@@ -60,6 +62,52 @@ class UserAdministrationIntegrationTest {
             assertTrue(newUser.login("20261001", password()).isSuccess());
             assertEquals(Set.of(AdminScope.COURSE),
                     newUser.currentSession().orElseThrow().getAdminScopes());
+        }
+    }
+
+    @Test
+    void regularAccountCannotReceiveMoreThanOneSubsystemManagementScope() throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext administrator = client(server);
+            assertTrue(administrator.login("20260003", password()).isSuccess());
+
+            CreateUserAccountRequest request = new CreateUserAccountRequest(
+                    "20261009", "权限过多账号", proof("20261009"),
+                    Set.of(AdminScope.COURSE, AdminScope.LIBRARY));
+            Response response = administrator.send(
+                    UserActions.ADMIN_CREATE_ACCOUNT, request);
+
+            assertFalse(response.isSuccess());
+            assertEquals(ErrorCodes.COMMON_INVALID_REQUEST, response.getCode());
+            assertFalse(client(server).login("20261009", password()).isSuccess());
+        }
+    }
+
+    @Test
+    void superAdministratorPreviewsAndCreatesNextGeneratedAccountNumber()
+            throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext administrator = client(server);
+            assertTrue(administrator.login("20260003", password()).isSuccess());
+
+            Response preview = administrator.send(
+                    UserActions.ADMIN_PREVIEW_NEXT_ACCOUNT, null);
+            assertTrue(preview.isSuccess());
+            String suggested = assertInstanceOf(String.class, preview.getData());
+
+            Response created = administrator.send(
+                    UserActions.ADMIN_CREATE_GENERATED_ACCOUNT,
+                    new CreateGeneratedUserAccountRequest(
+                            "自动编号用户", Set.of(AdminScope.LIBRARY)));
+
+            assertTrue(created.isSuccess());
+            UserAccountView account = assertInstanceOf(
+                    UserAccountView.class, created.getData());
+            assertEquals(suggested, account.getUsername());
+            assertEquals(Set.of(AdminScope.LIBRARY), account.getAdminScopes());
+            assertTrue(client(server).login(account.getUsername(), password()).isSuccess());
         }
     }
 

@@ -581,7 +581,10 @@ classDiagram
 | `USER.LOGIN` | `null` | `LoginRequest` | `SessionInfo` | 验证账号并创建新会话。 |
 | `USER.CURRENT_SESSION` | 必填 | `null` | `SessionInfo` | 检查 token 是否仍有效。 |
 | `USER.LOGOUT` | 必填 | `null` | `null` | 删除服务器会话。 |
+| `USER.CHANGE_PASSWORD` | 必填 | `ChangePasswordRequest` | `null` | 修改当前账号密码，成功后清除该账号全部会话。 |
 | `USER.ADMIN_LIST_ACCOUNTS` | 必填 | `null` | `UserAccountListResponse` | 超级管理员查询账号。 |
+| `USER.ADMIN_PREVIEW_NEXT_ACCOUNT` | 必填 | `null` | `String` | 预览下一张自动生成的一卡通号。 |
+| `USER.ADMIN_CREATE_GENERATED_ACCOUNT` | 必填 | `CreateGeneratedUserAccountRequest` | `UserAccountView` | 由服务器生成一卡通号并创建普通账号。 |
 | `USER.ADMIN_CREATE_ACCOUNT` | 必填 | `CreateUserAccountRequest` | `UserAccountView` | 创建一个普通账号。 |
 | `USER.ADMIN_BATCH_CREATE_ACCOUNTS` | 必填 | `BatchCreateUserAccountsRequest` | `UserAccountListResponse` | 原子批量创建普通账号。 |
 | `USER.ADMIN_UPDATE_ACCOUNT` | 必填 | `UpdateUserAccountRequest` | `UserAccountView` | 修改显示名和管理范围。 |
@@ -606,6 +609,10 @@ classDiagram
 
 `PasswordProof.create()` 当前计算内容为领域标记、规范化用户名和密码的 SHA-256 摘要。它降低了原始密码进入请求对象的风险，但在没有 TLS 时仍可能被截获并重放，因此不能视为最终安全协议。
 
+`ChangePasswordRequest` 包含 `currentPasswordProof` 和 `newPasswordProof`。它不包含 `userId`：服务器必须通过请求 token 查询 `SessionInfo.userId`，从而保证普通用户只能修改自己的密码。两项证明均为 64 位小写十六进制 SHA-256 值；修改成功后客户端清除本地会话并返回登录页。
+
+单个新增账号时，客户端先调用 `USER.ADMIN_PREVIEW_NEXT_ACCOUNT`，把建议一卡通号显示在只读框中；确认创建时发送只包含姓名和管理范围的 `CreateGeneratedUserAccountRequest`。服务器再次读取当前年份已有一卡通号的最大四位流水号并加一，因而不按账号总数推算，也不依赖客户端预览值。批量导入仍使用文件中明确给出的一卡通号。
+
 ### 11.4 Response
 
 | 字段 | 类型 | 约束 | 说明 |
@@ -625,7 +632,7 @@ classDiagram
 | `username` | `String` | 一卡通号；字段名为兼容现有接口保留。 |
 | `displayName` | `String` | 界面显示名称，不作为权限依据。 |
 | `role` | `Role` | `USER` 或 `SUPER_ADMIN`。 |
-| `adminScopes` | `Set<AdminScope>` | 允许管理的业务模块集合。 |
+| `adminScopes` | `Set<AdminScope>` | 普通账号只能为 0–1 项；超级管理员由 `Role` 隐式拥有全部管理能力。 |
 
 token 已经是 `SessionInfo` 的字段。登录响应不是分别返回两份“SessionInfo 和 token”，而是 `Response.data` 返回一个包含 token 的 `SessionInfo`。
 

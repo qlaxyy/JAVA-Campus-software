@@ -106,7 +106,9 @@ Optional<SessionInfo> session = context.sessions()
 
 - `Role.USER`：普通账号。
 - `Role.SUPER_ADMIN`：可管理全系统的超级管理员。
-- `AdminScope`：账号可管理哪些子系统，例如 `HOSPITAL`、`COURSE`。
+- `AdminScope`：普通账号可管理的子系统；每个普通账号只能选择 0–1 个，例如 `HOSPITAL` 或 `COURSE`。
+
+`SUPER_ADMIN` 的全系统管理能力来自 `Role`，不受上述单个子系统限制。修改自己的密码时，客户端携带当前密码证明和新密码证明；服务器通过 token 确定被修改的账号，验证当前密码后保存新密码，并清除该账号的全部旧会话。
 
 模块内部再用 `SessionInfo.userId` 查询本模块数据。例如医院模式：
 

@@ -71,6 +71,42 @@ class AuthenticationIntegrationTest {
     }
 
     @Test
+    void userCanChangeOwnPasswordAndMustLoginAgain() throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext context = new ClientContext(
+                    new CampusClient("127.0.0.1", server.getPort()));
+            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
+
+            Response changed = context.changePassword(
+                    "123456".toCharArray(), "654321".toCharArray());
+
+            assertTrue(changed.isSuccess());
+            assertTrue(context.currentSession().isEmpty());
+            assertFalse(context.login("20260001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260001", "654321".toCharArray()).isSuccess());
+        }
+    }
+
+    @Test
+    void wrongCurrentPasswordDoesNotChangePasswordOrSession() throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext context = new ClientContext(
+                    new CampusClient("127.0.0.1", server.getPort()));
+            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
+
+            Response changed = context.changePassword(
+                    "wrong".toCharArray(), "654321".toCharArray());
+
+            assertFalse(changed.isSuccess());
+            assertEquals(ErrorCodes.AUTH_INVALID_CREDENTIALS, changed.getCode());
+            assertTrue(context.currentSession().isPresent());
+            assertTrue(context.send(UserActions.CURRENT_SESSION, null).isSuccess());
+        }
+    }
+
+    @Test
     void subsystemAdministratorReceivesServerAssignedScope() throws Exception {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();

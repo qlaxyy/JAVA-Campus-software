@@ -3,6 +3,7 @@ package edu.seu.vcampus.server.module.user;
 import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.user.BatchCreateUserAccountsRequest;
 import edu.seu.vcampus.common.user.CreateUserAccountRequest;
+import edu.seu.vcampus.common.user.CreateGeneratedUserAccountRequest;
 import edu.seu.vcampus.common.user.ResetUserPasswordRequest;
 import edu.seu.vcampus.common.user.Role;
 import edu.seu.vcampus.common.user.UpdateUserAccountRequest;
@@ -40,6 +41,7 @@ final class UserAdministrationService {
 
     synchronized UserAccountView createAccount(CreateUserAccountRequest request) {
         Objects.requireNonNull(request, "request must not be null");
+        requireAtMostOneScope(request.getAdminScopes());
         if (repository.findByUsername(request.getUsername()).isPresent()) {
             throw failure(ErrorCodes.USER_USERNAME_EXISTS, "该一卡通号已经存在。");
         }
@@ -49,6 +51,18 @@ final class UserAdministrationService {
                 request.getAdminScopes(), request.getPasswordProof(), true);
         repository.save(account);
         return account.toView();
+    }
+
+    String previewNextAccountNumber() {
+        return authentication.nextGeneratedUsername();
+    }
+
+    synchronized UserAccountView createGeneratedAccount(
+            CreateGeneratedUserAccountRequest request) {
+        Objects.requireNonNull(request, "request must not be null");
+        requireAtMostOneScope(request.getAdminScopes());
+        return authentication.createGeneratedRegularAccount(
+                request.getDisplayName(), request.getAdminScopes()).toView();
     }
 
     synchronized UserAccountListResponse createAccounts(
@@ -91,6 +105,9 @@ final class UserAdministrationService {
     synchronized UserAccountView updateAccount(UpdateUserAccountRequest request) {
         Objects.requireNonNull(request, "request must not be null");
         UserAccount current = requiredAccount(request.getUserId());
+        if (current.role() == Role.USER) {
+            requireAtMostOneScope(request.getAdminScopes());
+        }
         UserAccount updated = current.withProfile(
                 request.getDisplayName(), request.getAdminScopes());
         repository.save(updated);
@@ -144,6 +161,13 @@ final class UserAdministrationService {
 
     private static UserAdministrationException failure(String code, String message) {
         return new UserAdministrationException(code, message);
+    }
+
+    private static void requireAtMostOneScope(Set<?> scopes) {
+        if (scopes == null || scopes.size() > 1) {
+            throw failure(ErrorCodes.COMMON_INVALID_REQUEST,
+                    "普通账号只能选择 0–1 个子系统管理权限。");
+        }
     }
 
     private static String newUserId() {

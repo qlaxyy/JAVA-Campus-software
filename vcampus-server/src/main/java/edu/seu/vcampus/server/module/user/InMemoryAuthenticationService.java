@@ -88,6 +88,24 @@ public final class InMemoryAuthenticationService
         return token != null && sessions.remove(token) != null;
     }
 
+    /** Replaces an account password after verifying its current password. */
+    synchronized boolean changePassword(
+            String userId,
+            String currentPasswordProof,
+            String newPasswordProof) {
+        if (!isPasswordProof(currentPasswordProof) || !isPasswordProof(newPasswordProof)) {
+            return false;
+        }
+        UserAccount user = users.findById(userId).orElse(null);
+        if (user == null
+                || !proofMatches(user.passwordProof(), currentPasswordProof)) {
+            return false;
+        }
+        users.save(user.withPasswordProof(newPasswordProof));
+        invalidateUserSessions(userId);
+        return true;
+    }
+
     /** Invalidates every active session belonging to an account. */
     void invalidateUserSessions(String userId) {
         sessions.entrySet().removeIf(entry -> entry.getValue().getUserId().equals(userId));
@@ -112,6 +130,10 @@ public final class InMemoryAuthenticationService
 
     @Override
     public synchronized ProvisionedAccount createGeneratedRegularAccount(String displayName) {
+        return toProvisioned(createGeneratedRegularAccount(displayName, Set.of()));
+    }
+
+    synchronized String nextGeneratedUsername() {
         int year = Year.now().getValue();
         int maximumSequence = users.findAll().stream()
                 .map(UserAccount::username)
@@ -120,16 +142,29 @@ public final class InMemoryAuthenticationService
                 .mapToInt(CampusCardNumber::sequence)
                 .max()
                 .orElse(0);
+        if (maximumSequence >= CampusCardNumber.MAX_SEQUENCE) {
+            throw new IllegalStateException(
+                    "The campus-card sequence for " + year + " is exhausted.");
+        }
+        return CampusCardNumber.format(year, maximumSequence + 1);
+    }
+
+    synchronized UserAccount createGeneratedRegularAccount(
+            String displayName,
+            Set<edu.seu.vcampus.common.user.AdminScope> adminScopes) {
+        int year = Year.now().getValue();
+        int nextSequence = CampusCardNumber.sequence(nextGeneratedUsername());
         char[] password = "123456".toCharArray();
         try {
-            for (int sequence = maximumSequence + 1;
+            for (int sequence = nextSequence;
                  sequence <= CampusCardNumber.MAX_SEQUENCE;
                  sequence++) {
                 String username = CampusCardNumber.format(year, sequence);
                 CreateAccountInput input = new CreateAccountInput(
                         username,
                         displayName,
-                        PasswordProof.create(username, password));
+                        PasswordProof.create(username, password),
+                        adminScopes);
                 if (users.findByUsername(input.username()).isPresent()) {
                     continue;
                 }
@@ -138,11 +173,11 @@ public final class InMemoryAuthenticationService
                         input.username(),
                         input.displayName(),
                         Role.USER,
-                        Set.of(),
+                        input.adminScopes(),
                         input.passwordProof(),
                         true);
                 users.save(created);
-                return toProvisioned(created);
+                return created;
             }
             throw new IllegalStateException(
                     "The campus-card sequence for " + year + " is exhausted.");
@@ -159,14 +194,16 @@ public final class InMemoryAuthenticationService
     private record CreateAccountInput(
             String username,
             String displayName,
-            String passwordProof) {
+            String passwordProof,
+            Set<edu.seu.vcampus.common.user.AdminScope> adminScopes) {
         private CreateAccountInput {
             edu.seu.vcampus.common.user.CreateUserAccountRequest validated =
                     new edu.seu.vcampus.common.user.CreateUserAccountRequest(
-                            username, displayName, passwordProof, Set.of());
+                            username, displayName, passwordProof, adminScopes);
             username = validated.getUsername();
             displayName = validated.getDisplayName();
             passwordProof = validated.getPasswordProof();
+            adminScopes = validated.getAdminScopes();
         }
     }
 
@@ -180,5 +217,9 @@ public final class InMemoryAuthenticationService
         return MessageDigest.isEqual(
                 expected.getBytes(StandardCharsets.US_ASCII),
                 actual.getBytes(StandardCharsets.US_ASCII));
+    }
+
+    private static boolean isPasswordProof(String value) {
+        return value != null && value.matches("[0-9a-f]{64}");
     }
 }

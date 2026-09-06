@@ -100,6 +100,10 @@ final class ShopPalette {
         private final Color fill;
         private final int radius;
 
+        SurfacePanel() {
+            this(CARD, 18);
+        }
+
         SurfacePanel(Color fill, int radius) {
             this.fill = fill;
             this.radius = radius;

@@ -24,7 +24,11 @@ final class ProductDetailDialog extends JDialog {
 
     private int photoIndex;
 
-    ProductDetailDialog(Window owner, ProductSummaryDto product, Consumer<ProductSummaryDto> onAdd) {
+    ProductDetailDialog(
+            Window owner,
+            ProductSummaryDto product,
+            Consumer<ProductSummaryDto> onWant,
+            Consumer<ProductSummaryDto> onAddToCart) {
         super(owner, "商品详情", ModalityType.DOCUMENT_MODAL);
         setLayout(new BorderLayout());
         getContentPane().setBackground(ShopPalette.PAGE);
@@ -89,12 +93,23 @@ final class ProductDetailDialog extends JDialog {
                 + "</body></html>");
         description.setForeground(ShopPalette.TEXT);
 
+        JButton cart = ShopPalette.quietButton("加入购物车");
+        cart.setEnabled(product.getStockQty() > 0);
+        cart.addActionListener(event -> {
+            dispose();
+            onAddToCart.accept(product);
+        });
         JButton want = ShopPalette.accentButton(product.getStockQty() > 0 ? "我想要" : "暂时缺货");
         want.setEnabled(product.getStockQty() > 0);
         want.addActionListener(event -> {
             dispose();
-            onAdd.accept(product);
+            onWant.accept(product);
         });
+
+        JPanel actions = new JPanel(new GridLayout(1, 2, 8, 0));
+        actions.setOpaque(false);
+        actions.add(cart);
+        actions.add(want);
 
         JPanel copy = new JPanel(new BorderLayout(0, 10));
         copy.setOpaque(false);
@@ -106,7 +121,7 @@ final class ProductDetailDialog extends JDialog {
         north.add(facts, BorderLayout.SOUTH);
         copy.add(north, BorderLayout.NORTH);
         copy.add(description, BorderLayout.CENTER);
-        copy.add(want, BorderLayout.SOUTH);
+        copy.add(actions, BorderLayout.SOUTH);
 
         add(gallery, BorderLayout.NORTH);
         add(new JScrollPane(copy), BorderLayout.CENTER);

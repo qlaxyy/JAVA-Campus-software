@@ -1,5 +1,5 @@
 package edu.seu.vcampus.server.module.course;
-
+import edu.seu.vcampus.common.course.AdminUpdateOfferingRequest;
 import edu.seu.vcampus.common.course.BatchRequest;
 import edu.seu.vcampus.common.course.CourseActions;
 import edu.seu.vcampus.common.course.DropCourseRequest;
@@ -19,6 +19,14 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Objects;
 import edu.seu.vcampus.common.course.CourseSearchRequest;
+import edu.seu.vcampus.common.course.AdminForceDropCourseRequest;
+import edu.seu.vcampus.common.course.AdminForceSelectCourseRequest;
+import edu.seu.vcampus.common.course.AdminListStudentEnrollmentsRequest;
+import edu.seu.vcampus.common.course.CourseInfo;
+import java.util.List;
+import edu.seu.vcampus.common.course.AdminUpdateCourseRequest;
+import edu.seu.vcampus.common.course.AdminUpdateBatchRequest;
+
 /**
  * 选课模块服务器入口。
  */
@@ -30,7 +38,11 @@ public final class CourseServerModule
      */
     private final CourseBatchService
         batchService;
-
+    /**
+     * 教学班管理业务。
+     */
+    private final CourseOfferingAdministrationService
+        offeringAdministrationService;
     /**
      * 方案内课程业务。
      */
@@ -63,7 +75,11 @@ public final class CourseServerModule
      */
     private final CourseSelectionService
         selectionService;
-
+    /**
+     * 教务强制操作日志。
+     */
+    private final CourseAdminAuditService
+        adminAuditService;
     /**
      * 已选课程 / 退课业务。
      */
@@ -85,7 +101,9 @@ public final class CourseServerModule
          */
         Clock clock =
             Clock.systemDefaultZone();
-
+        this.adminAuditService =
+            new CourseAdminAuditService(
+                clock);
         /*
          * =========================
          * 2. 选课批次
@@ -152,6 +170,19 @@ public final class CourseServerModule
         CourseEnrollmentRepository
             enrollmentRepository =
             new InMemoryCourseEnrollmentRepository();
+        CourseOfferingSettingsRepository
+            offeringSettingsRepository =
+            new InMemoryCourseOfferingSettingsRepository();
+
+        this.offeringAdministrationService =
+            new CourseOfferingAdministrationService(
+                batchService,
+                planRepository,
+                substitutionRepository,
+                peCourseRepository,
+                generalCourseRepository,
+                enrollmentRepository,
+                offeringSettingsRepository);
 
         /*
          * =========================
@@ -287,6 +318,9 @@ public final class CourseServerModule
                 generalCourseService,
                 enrollmentRepository,
                 historyRepository);
+        this.selectionService
+            .setOfferingAdministrationService(
+                this.offeringAdministrationService);
         /*
          * =========================
          * 15. 已选课程 / 退课 Service
@@ -317,7 +351,9 @@ public final class CourseServerModule
         GeneralCourseService generalCourseService,
         CourseSelectionService selectionService,
         CourseEnrollmentService enrollmentService) {
-
+        this.adminAuditService =
+            new CourseAdminAuditService(
+                Clock.systemDefaultZone());
         this.batchService =
             Objects.requireNonNull(
                 batchService,
@@ -357,6 +393,33 @@ public final class CourseServerModule
             Objects.requireNonNull(
                 enrollmentService,
                 "enrollmentService must not be null");
+        CoursePlanRepository adminPlanRepository =
+            new InMemoryCoursePlanRepository();
+
+        CourseSubstitutionRepository
+            adminSubstitutionRepository =
+            new InMemoryCourseSubstitutionRepository();
+
+        PeCourseRepository adminPeRepository =
+            new InMemoryPeCourseRepository();
+
+        GeneralCourseRepository
+            adminGeneralRepository =
+            new InMemoryGeneralCourseRepository();
+
+        CourseEnrollmentRepository
+            adminEnrollmentRepository =
+            new InMemoryCourseEnrollmentRepository();
+
+        this.offeringAdministrationService =
+            new CourseOfferingAdministrationService(
+                this.batchService,
+                adminPlanRepository,
+                adminSubstitutionRepository,
+                adminPeRepository,
+                adminGeneralRepository,
+                adminEnrollmentRepository,
+                new InMemoryCourseOfferingSettingsRepository());
     }
 
     /**
@@ -367,7 +430,16 @@ public final class CourseServerModule
 
         return ModuleNames.COURSE;
     }
+    /**
+     * 课程模块统一使用登录账号作为学号。
+     */
+    private String studentId(
+        SessionInfo session) {
 
+        return session
+            .getUsername()
+            .trim();
+    }
     /**
      * 注册选课模块服务器 Action。
      */
@@ -375,7 +447,12 @@ public final class CourseServerModule
     public void registerHandlers(
         ActionRouter router,
         ServerContext context) {
-
+        router.register(
+            CourseActions.ADMIN_LIST_AUDIT_LOGS,
+            request ->
+                adminListAuditLogs(
+                    request,
+                    context));
         /*
          * =========================
          * 查询选课批次
@@ -399,7 +476,17 @@ public final class CourseServerModule
                 listPlanCourses(
                     request,
                     context));
-
+        /*
+         * =========================
+         * 教务修改选课批次
+         * =========================
+         */
+        router.register(
+            CourseActions.ADMIN_UPDATE_BATCH,
+            request ->
+                adminUpdateBatch(
+                    request,
+                    context));
         /*
          * =========================
          * 查询方案外课程
@@ -468,7 +555,28 @@ public final class CourseServerModule
                 listEnrollments(
                     request,
                     context));
-
+        /*
+         * =========================
+         * 教务查询全部教学班
+         * =========================
+         */
+        router.register(
+            CourseActions.ADMIN_LIST_OFFERINGS,
+            request ->
+                adminListOfferings(
+                    request,
+                    context));
+        /*
+         * =========================
+         * 教务修改课程基本信息
+         * =========================
+         */
+        router.register(
+            CourseActions.ADMIN_UPDATE_COURSE,
+            request ->
+                adminUpdateCourse(
+                    request,
+                    context));
         /*
          * =========================
          * 退课
@@ -480,8 +588,588 @@ public final class CourseServerModule
                 dropCourse(
                     request,
                     context));
+        /*
+         * =========================
+         * 教务查询学生已选课程
+         * =========================
+         */
+        router.register(
+            CourseActions.ADMIN_LIST_STUDENT_ENROLLMENTS,
+            request ->
+                adminListStudentEnrollments(
+                    request,
+                    context));
+
+        /*
+         * =========================
+         * 教务强制选课
+         * =========================
+         */
+        router.register(
+            CourseActions.ADMIN_FORCE_SELECT_COURSE,
+            request ->
+                adminForceSelectCourse(
+                    request,
+                    context));
+
+        /*
+         * =========================
+         * 教务强制退课
+         * =========================
+         */
+        router.register(
+            CourseActions.ADMIN_FORCE_DROP_COURSE,
+            request ->
+                adminForceDropCourse(
+                    request,
+                    context));
+
+        router.register(
+            CourseActions.ADMIN_UPDATE_OFFERING,
+            request ->
+                adminUpdateOffering(
+                    request,
+                    context));
+    }
+    /**
+     * 教务修改课程基本信息。
+     */
+    private Response adminUpdateCourse(
+        Request request,
+        ServerContext context) {
+
+        /*
+         * =========================
+         * 1. 登录检查
+         * =========================
+         */
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        /*
+         * =========================
+         * 2. 教务权限检查
+         * =========================
+         */
+        if (!session.canAdminister(
+            ModuleNames.COURSE)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "没有课程管理权限。");
+        }
+
+        /*
+         * =========================
+         * 3. 请求类型检查
+         * =========================
+         */
+        if (!(request.getData()
+            instanceof AdminUpdateCourseRequest
+            updateRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "课程修改请求格式错误。");
+        }
+
+        /*
+         * =========================
+         * 4. 修改课程
+         * =========================
+         */
+        CourseUpdateResult result =
+            offeringAdministrationService
+                .updateCourse(
+                    updateRequest.getBatchId(),
+                    updateRequest.getCourseId(),
+                    updateRequest.getCourseCode(),
+                    updateRequest.getCourseName(),
+                    updateRequest.getCredits(),
+                    updateRequest.getCourseType());
+
+        if (!result.success()) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                result.message());
+        }
+        /*
+         * 记录课程修改日志。
+         */
+        adminAuditService
+            .recordUpdateCourse(
+                session.getUsername(),
+                updateRequest.getBatchId(),
+                updateRequest.getCourseId(),
+                updateRequest.getCourseCode(),
+                updateRequest.getCourseName(),
+                updateRequest.getCredits(),
+                updateRequest.getCourseType(),
+                updateRequest.getReason());
+        /*
+         * =========================
+         * 5. 返回修改后的课程
+         * =========================
+         */
+        return Response.success(
+            request,
+            result.message(),
+            result.course());
+    }
+    /**
+     * 教务查询指定学生的已选课程。
+     */
+    private Response adminListStudentEnrollments(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!session.canAdminister(
+            ModuleNames.COURSE)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "没有选课管理权限。");
+        }
+
+        if (!(request.getData()
+            instanceof AdminListStudentEnrollmentsRequest
+            adminRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "学生选课查询请求无效。");
+        }
+
+        return Response.success(
+            request,
+            "学生已选课程加载成功。",
+            new ArrayList<>(
+                enrollmentService
+                    .listAdminEnrollments(
+                        adminRequest
+                            .getStudentId())));
+    }
+    /**
+     * 教务修改选课批次。
+     */
+    private Response adminUpdateBatch(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!session.canAdminister(
+            ModuleNames.COURSE)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "没有选课批次管理权限。");
+        }
+
+        if (!(request.getData()
+            instanceof AdminUpdateBatchRequest
+            updateRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "选课批次修改请求格式错误。");
+        }
+
+        BatchUpdateResult result =
+            batchService.updateBatch(
+                updateRequest.getBatchId(),
+                updateRequest.getSemester(),
+                updateRequest.getBatchName(),
+                updateRequest.getBatchType(),
+                updateRequest.getStartTime(),
+                updateRequest.getEndTime(),
+                updateRequest.getStatus(),
+                updateRequest.isAllowSelect(),
+                updateRequest.isAllowDrop());
+
+        if (!result.success()) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                result.message());
+        }
+        adminAuditService
+            .recordUpdateBatch(
+                session.getUsername(),
+                updateRequest.getBatchId(),
+                updateRequest.getSemester(),
+                updateRequest.getBatchName(),
+                updateRequest.getBatchType(),
+                updateRequest.getStartTime(),
+                updateRequest.getEndTime(),
+                updateRequest.getStatus(),
+                updateRequest.isAllowSelect(),
+                updateRequest.isAllowDrop(),
+                updateRequest.getReason());
+        return Response.success(
+            request,
+            result.message(),
+            result.batch());
+    }
+    /**
+     * 将教务修改的课程信息和教学班设置
+     * 应用到学生端课程列表。
+     */
+    private ArrayList<CourseInfo>
+    applyStudentCourseSettings(
+        long batchId,
+        List<CourseInfo> courses) {
+
+        return new ArrayList<>(
+            courses.stream()
+                .map(course ->
+                    offeringAdministrationService
+                        .applyStudentSettings(
+                            batchId,
+                            course))
+                .toList());
+    }
+    /**
+     * 教务查询指定批次的全部教学班。
+     */
+    private Response adminListOfferings(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!session.canAdminister(
+            ModuleNames.COURSE)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "没有选课管理权限。");
+        }
+
+        if (!(request.getData()
+            instanceof BatchRequest batchRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "教学班查询请求无效。");
+        }
+
+        if (batchService.findBatch(
+            batchRequest.getBatchId()) == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "选课批次不存在。");
+        }
+
+        return Response.success(
+            request,
+            "教学班列表加载成功。",
+            new ArrayList<>(offeringAdministrationService
+                .listCourses(
+                    batchRequest.getBatchId()))
+               );
     }
 
+    /**
+     * 教务修改教学班容量和开放状态。
+     */
+    private Response adminUpdateOffering(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!session.canAdminister(
+            ModuleNames.COURSE)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "没有选课管理权限。");
+        }
+
+        if (!(request.getData()
+            instanceof AdminUpdateOfferingRequest
+            adminRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "教学班修改请求无效。");
+        }
+
+        CourseOfferingUpdateResult result =
+            offeringAdministrationService
+                .updateOffering(
+                    adminRequest.getBatchId(),
+                    adminRequest.getOfferingId(),
+                    adminRequest.getCapacity(),
+                    adminRequest.isOpen());
+
+        if (!result.success()) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                result.message());
+        }
+        adminAuditService.recordUpdateOffering(
+            session.getUsername(),
+            adminRequest.getBatchId(),
+            adminRequest.getOfferingId(),
+            adminRequest.getCapacity(),
+            adminRequest.isOpen(),
+            adminRequest.getReason());
+        return Response.success(
+            request,
+            result.message(),
+            null);
+    }
+    /**
+     * 教务为指定学生强制选课。
+     */
+    private Response adminForceSelectCourse(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!session.canAdminister(
+            ModuleNames.COURSE)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "没有选课管理权限。");
+        }
+
+        if (!(request.getData()
+            instanceof AdminForceSelectCourseRequest
+            adminRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "强制选课请求无效。");
+        }
+
+        CourseSelectionResult result =
+            selectionService.forceSelectCourse(
+                adminRequest.getStudentId(),
+                adminRequest.getBatchId(),
+                adminRequest.getOfferingId());
+
+        if (!result.success()) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                result.message());
+        }
+        adminAuditService.recordForceSelect(
+            session.getUsername(),
+            adminRequest.getStudentId(),
+            adminRequest.getBatchId(),
+            adminRequest.getOfferingId(),
+            adminRequest.getReason());
+        return Response.success(
+            request,
+            result.message(),
+            null);
+    }
+    /**
+     * 查询教务强制操作日志。
+     */
+    private Response adminListAuditLogs(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!session.canAdminister(
+            ModuleNames.COURSE)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "没有选课管理权限。");
+        }
+
+        if (request.getData() != null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "日志查询请求不需要携带数据。");
+        }
+
+        return Response.success(
+            request,
+            "教务操作日志加载成功。",
+            new ArrayList<>(
+                adminAuditService
+                    .listAuditLogs()));
+    }
+    /**
+     * 教务为指定学生强制退课。
+     */
+    private Response adminForceDropCourse(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!session.canAdminister(
+            ModuleNames.COURSE)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "没有选课管理权限。");
+        }
+
+        if (!(request.getData()
+            instanceof AdminForceDropCourseRequest
+            adminRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "强制退课请求无效。");
+        }
+
+        CourseDropResult result =
+            enrollmentService.forceDropCourse(
+                adminRequest.getStudentId(),
+                adminRequest.getEnrollmentId());
+
+        if (!result.success()) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                result.message());
+        }
+        adminAuditService.recordForceDrop(
+            session.getUsername(),
+            adminRequest.getStudentId(),
+            adminRequest.getEnrollmentId(),
+            adminRequest.getReason());
+        return Response.success(
+            request,
+            result.message(),
+            null);
+    }
     /**
      * 查询当前学期选课批次。
      */
@@ -579,13 +1267,11 @@ public final class CourseServerModule
         return Response.success(
             request,
             "Plan courses loaded.",
-            new ArrayList<>(
-                planService
-                    .listPlanCourses(
-                        batchRequest
-                            .getBatchId(),
-                        session
-                            .getUserId())));
+            applyStudentOfferingSettings(
+                batchRequest.getBatchId(),
+                planService.listPlanCourses(
+                    batchRequest.getBatchId(),
+                    studentId(session))));
     }
 
     /**
@@ -637,13 +1323,12 @@ public final class CourseServerModule
         return Response.success(
             request,
             "Substitute courses loaded.",
-            new ArrayList<>(
+            applyStudentOfferingSettings(
+                batchRequest.getBatchId(),
                 substitutionService
                     .listSubstituteCourses(
-                        batchRequest
-                            .getBatchId(),
-                        session
-                            .getUserId())));
+                        batchRequest.getBatchId(),
+                        studentId(session))));
     }
 
     /**
@@ -711,17 +1396,13 @@ public final class CourseServerModule
         return Response.success(
             request,
             "PE courses loaded.",
-            new ArrayList<>(
-                peCourseService
-                    .listPeCourses(
-                        peRequest
-                            .getBatchId(),
-                        peRequest
-                            .getSportProject(),
-                        session
-                            .getUserId(),
-                        session
-                            .getUsername())));
+            applyStudentOfferingSettings(
+                peRequest.getBatchId(),
+                peCourseService.listPeCourses(
+                    peRequest.getBatchId(),
+                    peRequest.getSportProject(),
+                    studentId(session),
+                    studentId(session))));
     }
     /**
      * 查询通选课程。
@@ -772,15 +1453,12 @@ public final class CourseServerModule
         return Response.success(
             request,
             "General courses loaded.",
-            new ArrayList<>(
-                generalCourseService
-                    .listGeneralCourses(
-                        generalRequest
-                            .getBatchId(),
-                        generalRequest
-                            .getGeneralCategory(),
-                        session
-                            .getUserId())));
+            applyStudentOfferingSettings(
+                generalRequest.getBatchId(),
+                generalCourseService.listGeneralCourses(
+                    generalRequest.getBatchId(),
+                    generalRequest.getGeneralCategory(),
+                    studentId(session))));
     }
     /**
      * 全校课程查询。
@@ -893,8 +1571,8 @@ public final class CourseServerModule
         CourseSelectionResult result =
             selectionService
                 .selectCourse(
-                    session.getUserId(),
-                    session.getUsername(),
+                    studentId(session),
+                    studentId(session),
                     selectRequest
                         .getBatchId(),
                     selectRequest
@@ -976,8 +1654,7 @@ public final class CourseServerModule
             new ArrayList<>(
                 enrollmentService
                     .listEnrollments(
-                        session
-                            .getUserId(),
+                        studentId(session),
                         batchRequest
                             .getBatchId())));
     }
@@ -1031,7 +1708,7 @@ public final class CourseServerModule
         CourseDropResult result =
             enrollmentService
                 .dropCourse(
-                    session.getUserId(),
+                    session.getUsername(),
                     dropRequest
                         .getBatchId(),
                     dropRequest
@@ -1059,5 +1736,24 @@ public final class CourseServerModule
             request,
             result.message(),
             null);
+    }
+
+    /**
+     * 把教务修改后的教学班设置
+     * 应用到学生端课程列表。
+     */
+    private ArrayList<CourseInfo>
+    applyStudentOfferingSettings(
+        long batchId,
+        List<CourseInfo> courses) {
+
+        return new ArrayList<>(
+            courses.stream()
+                .map(course ->
+                    offeringAdministrationService
+                        .applyStudentSettings(
+                            batchId,
+                            course))
+                .toList());
     }
 }

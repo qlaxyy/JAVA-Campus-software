@@ -14,6 +14,9 @@ import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.common.user.UpdateUserAccountRequest;
 import edu.seu.vcampus.common.user.UpdateUserStatusRequest;
 import edu.seu.vcampus.common.user.UserActions;
+import edu.seu.vcampus.common.user.UserAccountView;
+import edu.seu.vcampus.common.user.UserAuditLogEntry;
+import edu.seu.vcampus.common.user.UserAuditLogResponse;
 import edu.seu.vcampus.server.infrastructure.ActionRouter;
 import edu.seu.vcampus.server.module.ServerModule;
 import edu.seu.vcampus.server.module.ServerContext;
@@ -21,6 +24,8 @@ import edu.seu.vcampus.server.module.ServerContext;
 import java.io.Serializable;
 import java.util.Objects;
 import java.util.Optional;
+import java.time.Instant;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 /** Server entry point owned by the user-management module. */
@@ -28,6 +33,7 @@ public final class UserServerModule implements ServerModule {
 
     private final InMemoryAuthenticationService authentication;
     private final UserAdministrationService administration;
+    private final UserAuditRepository auditLogs;
 
     /**
      * Creates the user module with the shared authentication service.
@@ -39,6 +45,7 @@ public final class UserServerModule implements ServerModule {
                 authentication, "authentication must not be null");
         this.administration = new UserAdministrationService(
                 authentication.users(), authentication);
+        this.auditLogs = authentication.auditLogs();
     }
 
     @Override
@@ -61,6 +68,7 @@ public final class UserServerModule implements ServerModule {
         router.register(UserActions.ADMIN_UPDATE_ACCOUNT, this::updateAccount);
         router.register(UserActions.ADMIN_UPDATE_STATUS, this::updateStatus);
         router.register(UserActions.ADMIN_RESET_PASSWORD, this::resetPassword);
+        router.register(UserActions.ADMIN_LIST_AUDIT_LOGS, this::listAuditLogs);
     }
 
     private Response login(Request request) {
@@ -128,8 +136,9 @@ public final class UserServerModule implements ServerModule {
         if (denied != null) {
             return denied;
         }
-        return executeAdministration(
-                request, "账号创建成功。", () -> administration.createAccount(data));
+        return executeAuditedAdministration(
+                request, "账号创建成功。", UserActions.ADMIN_CREATE_ACCOUNT,
+                data.getUsername(), () -> administration.createAccount(data));
     }
 
     private Response previewNextAccount(Request request) {
@@ -150,9 +159,9 @@ public final class UserServerModule implements ServerModule {
         if (denied != null) {
             return denied;
         }
-        return executeAdministration(
-                request, "账号创建成功。",
-                () -> administration.createGeneratedAccount(data));
+        return executeAuditedAdministration(
+                request, "账号创建成功。", UserActions.ADMIN_CREATE_GENERATED_ACCOUNT,
+                data.getDisplayName(), () -> administration.createGeneratedAccount(data));
     }
 
     private Response createAccounts(Request request) {
@@ -163,9 +172,11 @@ public final class UserServerModule implements ServerModule {
         if (denied != null) {
             return denied;
         }
-        return executeAdministration(
+        return executeAuditedAdministration(
                 request,
                 "成功导入 " + data.getAccounts().size() + " 个账号。",
+                UserActions.ADMIN_BATCH_CREATE_ACCOUNTS,
+                "批量账号：" + data.getAccounts().size() + " 个",
                 () -> administration.createAccounts(data));
     }
 
@@ -177,8 +188,9 @@ public final class UserServerModule implements ServerModule {
         if (denied != null) {
             return denied;
         }
-        return executeAdministration(
-                request, "账号信息已更新。", () -> administration.updateAccount(data));
+        return executeAuditedAdministration(
+                request, "账号信息已更新。", UserActions.ADMIN_UPDATE_ACCOUNT,
+                accountTarget(data.getUserId()), () -> administration.updateAccount(data));
     }
 
     private Response resetPassword(Request request) {
@@ -189,8 +201,9 @@ public final class UserServerModule implements ServerModule {
         if (denied != null) {
             return denied;
         }
-        return executeAdministration(
-                request, "密码已重置。", () -> administration.resetPassword(data));
+        return executeAuditedAdministration(
+                request, "密码已重置。", UserActions.ADMIN_RESET_PASSWORD,
+                accountTarget(data.getUserId()), () -> administration.resetPassword(data));
     }
 
     private Response updateStatus(Request request) {
@@ -204,8 +217,69 @@ public final class UserServerModule implements ServerModule {
         String actorUserId = authentication.findSession(request.getToken())
                 .orElseThrow()
                 .getUserId();
-        return executeAdministration(request, "账号状态已更新。",
+        return executeAuditedAdministration(
+                request, "账号状态已更新。", UserActions.ADMIN_UPDATE_STATUS,
+                accountTarget(data.getUserId()),
                 () -> administration.updateStatus(actorUserId, data));
+    }
+
+    private Response listAuditLogs(Request request) {
+        Response denied = administrationFailure(request);
+        if (denied != null) {
+            return denied;
+        }
+        return executeAdministration(
+                request,
+                "操作记录加载成功。",
+                () -> new UserAuditLogResponse(auditLogs.findAll()));
+    }
+
+    private Response executeAuditedAdministration(
+            Request request,
+            String successMessage,
+            String actionCode,
+            String requestedTarget,
+            Supplier<? extends Serializable> operation) {
+        SessionInfo actor = authentication.findSession(request.getToken()).orElseThrow();
+        Response response = executeAdministration(request, successMessage, operation);
+        String target = response.getData() instanceof UserAccountView account
+                ? account.getUsername()
+                : requestedTarget;
+        appendAudit(actor, actionCode, target, response);
+        return response;
+    }
+
+    private void appendAudit(
+            SessionInfo actor,
+            String actionCode,
+            String target,
+            Response response) {
+        try {
+            String detail = response.getCode() + "：" + response.getMessage();
+            auditLogs.append(new UserAuditLogEntry(
+                    UUID.randomUUID().toString(),
+                    Instant.now().toEpochMilli(),
+                    actor.getUserId(),
+                    actor.getUsername(),
+                    actor.getDisplayName(),
+                    actionCode,
+                    limit(target, 120),
+                    response.isSuccess(),
+                    limit(detail, 255)));
+        } catch (RuntimeException exception) {
+            System.err.println("Failed to save user audit record: " + exception.getMessage());
+        }
+    }
+
+    private static String limit(String value, int maximumLength) {
+        String text = value == null || value.isBlank() ? "未知目标" : value.trim();
+        return text.length() <= maximumLength ? text : text.substring(0, maximumLength);
+    }
+
+    private String accountTarget(String userId) {
+        return authentication.users().findById(userId)
+                .map(UserAccount::username)
+                .orElse(userId);
     }
 
     private Response administrationFailure(Request request) {

@@ -3,6 +3,7 @@ package edu.seu.vcampus.client.application;
 import edu.seu.vcampus.client.infrastructure.CampusClient;
 import edu.seu.vcampus.common.protocol.Request;
 import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.user.LoginRequest;
 import edu.seu.vcampus.common.user.ChangePasswordRequest;
 import edu.seu.vcampus.common.user.PasswordProof;
@@ -22,6 +23,7 @@ public final class ClientContext {
 
     private final CampusClient client;
     private final ClientSession session = new ClientSession();
+    private volatile Runnable authenticationLostHandler = () -> { };
 
     /**
      * Creates the shared application context.
@@ -67,7 +69,13 @@ public final class ClientContext {
      * @throws IOException when the server cannot be reached
      */
     public Response send(String action, Serializable data) throws IOException {
-        return client.send(Request.create(action, session.tokenOrNull(), data));
+        Response response = client.send(Request.create(action, session.tokenOrNull(), data));
+        if (ErrorCodes.AUTH_REQUIRED.equals(response.getCode())
+                && session.current().isPresent()) {
+            session.clear();
+            authenticationLostHandler.run();
+        }
+        return response;
     }
 
     /**
@@ -107,5 +115,11 @@ public final class ClientContext {
     /** @return current authenticated session, if any */
     public Optional<SessionInfo> currentSession() {
         return session.current();
+    }
+
+    /** Registers the UI action used when the server rejects an expired session. */
+    public void setAuthenticationLostHandler(Runnable handler) {
+        authenticationLostHandler = Objects.requireNonNull(
+                handler, "handler must not be null");
     }
 }

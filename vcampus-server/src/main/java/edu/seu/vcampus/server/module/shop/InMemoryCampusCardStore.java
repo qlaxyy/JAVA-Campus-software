@@ -20,7 +20,7 @@ final class InMemoryCampusCardStore {
         cards.put("U-STUDENT-001", new CampusCardView(
                 "U-STUDENT-001", "20260001", "20260001", DEMO_BALANCE_FEN));
         cards.put("U-SHOP-ADMIN-001", new CampusCardView(
-                "U-SHOP-ADMIN-001", "20260007", "20260007", DEMO_BALANCE_FEN));
+                "U-SHOP-ADMIN-001", "20260006", "20260006", DEMO_BALANCE_FEN));
     }
 
     synchronized CampusCardView view(SessionInfo session) {

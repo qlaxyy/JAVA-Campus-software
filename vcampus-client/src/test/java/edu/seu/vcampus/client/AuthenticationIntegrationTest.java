@@ -114,7 +114,7 @@ class AuthenticationIntegrationTest {
                     new CampusClient("127.0.0.1", server.getPort()));
 
             Response login = context.login(
-                    "20260008", "123456".toCharArray());
+                    "20260007", "123456".toCharArray());
 
             assertTrue(login.isSuccess());
             SessionInfo session = assertInstanceOf(SessionInfo.class, login.getData());
@@ -126,11 +126,11 @@ class AuthenticationIntegrationTest {
     @Test
     void everySubsystemAdministratorReceivesItsOwnScope() throws Exception {
         Map<String, AdminLogin> accounts = Map.of(
-                "20260004", new AdminLogin(AdminScope.STUDENT),
-                "20260005", new AdminLogin(AdminScope.COURSE),
-                "20260006", new AdminLogin(AdminScope.LIBRARY),
-                "20260007", new AdminLogin(AdminScope.SHOP),
-                "20260008", new AdminLogin(AdminScope.HOSPITAL));
+                "20260003", new AdminLogin(AdminScope.STUDENT),
+                "20260004", new AdminLogin(AdminScope.COURSE),
+                "20260005", new AdminLogin(AdminScope.LIBRARY),
+                "20260006", new AdminLogin(AdminScope.SHOP),
+                "20260007", new AdminLogin(AdminScope.HOSPITAL));
 
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();

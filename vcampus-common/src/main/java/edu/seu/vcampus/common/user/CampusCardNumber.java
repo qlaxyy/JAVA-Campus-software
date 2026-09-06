@@ -22,9 +22,14 @@ public final class CampusCardNumber {
         return normalized;
     }
 
-    /** Returns whether the value is a valid campus-card number. */
+    /** Returns whether the value is a valid login number, including reserved yyyy0000. */
     public static boolean isValid(String value) {
         return value != null && hasValidShapeAndSequence(value.trim());
+    }
+
+    /** Returns whether the value may be assigned to a regular account. */
+    public static boolean isRegularAccountNumber(String value) {
+        return isValid(value) && !value.trim().endsWith("0000");
     }
 
     /** Builds one campus-card number from a year and its four-digit sequence. */
@@ -45,6 +50,6 @@ public final class CampusCardNumber {
     }
 
     private static boolean hasValidShapeAndSequence(String value) {
-        return value.matches("2\\d{7}") && !value.endsWith("0000");
+        return value.matches("2\\d{7}");
     }
 }

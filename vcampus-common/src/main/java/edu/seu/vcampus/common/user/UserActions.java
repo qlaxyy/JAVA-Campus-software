@@ -29,6 +29,8 @@ public final class UserActions {
             ActionNames.of(ModuleNames.USER, "ADMIN_UPDATE_STATUS");
     public static final String ADMIN_RESET_PASSWORD =
             ActionNames.of(ModuleNames.USER, "ADMIN_RESET_PASSWORD");
+    public static final String ADMIN_LIST_AUDIT_LOGS =
+            ActionNames.of(ModuleNames.USER, "ADMIN_LIST_AUDIT_LOGS");
 
     private UserActions() {
     }

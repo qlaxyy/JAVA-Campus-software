@@ -19,6 +19,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.time.Year;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -29,10 +32,16 @@ public final class InMemoryAuthenticationService
         implements SessionLookup, AccountProvisioning {
 
     private static final int TOKEN_BYTES = 32;
+    static final Duration DEFAULT_IDLE_TIMEOUT = Duration.ofMinutes(30);
+    static final Duration DEFAULT_ABSOLUTE_TIMEOUT = Duration.ofHours(8);
 
     private final SecureRandom secureRandom = new SecureRandom();
     private final UserRepository users;
-    private final ConcurrentMap<String, SessionInfo> sessions = new ConcurrentHashMap<>();
+    private final Clock clock;
+    private final Duration idleTimeout;
+    private final Duration absoluteTimeout;
+    private final UserAuditRepository auditLogs;
+    private final ConcurrentMap<String, StoredSession> sessions = new ConcurrentHashMap<>();
 
     /** Creates authentication backed by the public development accounts. */
     public InMemoryAuthenticationService() {
@@ -40,11 +49,29 @@ public final class InMemoryAuthenticationService
     }
 
     InMemoryAuthenticationService(UserRepository users) {
+        this(users, Clock.systemUTC(), DEFAULT_IDLE_TIMEOUT, DEFAULT_ABSOLUTE_TIMEOUT);
+    }
+
+    InMemoryAuthenticationService(
+            UserRepository users,
+            Clock clock,
+            Duration idleTimeout,
+            Duration absoluteTimeout) {
         this.users = Objects.requireNonNull(users, "users must not be null");
+        this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.idleTimeout = requirePositive(idleTimeout, "idleTimeout");
+        this.absoluteTimeout = requirePositive(absoluteTimeout, "absoluteTimeout");
+        this.auditLogs = users instanceof AccessUserRepository accessRepository
+                ? new AccessUserAuditRepository(accessRepository.database())
+                : new InMemoryUserAuditRepository();
     }
 
     UserRepository users() {
         return users;
+    }
+
+    UserAuditRepository auditLogs() {
+        return auditLogs;
     }
 
     /**
@@ -74,7 +101,9 @@ public final class InMemoryAuthenticationService
                 user.displayName(),
                 user.role(),
                 user.adminScopes());
-        sessions.put(session.getToken(), session);
+        Instant now = clock.instant();
+        purgeExpiredSessions(now);
+        sessions.put(session.getToken(), new StoredSession(session, now, now));
         return Optional.of(session);
     }
 
@@ -108,7 +137,8 @@ public final class InMemoryAuthenticationService
 
     /** Invalidates every active session belonging to an account. */
     void invalidateUserSessions(String userId) {
-        sessions.entrySet().removeIf(entry -> entry.getValue().getUserId().equals(userId));
+        sessions.entrySet().removeIf(
+                entry -> entry.getValue().session().getUserId().equals(userId));
     }
 
     @Override
@@ -116,7 +146,12 @@ public final class InMemoryAuthenticationService
         if (token == null || token.isBlank()) {
             return Optional.empty();
         }
-        return Optional.ofNullable(sessions.get(token));
+        Instant now = clock.instant();
+        StoredSession active = sessions.computeIfPresent(token, (ignored, stored) ->
+                stored.isExpired(now, idleTimeout, absoluteTimeout)
+                        ? null
+                        : stored.accessed(now));
+        return active == null ? Optional.empty() : Optional.of(active.session());
     }
 
     @Override
@@ -221,5 +256,36 @@ public final class InMemoryAuthenticationService
 
     private static boolean isPasswordProof(String value) {
         return value != null && value.matches("[0-9a-f]{64}");
+    }
+
+    private void purgeExpiredSessions(Instant now) {
+        sessions.entrySet().removeIf(entry ->
+                entry.getValue().isExpired(now, idleTimeout, absoluteTimeout));
+    }
+
+    private static Duration requirePositive(Duration value, String name) {
+        Objects.requireNonNull(value, name + " must not be null");
+        if (value.isZero() || value.isNegative()) {
+            throw new IllegalArgumentException(name + " must be positive");
+        }
+        return value;
+    }
+
+    private record StoredSession(
+            SessionInfo session,
+            Instant createdAt,
+            Instant lastAccessAt) {
+
+        private StoredSession accessed(Instant now) {
+            return new StoredSession(session, createdAt, now);
+        }
+
+        private boolean isExpired(
+                Instant now,
+                Duration idleTimeout,
+                Duration absoluteTimeout) {
+            return !now.isBefore(lastAccessAt.plus(idleTimeout))
+                    || !now.isBefore(createdAt.plus(absoluteTimeout));
+        }
     }
 }

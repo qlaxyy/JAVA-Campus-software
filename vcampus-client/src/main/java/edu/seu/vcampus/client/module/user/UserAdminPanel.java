@@ -12,6 +12,8 @@ import edu.seu.vcampus.common.user.UpdateUserAccountRequest;
 import edu.seu.vcampus.common.user.UserAccountListResponse;
 import edu.seu.vcampus.common.user.UserActions;
 import edu.seu.vcampus.common.user.UserAccountView;
+import edu.seu.vcampus.common.user.UserAuditLogEntry;
+import edu.seu.vcampus.common.user.UserAuditLogResponse;
 import edu.seu.vcampus.common.hospital.DoctorApplicationListResponse;
 import edu.seu.vcampus.common.hospital.DoctorApplicationStatus;
 import edu.seu.vcampus.common.hospital.DoctorApplicationType;
@@ -31,11 +33,15 @@ import javax.swing.ListSelectionModel;
 import javax.swing.SwingWorker;
 import javax.swing.SwingUtilities;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.event.HierarchyEvent;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -55,6 +61,7 @@ public final class UserAdminPanel extends JPanel {
     private final JButton resetButton = new JButton("重置密码");
     private final JButton refreshButton = new JButton("刷新");
     private final JButton doctorReviewButton = new JButton("医生申请审核");
+    private final JButton auditButton = new JButton("操作记录");
     private boolean loaded;
 
     public UserAdminPanel(ClientContext context) {
@@ -73,6 +80,7 @@ public final class UserAdminPanel extends JPanel {
         actions.add(statusButton);
         actions.add(resetButton);
         actions.add(doctorReviewButton);
+        actions.add(auditButton);
         actions.add(refreshButton);
 
         add(actions, BorderLayout.NORTH);
@@ -87,6 +95,7 @@ public final class UserAdminPanel extends JPanel {
         statusButton.addActionListener(event -> changeStatus());
         resetButton.addActionListener(event -> resetPassword());
         doctorReviewButton.addActionListener(event -> loadDoctorApplications());
+        auditButton.addActionListener(event -> loadAuditLogs());
         refreshButton.addActionListener(event -> refreshAccounts());
         updateButtons();
 
@@ -276,6 +285,75 @@ public final class UserAdminPanel extends JPanel {
                 });
     }
 
+    private void loadAuditLogs() {
+        runRequest(
+                "正在加载操作记录……",
+                () -> context.send(UserActions.ADMIN_LIST_AUDIT_LOGS, null),
+                response -> {
+                    if (response.isSuccess()
+                            && response.getData() instanceof UserAuditLogResponse data) {
+                        showAuditLogs(data.getEntries());
+                        statusLabel.setText("已加载 " + data.getEntries().size() + " 条操作记录");
+                    } else {
+                        showFailure(response);
+                    }
+                });
+    }
+
+    private void showAuditLogs(List<UserAuditLogEntry> entries) {
+        String[] columns = {"时间", "操作者", "操作", "目标", "结果", "说明"};
+        Object[][] rows = new Object[entries.size()][columns.length];
+        DateTimeFormatter formatter = DateTimeFormatter
+                .ofPattern("yyyy-MM-dd HH:mm:ss")
+                .withZone(ZoneId.systemDefault());
+        for (int index = 0; index < entries.size(); index++) {
+            UserAuditLogEntry entry = entries.get(index);
+            rows[index] = new Object[]{
+                    formatter.format(Instant.ofEpochMilli(entry.getOccurredAtEpochMillis())),
+                    entry.getActorDisplayName() + "（" + entry.getActorUsername() + "）",
+                    auditActionText(entry.getActionCode()),
+                    entry.getTarget(),
+                    entry.isSuccessful() ? "成功" : "失败",
+                    entry.getDetail()
+            };
+        }
+        DefaultTableModel model = new DefaultTableModel(rows, columns) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        JTable auditTable = new JTable(model);
+        auditTable.setAutoCreateRowSorter(true);
+        JScrollPane scrollPane = new JScrollPane(auditTable);
+        scrollPane.setPreferredSize(new java.awt.Dimension(920, 420));
+        JOptionPane.showMessageDialog(
+                this,
+                scrollPane,
+                "账号管理操作记录",
+                JOptionPane.PLAIN_MESSAGE);
+    }
+
+    private static String auditActionText(String actionCode) {
+        if (UserActions.ADMIN_CREATE_ACCOUNT.equals(actionCode)
+                || UserActions.ADMIN_CREATE_GENERATED_ACCOUNT.equals(actionCode)) {
+            return "新增账号";
+        }
+        if (UserActions.ADMIN_BATCH_CREATE_ACCOUNTS.equals(actionCode)) {
+            return "批量导入";
+        }
+        if (UserActions.ADMIN_UPDATE_ACCOUNT.equals(actionCode)) {
+            return "编辑账号";
+        }
+        if (UserActions.ADMIN_UPDATE_STATUS.equals(actionCode)) {
+            return "启用/禁用";
+        }
+        if (UserActions.ADMIN_RESET_PASSWORD.equals(actionCode)) {
+            return "重置密码";
+        }
+        return actionCode;
+    }
+
     private void chooseDoctorApplication(DoctorApplicationListResponse response) {
         List<DoctorApplicationView> pending = response.getApplications().stream()
                 .filter(application -> application.getStatus()
@@ -407,6 +485,7 @@ public final class UserAdminPanel extends JPanel {
         statusButton.setEnabled(enabled);
         resetButton.setEnabled(enabled);
         doctorReviewButton.setEnabled(enabled);
+        auditButton.setEnabled(enabled);
     }
 
     private void showFailure(Response response) {

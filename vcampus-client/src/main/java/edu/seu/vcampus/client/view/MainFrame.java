@@ -18,6 +18,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JPasswordField;
 import javax.swing.SwingConstants;
 import javax.swing.SwingWorker;
+import javax.swing.SwingUtilities;
 import javax.swing.border.MatteBorder;
 import javax.swing.plaf.basic.BasicButtonUI;
 import java.awt.BorderLayout;
@@ -87,6 +88,7 @@ public final class MainFrame extends JFrame {
         setLocationByPlatform(true);
 
         loginPanel = new LoginPanel(context, this::showWorkspace);
+        context.setAuthenticationLostHandler(this::showExpiredSessionLogin);
         logoutButton.addActionListener(event -> logout());
         changePasswordButton.addActionListener(event -> changePassword());
         pingButton.addActionListener(event -> pingServer());
@@ -391,6 +393,13 @@ public final class MainFrame extends JFrame {
                 }
             }
         }.execute();
+    }
+
+    private void showExpiredSessionLogin() {
+        SwingUtilities.invokeLater(() -> {
+            loginPanel.prepareForLogin("登录状态已过期，请重新登录");
+            applicationLayout.show(applicationPanel, LOGIN_CARD);
+        });
     }
 
     private void changePassword() {

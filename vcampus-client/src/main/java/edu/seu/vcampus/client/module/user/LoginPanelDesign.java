@@ -246,14 +246,14 @@ final class LoginPanelDesign {
         JPanel accounts = new JPanel(new GridLayout(0, 2, 12, 3));
         accounts.setOpaque(false);
         String[] labels = {
+            "超级管理员  20260000",
             "普通账号  20260001",
             "医生演示  20260002",
-            "超级管理员  20260003",
-            "学籍管理员  20260004",
-            "选课管理员  20260005",
-            "图书馆管理员  20260006",
-            "商店管理员  20260007",
-            "医院管理员  20260008"
+            "学籍管理员  20260003",
+            "选课管理员  20260004",
+            "图书馆管理员  20260005",
+            "商店管理员  20260006",
+            "医院管理员  20260007"
         };
         for (String text : labels) {
             JLabel label = new JLabel(text);

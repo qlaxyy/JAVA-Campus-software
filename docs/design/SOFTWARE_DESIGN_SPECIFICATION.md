@@ -108,7 +108,7 @@
 
 | 编号 | 功能 | 说明 |
 |---|---|---|
-| LOGIN-01 | 输入校验 | 一卡通号必须为“4 位年份 + 4 位流水号”，一卡通号或密码为空/格式错误时客户端直接提示，不发送请求。 |
+| LOGIN-01 | 输入校验 | 登录号必须为 8 位数字；普通一卡通号使用“4 位年份 + `0001`—`9999`”，`20260000` 保留给演示超级管理员。账号或密码为空/格式错误时客户端直接提示，不发送请求。 |
 | LOGIN-02 | 身份验证 | 服务器根据一卡通号查找启用账号并校验密码 proof。 |
 | LOGIN-03 | 创建会话 | 验证成功后生成随机 token，在服务器保存 `token → SessionInfo`。 |
 | LOGIN-04 | 返回身份 | 登录成功时通过 `Response.data` 返回 `SessionInfo`。 |
@@ -116,7 +116,8 @@
 | LOGIN-06 | 携带凭证 | 登录后的请求由 `ClientContext` 自动携带 token。 |
 | LOGIN-07 | 查询会话 | 服务器可通过 token 查询当前 `SessionInfo`。 |
 | LOGIN-08 | 退出登录 | 服务器删除 token，客户端无论服务器结果如何都清除本地会话。 |
-| LOGIN-09 | 统一失败提示 | 账号不存在、被停用或密码错误均返回同一种凭据错误，避免泄露账号状态。 |
+| LOGIN-09 | 会话过期 | 连续空闲 30 分钟或创建满 8 小时后删除 token；客户端收到 `AUTH_REQUIRED` 后返回登录页。 |
+| LOGIN-10 | 统一失败提示 | 账号不存在、被停用或密码错误均返回同一种凭据错误，避免泄露账号状态。 |
 
 #### 2.2.3 账号管理功能需求
 
@@ -124,6 +125,8 @@
 - 超级管理员可选择 UTF-8 CSV 批量创建普通账号，格式为 `campusCardNumber,displayName`。
 - 批量导入每次最多 1000 个账号，不从文件授予管理权限，初始密码统一为 `123456`。
 - 服务器必须检查数据库已有一卡通号和文件内重复一卡通号；任意一行失败时整批回滚。
+- 新增、批量导入、编辑、启停和重置密码必须记录操作者、操作、目标、结果和时间；审计记录不得包含密码、密码 proof 或 token。
+- 只有 `SUPER_ADMIN` 可以读取全部账号管理操作记录，客户端不提供修改或删除记录的入口。
 
 #### 2.2.4 非功能需求
 
@@ -523,7 +526,7 @@ classDiagram
 | 类 | 主要职责 | 登录相关方法 |
 |---|---|---|
 | `LoginPanel` | 登录表单、输入校验、异步调用和结果提示 | `login()`、`validationMessage()`、`prepareForLogin()` |
-| `ClientContext` | 封装登录、带 token 请求和退出操作 | `login()`、`send()`、`logout()`、`currentSession()` |
+| `ClientContext` | 封装登录、带 token 请求、退出和失效通知 | `login()`、`send()`、`logout()`、`currentSession()`、`setAuthenticationLostHandler()` |
 | `ClientSession` | 保存当前客户端会话 | `set()`、`clear()`、`current()`、`tokenOrNull()` |
 | `CampusClient` | 建立 Socket 并完成一次请求/响应 | `send(Request)` |
 
@@ -534,7 +537,7 @@ classDiagram
 | `CampusServer` | 监听连接、读取 Request、分派并写回 Response | `start()`、`handleClient()`、`dispatch()`、`close()` |
 | `ActionRouter` | 将 `USER.LOGIN` 映射到唯一处理器 | `register()`、`dispatch()` |
 | `UserServerModule` | 校验登录 DTO，组织成功或失败响应 | `registerHandlers()`、`login()`、`logout()`、`currentSession()` |
-| `InMemoryAuthenticationService` | 验证账号、创建/删除/查询会话 | `login()`、`logout()`、`findSession()` |
+| `InMemoryAuthenticationService` | 验证账号、创建/删除/查询会话并执行过期判断 | `login()`、`logout()`、`findSession()` |
 | `UserRepository` | 定义账号存取边界 | `findById()`、`findByUsername()`、`findAll()`、`save()` |
 | `AccessUserRepository` | 正式启动时使用的 Access 账号实现 | 实现 `UserRepository` |
 | `InMemoryUserRepository` | 自动化测试使用的隔离账号实现 | 实现 `UserRepository` |
@@ -590,6 +593,7 @@ classDiagram
 | `USER.ADMIN_UPDATE_ACCOUNT` | 必填 | `UpdateUserAccountRequest` | `UserAccountView` | 修改显示名和管理范围。 |
 | `USER.ADMIN_UPDATE_STATUS` | 必填 | `UpdateUserStatusRequest` | `UserAccountView` | 启用或停用账号。 |
 | `USER.ADMIN_RESET_PASSWORD` | 必填 | `ResetUserPasswordRequest` | `UserAccountView` | 重置密码并清除该账号会话。 |
+| `USER.ADMIN_LIST_AUDIT_LOGS` | 必填 | `null` | `UserAuditLogResponse` | 超级管理员读取全部账号管理操作记录。 |
 
 ### 11.2 Request
 
@@ -685,7 +689,7 @@ Swing 组件必须在事件分派线程中创建和更新。登录网络请求�
 
 `CampusServer` 使用一个接收线程监听连接，使用固定线程池并发处理客户端请求。并发共享对象采用线程安全结构：
 
-- 会话：`ConcurrentHashMap<String, SessionInfo>`；
+- 会话：`ConcurrentHashMap<String, StoredSession>`，内部记录 `SessionInfo`、创建时间和最后访问时间；
 - 测试用内存账号：`ConcurrentHashMap<String, UserAccount>`；
 - 正式启动账号：Access DAO，每次操作使用独立 JDBC 连接，写入使用事务；
 - Action 注册表：`ConcurrentHashMap<String, RequestHandler>`。
@@ -699,6 +703,7 @@ Swing 组件必须在事件分派线程中创建和更新。登录网络请求�
 当前登录模块已经连接 `vCampus.accdb`：
 
 - `AccessUserRepository` 首次连接时创建用户表；
+- `AccessUserAuditRepository` 首次连接时创建只追加的账号管理审计表；
 - `DemoUserAccounts` 只在空库中初始化公开测试账号；
 - 账号资料和 `AdminScope` 修改会跨服务器重启保留；
 - `InMemoryAuthenticationService` 在内存中保存会话；
@@ -717,6 +722,10 @@ flowchart LR
     UR --> MEM[测试 InMemoryUserRepository]
     UR --> DAO[生产 AccessUserRepository]
     DAO --> DB[(vCampus.accdb)]
+    USER[UserServerModule] --> AUDIT[UserAuditRepository 接口]
+    AUDIT --> AMEM[测试 InMemoryUserAuditRepository]
+    AUDIT --> ADAO[生产 AccessUserAuditRepository]
+    ADAO --> DB
 ```
 
 ### 14.3 登录相关表
@@ -748,11 +757,27 @@ flowchart LR
 | `grantedByUserId` | Short Text(36) | 是 | 外键 | 授权人。 |
 | `grantedAt` | Date/Time | 是 | 当前时间 | 授权时间。 |
 
+#### 14.3.3 `tblUserAuditLog`
+
+该表由用户服务器追加写入，保存账号管理操作的成功或失败结果。客户端只能通过 `USER.ADMIN_LIST_AUDIT_LOGS` 读取全部记录；系统不提供网络修改和删除接口。
+
+| 字段 | Access 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `auditId` | Short Text(36) | 是 | UUID 主键。 |
+| `occurredAt` | Date/Time | 是 | 操作发生时间。 |
+| `actorUserId` | Short Text(36) | 是 | 操作者稳定用户 ID。 |
+| `actorUsername` | Short Text(50) | 是 | 操作者当时的一卡通号。 |
+| `actorDisplayName` | Short Text(100) | 是 | 操作者当时的显示名称。 |
+| `actionCode` | Short Text(80) | 是 | 被执行的账号管理 Action。 |
+| `targetText` | Short Text(120) | 是 | 目标账号或批量操作摘要。 |
+| `successful` | Yes/No | 是 | 是否成功。 |
+| `detailText` | Short Text(255) | 是 | 响应码和简短说明，不含凭据。 |
+
 ### 14.4 会话存储
 
-第一阶段会话不写入 Access，而由用户服务器进程中的 `ConcurrentHashMap` 保存。其他服务器模块通过 `ServerContext.sessions()` 提供的只读 `SessionLookup` 查询 token；客户端不能调用 `ServerContext`，也不能直接读取服务器会话表。
+会话不写入 Access，而由用户服务器进程中的 `ConcurrentHashMap` 保存。每条记录包含创建时间和最后访问时间，空闲超时为 30 分钟，绝对有效期为 8 小时；每次成功查询会话会更新最后访问时间，但不会延长绝对有效期。其他服务器模块通过 `ServerContext.sessions()` 提供的只读 `SessionLookup` 查询 token；客户端不能调用 `ServerContext`，也不能直接读取服务器会话表。
 
-后续如需会话过期、跨进程共享或服务器重启后保持登录，应单独设计过期时间、撤销策略和持久化方案，不能直接把完整 token 写入普通日志或审计表。
+如需跨进程共享或服务器重启后保持登录，应单独设计持久化方案，不能直接把完整 token 写入普通日志、数据库明文字段或审计表。
 
 ## 15. 安全与异常设计
 
@@ -771,7 +796,7 @@ flowchart LR
 |---|---|
 | Socket 未使用 TLS | 在真实网络部署前增加 TLS，防止凭据 proof 和 token 被窃听。 |
 | 开发期 proof 为确定性 SHA-256 | 数据库改用 PBKDF2 等带盐慢哈希；网络认证方案需结合 TLS 重新设计。 |
-| token 没有过期时间 | 增加创建时间、最后访问时间、空闲过期和绝对过期。 |
+| 内存中过期 token 可能累积 | 查询时删除当前过期 token，创建会话时批量清理；若并发规模扩大再增加定时清理任务。 |
 | 登录失败没有限速与锁定 | 增加失败计数、短时限流和可审计的锁定/解锁流程。 |
 | 会话只存在内存 | 明确服务器重启后要求重新登录；需要持久化时另行评审。 |
 
@@ -781,9 +806,10 @@ flowchart LR
 
 | 测试类 | 覆盖内容 |
 |---|---|
-| `AuthenticationIntegrationTest` | 正确登录、会话查询、退出、退出后 token 失效、错误密码、子系统管理员范围。 |
+| `AuthenticationIntegrationTest`、`InMemoryAuthenticationServiceTest` | 正确登录、会话查询、退出、错误密码、子系统管理员范围，以及空闲/绝对过期。 |
 | `LoginPanelTest` | 登录界面控件、开发测试账号展示、账号和密码非空校验。 |
 | `DoctorOnboardingIntegrationTest` | 医院管理员分类提交、越权拦截、已有账号精确绑定、外来医生账号自动生成、账号碰撞防护，以及 Access 重启后医生资格保留。 |
+| `UserAdministrationIntegrationTest`、`AccessUserAuditRepositoryTest` | 超级管理员账号维护、越权拦截、成功/失败审计记录及 Access 重启后记录保留。 |
 
 ### 16.2 登录模块验收条件
 
@@ -792,6 +818,7 @@ flowchart LR
 - [ ] 错误密码、未知账号和停用账号均不能创建会话。
 - [ ] 客户端保存会话后，`USER.CURRENT_SESSION` 可以返回同一个 `userId`。
 - [ ] 退出后客户端会话为空，原 token 再次查询返回 `AUTH_REQUIRED`。
+- [ ] 连续空闲 30 分钟或登录满 8 小时后 token 返回 `AUTH_REQUIRED`，客户端回到登录页。
 - [ ] 登录过程不冻结 Swing 界面，密码输入在使用后被清空。
 - [ ] Response 不包含密码、密码 proof 或服务器异常堆栈。
 - [ ] `mvn clean verify` 全部通过。
@@ -809,7 +836,9 @@ flowchart LR
 | 公共请求和响应 | `vcampus-common/src/main/java/edu/seu/vcampus/common/protocol/Request.java`、`Response.java` |
 | 登录 DTO 与密码 proof | `vcampus-common/src/main/java/edu/seu/vcampus/common/user/LoginRequest.java`、`PasswordProof.java` |
 | 会话 DTO | `vcampus-common/src/main/java/edu/seu/vcampus/common/user/SessionInfo.java` |
+| 审计 DTO | `vcampus-common/src/main/java/edu/seu/vcampus/common/user/UserAuditLogEntry.java`、`UserAuditLogResponse.java` |
 | 用户 Action | `vcampus-common/src/main/java/edu/seu/vcampus/common/user/UserActions.java` |
+| Access 审计 DAO | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/AccessUserAuditRepository.java` |
 | Socket 服务器 | `vcampus-server/src/main/java/edu/seu/vcampus/server/infrastructure/CampusServer.java` |
 | Action 路由 | `vcampus-server/src/main/java/edu/seu/vcampus/server/infrastructure/ActionRouter.java` |
 | 用户服务器入口 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/UserServerModule.java` |

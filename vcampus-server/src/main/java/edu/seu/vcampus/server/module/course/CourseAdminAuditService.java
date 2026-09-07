@@ -148,7 +148,41 @@ final class CourseAdminAuditService {
             enrollmentId,
             details);
     }
+    /**
+     * 记录成绩录入或修改。
+     */
+    synchronized void recordUpdateGrade(
+        String operatorUsername,
+        String studentId,
+        long enrollmentId,
+        double score,
+        String reason) {
 
+        String details =
+            cleanText(
+                reason,
+                "reason")
+                + "；修改后成绩="
+                + score;
+
+        records.add(
+            new CourseAdminAuditRecord(
+                nextOperationId++,
+                cleanText(
+                    operatorUsername,
+                    "operatorUsername"),
+                cleanText(
+                    studentId,
+                    "studentId"),
+                CourseAdminOperationType
+                    .UPDATE_GRADE,
+                null,
+                null,
+                enrollmentId,
+                details,
+                LocalDateTime.now(
+                    clock)));
+    }
     /**
      * 记录强制退课。
      */

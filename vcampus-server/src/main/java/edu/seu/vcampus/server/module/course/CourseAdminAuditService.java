@@ -1,42 +1,53 @@
 package edu.seu.vcampus.server.module.course;
 
-import java.time.Clock;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
 import edu.seu.vcampus.common.course.CourseAdminAuditInfo;
 import edu.seu.vcampus.common.course.SelectionBatchStatus;
 import edu.seu.vcampus.common.course.SelectionBatchType;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
-
+import java.util.List;
+import java.util.Objects;
 
 /**
- * 教务强制选课和退课操作日志。
- *
- * 当前开发阶段保存在服务器内存中，
- * 后续可以替换为 Access 数据库实现。
+ * 教务操作日志业务服务。
  */
 final class CourseAdminAuditService {
 
     private final Clock clock;
 
-    private final List<CourseAdminAuditRecord>
-        records =
-        new ArrayList<>();
+    private final CourseAdminAuditRepository
+        repository;
 
-    private long nextOperationId =
-        1L;
-
+    /**
+     * 默认使用内存日志仓库。
+     */
     CourseAdminAuditService(
         Clock clock) {
+
+        this(
+            clock,
+            new InMemoryCourseAdminAuditRepository());
+    }
+
+    /**
+     * 使用指定日志仓库。
+     */
+    CourseAdminAuditService(
+        Clock clock,
+        CourseAdminAuditRepository repository) {
 
         this.clock =
             Objects.requireNonNull(
                 clock,
                 "clock must not be null");
+
+        this.repository =
+            Objects.requireNonNull(
+                repository,
+                "repository must not be null");
     }
+
     /**
      * 记录选课批次修改。
      */
@@ -54,17 +65,16 @@ final class CourseAdminAuditService {
         String reason) {
 
         String details =
-            cleanText(
-                reason,
-                "reason")
+            optionalText(
+                reason)
                 + "；学期="
-                + cleanText(
+                + requiredText(
                 semester,
-                "未填写")
+                "semester")
                 + "；批次名称="
-                + cleanText(
+                + requiredText(
                 batchName,
-                "未填写")
+                "batchName")
                 + "；批次类型="
                 + batchType
                 + "；开始时间="
@@ -82,22 +92,16 @@ final class CourseAdminAuditService {
                 ? "是"
                 : "否");
 
-        records.add(
-            new CourseAdminAuditRecord(
-                nextOperationId++,
-                cleanText(
-                    operatorUsername,
-                    "operatorUsername"),
-                "-",
-                CourseAdminOperationType
-                    .UPDATE_BATCH,
-                batchId,
-                null,
-                null,
-                details,
-                LocalDateTime.now(
-                    clock)));
+        append(
+            operatorUsername,
+            "-",
+            CourseAdminOperationType.UPDATE_BATCH,
+            batchId,
+            null,
+            null,
+            details);
     }
+
     /**
      * 记录强制选课。
      */
@@ -108,26 +112,17 @@ final class CourseAdminAuditService {
         long offeringId,
         String reason) {
 
-        records.add(
-            new CourseAdminAuditRecord(
-                nextOperationId++,
-                cleanText(
-                    operatorUsername,
-                    "operatorUsername"),
-                cleanText(
-                    studentId,
-                    "studentId"),
-                CourseAdminOperationType
-                    .FORCE_SELECT,
-                batchId,
-                offeringId,
-                null,
-                cleanText(
-                    reason,
-                    "reason"),
-                LocalDateTime.now(
-                    clock)));
+        append(
+            operatorUsername,
+            studentId,
+            CourseAdminOperationType.FORCE_SELECT,
+            batchId,
+            offeringId,
+            null,
+            optionalText(
+                reason));
     }
+
     /**
      * 记录成绩录入或修改。
      */
@@ -139,29 +134,19 @@ final class CourseAdminAuditService {
         String reason) {
 
         String details =
-            cleanText(
-                reason,
-                "reason")
+            optionalText(
+                reason)
                 + "；修改后成绩="
                 + score;
 
-        records.add(
-            new CourseAdminAuditRecord(
-                nextOperationId++,
-                cleanText(
-                    operatorUsername,
-                    "operatorUsername"),
-                cleanText(
-                    studentId,
-                    "studentId"),
-                CourseAdminOperationType
-                    .UPDATE_GRADE,
-                null,
-                null,
-                enrollmentId,
-                details,
-                LocalDateTime.now(
-                    clock)));
+        append(
+            operatorUsername,
+            studentId,
+            CourseAdminOperationType.UPDATE_GRADE,
+            null,
+            null,
+            enrollmentId,
+            details);
     }
     /**
      * 记录强制退课。
@@ -172,26 +157,17 @@ final class CourseAdminAuditService {
         long enrollmentId,
         String reason) {
 
-        records.add(
-            new CourseAdminAuditRecord(
-                nextOperationId++,
-                cleanText(
-                    operatorUsername,
-                    "operatorUsername"),
-                cleanText(
-                    studentId,
-                    "studentId"),
-                CourseAdminOperationType
-                    .FORCE_DROP,
-                null,
-                null,
-                enrollmentId,
-                cleanText(
-                    reason,
-                    "reason"),
-                LocalDateTime.now(
-                    clock)));
+        append(
+            operatorUsername,
+            studentId,
+            CourseAdminOperationType.FORCE_DROP,
+            null,
+            null,
+            enrollmentId,
+            optionalText(
+                reason));
     }
+
     /**
      * 记录教学班设置修改。
      */
@@ -204,9 +180,8 @@ final class CourseAdminAuditService {
         String reason) {
 
         String details =
-            cleanText(
-                reason,
-                "reason")
+            optionalText(
+                reason)
                 + "；修改后容量="
                 + capacity
                 + "；状态="
@@ -214,22 +189,16 @@ final class CourseAdminAuditService {
                 ? "开放"
                 : "关闭");
 
-        records.add(
-            new CourseAdminAuditRecord(
-                nextOperationId++,
-                cleanText(
-                    operatorUsername,
-                    "operatorUsername"),
-                "-",
-                CourseAdminOperationType
-                    .UPDATE_OFFERING,
-                batchId,
-                offeringId,
-                null,
-                details,
-                LocalDateTime.now(
-                    clock)));
+        append(
+            operatorUsername,
+            "-",
+            CourseAdminOperationType.UPDATE_OFFERING,
+            batchId,
+            offeringId,
+            null,
+            details);
     }
+
     /**
      * 记录课程基本信息修改。
      */
@@ -244,58 +213,81 @@ final class CourseAdminAuditService {
         String reason) {
 
         String details =
-            cleanText(
-                reason,
-                "reason")
+            optionalText(
+                reason)
                 + "；课程ID="
                 + courseId
                 + "；课程代码="
-                + cleanText(
+                + requiredText(
                 courseCode,
-                "未填写")
+                "courseCode")
                 + "；课程名称="
-                + cleanText(
+                + requiredText(
                 courseName,
-                "未填写")
+                "courseName")
                 + "；学分="
                 + credits
                 + "；课程类型="
-                + cleanText(
+                + requiredText(
                 courseType,
-                "未填写");
+                "courseType");
 
-        records.add(
-            new CourseAdminAuditRecord(
-                nextOperationId++,
-                cleanText(
-                    operatorUsername,
-                    "operatorUsername"),
-                "-",
-                CourseAdminOperationType
-                    .UPDATE_COURSE,
-                batchId,
-                null,
-                null,
-                details,
-                LocalDateTime.now(
-                    clock)));
+        append(
+            operatorUsername,
+            "-",
+            CourseAdminOperationType.UPDATE_COURSE,
+            batchId,
+            null,
+            null,
+            details);
     }
+
     /**
-     * 查询全部操作记录。
+     * 保存一条日志。
      */
+    private void append(
+        String operatorUsername,
+        String studentId,
+        CourseAdminOperationType operationType,
+        Long batchId,
+        Long offeringId,
+        Long enrollmentId,
+        String details) {
+
+        repository.append(
+            requiredText(
+                operatorUsername,
+                "operatorUsername"),
+            requiredText(
+                studentId,
+                "studentId"),
+            Objects.requireNonNull(
+                operationType),
+            batchId,
+            offeringId,
+            enrollmentId,
+            requiredText(
+                details,
+                "details"),
+            LocalDateTime.now(
+                clock));
+    }
+
     /**
-     * 转换成可以发送给客户端的日志 DTO。
+     * 查询全部操作日志。
      */
     synchronized List<CourseAdminAuditInfo>
     listAuditLogs() {
 
-        return records.stream()
+        return repository.findAll()
+            .stream()
             .map(record ->
                 new CourseAdminAuditInfo(
                     record.operationId(),
                     record.operatorUsername(),
                     record.studentId(),
-                    record.operationType().name(),
+                    record.operationType()
+                        .name(),
                     record.batchId(),
                     record.offeringId(),
                     record.enrollmentId(),
@@ -304,7 +296,10 @@ final class CourseAdminAuditService {
             .toList();
     }
 
-    private String cleanText(
+    /**
+     * 必填文本处理。
+     */
+    private String requiredText(
         String value,
         String fieldName) {
 
@@ -322,6 +317,21 @@ final class CourseAdminAuditService {
         }
 
         return cleaned;
+    }
+
+    /**
+     * 选填原因处理。
+     */
+    private String optionalText(
+        String value) {
+
+        if (value == null
+            || value.isBlank()) {
+
+            return "未填写原因";
+        }
+
+        return value.trim();
     }
 }
 

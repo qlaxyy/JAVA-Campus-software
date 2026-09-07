@@ -18,8 +18,7 @@ final class CourseOfferingAdministrationService {
     private final CoursePlanRepository
         planRepository;
     private final CourseSettingsRepository
-        courseSettingsRepository =
-        new InMemoryCourseSettingsRepository();
+        courseSettingsRepository;
     private final CourseSubstitutionRepository
         substitutionRepository;
 
@@ -46,8 +45,11 @@ final class CourseOfferingAdministrationService {
         CourseEnrollmentRepository
             enrollmentRepository,
         CourseOfferingSettingsRepository
-            settingsRepository) {
-
+            settingsRepository,CourseSettingsRepository
+            courseSettingsRepository) {
+        this.courseSettingsRepository =
+            Objects.requireNonNull(
+                courseSettingsRepository);
         this.batchService =
             Objects.requireNonNull(
                 batchService);

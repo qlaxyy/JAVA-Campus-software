@@ -15,23 +15,39 @@ import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Exercises the visible phase-three reader workflow without displaying a window. */
+/** Exercises the reader workflow across the online library and terminal modes. */
 class LibraryWorkflowUiTest {
 
     @Test
-    void readerUsesCatalogTerminalAndDisplayOnlyPersonalRecords() throws Exception {
+    void readerChoosesModesAndUsesCatalogTerminalAndPersonalRecords() throws Exception {
         try (CampusServer server = new CampusServer(0, 3)) {
             server.start();
             ClientContext context = login(server, "20260001");
-            AtomicReference<JTabbedPane> root = new AtomicReference<>();
-            onEdt(() -> root.set((JTabbedPane) new LibraryClientModule().createView(context)));
-            JTabbedPane tabs = root.get();
-            assertEquals(List.of("馆藏查询", "自助借还", "我的借阅"),
+            AtomicReference<LibraryModePanel> root = new AtomicReference<>();
+            onEdt(() -> root.set((LibraryModePanel)
+                    new LibraryClientModule().createView(context)));
+            LibraryModePanel modes = root.get();
+            JPanel selection = named(modes, JPanel.class, "library.modeSelection");
+            JPanel online = named(modes, JPanel.class, "library.online");
+            JPanel terminalMode = named(modes, JPanel.class, "library.terminal");
+            assertTrue(selection.isVisible());
+            assertFalse(online.isVisible());
+            assertFalse(terminalMode.isVisible());
+
+            onEdt(() -> named(modes, JButton.class, "library.mode.online").doClick());
+            assertFalse(selection.isVisible());
+            assertTrue(online.isVisible());
+            assertFalse(terminalMode.isVisible());
+
+            JTabbedPane tabs = named(online, JTabbedPane.class, "library.navigation");
+            assertEquals(List.of("馆藏查询", "我的图书馆"),
                     java.util.stream.IntStream.range(0, tabs.getTabCount()).mapToObj(tabs::getTitleAt).toList());
+            assertFalse(descendants(online).stream().anyMatch(SelfServicePanel.class::isInstance));
 
             LibraryPanel catalog = (LibraryPanel) tabs.getComponentAt(0);
-            SelfServicePanel terminal = (SelfServicePanel) tabs.getComponentAt(1);
-            MyBorrowPanel records = (MyBorrowPanel) tabs.getComponentAt(2);
+            MyLibraryPanel records = (MyLibraryPanel) tabs.getComponentAt(1);
+            SelfServicePanel terminal = named(terminalMode, SelfServicePanel.class,
+                    "library.selfService");
             JLabel terminalUser = named(terminal, JLabel.class, "library.selfService.user");
             assertEquals("当前用户：演示学生", terminalUser.getText());
             assertFalse(terminalUser.getText().contains("U-STUDENT-001"));
@@ -50,6 +66,12 @@ class LibraryWorkflowUiTest {
                     && holdingDetails.getText().contains("可借")
                     && holdingDetails.getText().contains("馆藏"));
 
+            onEdt(() -> named(online, JButton.class, "library.mode.back.online").doClick());
+            assertTrue(selection.isVisible());
+            onEdt(() -> named(modes, JButton.class, "library.mode.terminal").doClick());
+            assertTrue(terminalMode.isVisible());
+            assertFalse(online.isVisible());
+
             JTextField barcode = named(terminal, JTextField.class, "library.selfService.barcode");
             JButton borrow = button(terminal, "借书登记");
             JButton giveBack = button(terminal, "归还登记");
@@ -62,19 +84,28 @@ class LibraryWorkflowUiTest {
             awaitUi(() -> outcome.getText().contains("借书成功"));
 
             JTable current = named(records, JTable.class, "library.currentBorrows");
-            onEdt(() -> tabs.setSelectedIndex(2));
+            onEdt(() -> named(terminalMode, JButton.class,
+                    "library.mode.back.terminal").doClick());
+            assertTrue(selection.isVisible());
+            onEdt(() -> named(modes, JButton.class, "library.mode.online").doClick());
+            onEdt(() -> tabs.setSelectedIndex(1));
             awaitUi(() -> current.getRowCount() == 1 && current.isEnabled());
             assertEquals("SEU-B001-001", current.getValueAt(0, 1));
 
             onEdt(() -> {
-                tabs.setSelectedIndex(1);
+                named(online, JButton.class, "library.mode.back.online").doClick();
+                named(modes, JButton.class, "library.mode.terminal").doClick();
                 barcode.setText("SEU-B001-001");
             });
             awaitUi(giveBack::isEnabled);
             onEdt(giveBack::doClick);
             awaitUi(() -> outcome.getText().contains("归还成功") && outcome.getText().contains("等待管理员上架"));
-            onEdt(() -> tabs.setSelectedIndex(0));
-            onEdt(() -> tabs.setSelectedIndex(2));
+            onEdt(() -> {
+                named(terminalMode, JButton.class, "library.mode.back.terminal").doClick();
+                named(modes, JButton.class, "library.mode.online").doClick();
+                tabs.setSelectedIndex(0);
+                tabs.setSelectedIndex(1);
+            });
             JTable history = named(records, JTable.class, "library.borrowHistory");
             awaitUi(() -> current.getRowCount() == 0 && history.getRowCount() == 1);
             assertEquals("已归还", history.getValueAt(0, 5));

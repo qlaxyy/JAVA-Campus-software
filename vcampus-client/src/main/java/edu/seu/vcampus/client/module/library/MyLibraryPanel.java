@@ -22,8 +22,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
-/** Displays the authenticated user's current and historical circulation records. */
-public final class MyBorrowPanel extends JPanel {
+/** Displays the authenticated user's personal library information. */
+public final class MyLibraryPanel extends JPanel {
 
     private static final String[] COLUMNS = {
         "书名", "馆藏条码", "借阅时间", "到期时间", "归还时间", "状态", "是否逾期"
@@ -41,7 +41,7 @@ public final class MyBorrowPanel extends JPanel {
     private boolean working;
 
     /** @param context shared authenticated client context */
-    public MyBorrowPanel(ClientContext context) {
+    public MyLibraryPanel(ClientContext context) {
         this.context = context;
         setLayout(new BorderLayout(12, 12));
         setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -56,7 +56,7 @@ public final class MyBorrowPanel extends JPanel {
         records.addTab("历史借阅", new JScrollPane(historyTable));
         add(header, BorderLayout.NORTH);
         add(records, BorderLayout.CENTER);
-        add(new JLabel("归还请到“自助借还”页扫描实体书条码"), BorderLayout.SOUTH);
+        add(new JLabel("借还实体书请返回模式选择，进入“模拟自助终端”"), BorderLayout.SOUTH);
 
         refreshButton.addActionListener(event -> refresh());
     }

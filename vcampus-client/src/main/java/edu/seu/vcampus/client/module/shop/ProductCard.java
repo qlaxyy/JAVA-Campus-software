@@ -3,9 +3,7 @@ package edu.seu.vcampus.client.module.shop;
 import edu.seu.vcampus.common.shop.ProductSummaryDto;
 
 import javax.swing.BorderFactory;
-import javax.swing.JButton;
 import javax.swing.JLabel;
-import javax.swing.JLayeredPane;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
@@ -13,26 +11,21 @@ import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.geom.RoundRectangle2D;
+import java.awt.geom.Path2D;
 import java.awt.image.BufferedImage;
 import java.util.function.Consumer;
 
 /**
- * Square product tile: cover photo plus price, name and want-button only.
+ * Xianyu-style tile: large photo, then a name band and a price band.
  */
 final class ProductCard extends JPanel {
 
     private static final int RADIUS = 16;
-
-    private final JLayeredPane layers;
-    private final PhotoPane photo;
-    private final OverlayPane overlay;
 
     ProductCard(
             ProductSummaryDto product,
@@ -42,45 +35,87 @@ final class ProductCard extends JPanel {
         setLayout(new BorderLayout());
         setOpaque(false);
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        Dimension square = new Dimension(cellSize, cellSize);
-        setPreferredSize(square);
-        setMinimumSize(square);
-        setMaximumSize(square);
+        Dimension card = new Dimension(cellSize, ShopCatalogGrid.cardHeight(cellSize));
+        setPreferredSize(card);
+        setMinimumSize(card);
+        setMaximumSize(card);
 
-        JLayeredPane layers = new JLayeredPane();
         PhotoPane photo = new PhotoPane(product);
-        OverlayPane overlay = new OverlayPane(product, onWant);
-        layers.add(photo, JLayeredPane.DEFAULT_LAYER);
-        layers.add(overlay, JLayeredPane.PALETTE_LAYER);
-        add(layers, BorderLayout.CENTER);
-        addMouseListener(new MouseAdapter() {
+        photo.setPreferredSize(new Dimension(cellSize, cellSize));
+
+        JLabel name = new JLabel(nameHtml(product.getName(), cellSize));
+        name.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        name.setForeground(ShopPalette.TEXT);
+        name.setOpaque(true);
+        name.setBackground(ShopPalette.CARD);
+        name.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 0, 0, ShopPalette.LINE),
+                BorderFactory.createEmptyBorder(6, 10, 4, 10)));
+        name.setPreferredSize(new Dimension(cellSize, ShopCatalogGrid.NAME_BAND));
+
+        JLabel price = new JLabel(ShopMoney.yuan(product.getPriceFen()));
+        price.setFont(ShopPalette.priceFont());
+        price.setForeground(ShopPalette.PRICE);
+        price.setOpaque(true);
+        price.setBackground(ShopPalette.CARD);
+        price.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 0, 0, ShopPalette.LINE),
+                BorderFactory.createEmptyBorder(4, 10, 8, 10)));
+        price.setPreferredSize(new Dimension(cellSize, ShopCatalogGrid.PRICE_BAND));
+
+        JPanel text = new JPanel(new BorderLayout());
+        text.setOpaque(true);
+        text.setBackground(ShopPalette.CARD);
+        text.add(name, BorderLayout.NORTH);
+        text.add(price, BorderLayout.SOUTH);
+
+        add(photo, BorderLayout.CENTER);
+        add(text, BorderLayout.SOUTH);
+
+        MouseAdapter open = new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
-                openDetail(product, onWant, onAddToCart);
+                ProductDetailDialog dialog = new ProductDetailDialog(
+                        SwingUtilities.getWindowAncestor(ProductCard.this),
+                        product,
+                        onWant,
+                        onAddToCart);
+                dialog.setVisible(true);
             }
-        });
-        this.layers = layers;
-        this.photo = photo;
-        this.overlay = overlay;
+        };
+        addMouseListener(open);
+        photo.addMouseListener(open);
+        name.addMouseListener(open);
+        price.addMouseListener(open);
+        text.addMouseListener(open);
     }
 
     @Override
-    public void doLayout() {
-        super.doLayout();
-        int width = layers.getWidth();
-        int height = layers.getHeight();
-        photo.setBounds(0, 0, width, height);
-        int overlayHeight = Math.max(108, Math.min(height * 11 / 20, height - 24));
-        overlay.setBounds(0, Math.max(0, height - overlayHeight), width, overlayHeight);
+    protected void paintComponent(Graphics graphics) {
+        Graphics2D brush = (Graphics2D) graphics.create();
+        brush.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        brush.setColor(ShopPalette.CARD);
+        brush.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIUS, RADIUS);
+        brush.dispose();
+        super.paintComponent(graphics);
     }
 
-    private void openDetail(
-            ProductSummaryDto product,
-            Consumer<ProductSummaryDto> onWant,
-            Consumer<ProductSummaryDto> onAddToCart) {
-        ProductDetailDialog dialog = new ProductDetailDialog(
-                SwingUtilities.getWindowAncestor(this), product, onWant, onAddToCart);
-        dialog.setVisible(true);
+    @Override
+    protected void paintBorder(Graphics graphics) {
+        Graphics2D brush = (Graphics2D) graphics.create();
+        brush.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        brush.setColor(ShopPalette.LINE);
+        brush.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, RADIUS, RADIUS);
+        brush.dispose();
+    }
+
+    private static String nameHtml(String name, int cellSize) {
+        int inner = Math.max(80, cellSize - 24);
+        return "<html><body style='width:" + inner + "px'>" + escape(name) + "</body></html>";
+    }
+
+    private static String escape(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;");
     }
 
     private static final class PhotoPane extends JPanel {
@@ -92,6 +127,7 @@ final class ProductCard extends JPanel {
             this.image = ShopPhotoSupport.image(product.getCoverPhoto());
             this.fallback = ShopPalette.categoryTone(product.getCategoryName());
             setOpaque(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         }
 
         @Override
@@ -101,7 +137,7 @@ final class ProductCard extends JPanel {
             brush.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
             int width = getWidth();
             int height = getHeight();
-            RoundRectangle2D clip = new RoundRectangle2D.Float(0, 0, width, height, RADIUS, RADIUS);
+            Path2D clip = topRoundedRect(width, height, RADIUS);
             brush.setClip(clip);
             brush.setColor(fallback);
             brush.fill(clip);
@@ -109,50 +145,29 @@ final class ProductCard extends JPanel {
                 double scale = Math.max(width / (double) image.getWidth(), height / (double) image.getHeight());
                 int drawWidth = (int) Math.round(image.getWidth() * scale);
                 int drawHeight = (int) Math.round(image.getHeight() * scale);
-                brush.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight, null);
+                brush.drawImage(
+                        image,
+                        (width - drawWidth) / 2,
+                        (height - drawHeight) / 2,
+                        drawWidth,
+                        drawHeight,
+                        null);
             }
             brush.dispose();
         }
-    }
 
-    private static final class OverlayPane extends JPanel {
-
-        OverlayPane(ProductSummaryDto product, Consumer<ProductSummaryDto> onAdd) {
-            setOpaque(false);
-            setLayout(new BorderLayout(8, 0));
-            setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
-
-            JLabel name = new JLabel(product.getName());
-            name.setForeground(Color.WHITE);
-            name.setFont(new Font("SansSerif", Font.BOLD, 16));
-
-            JLabel price = new JLabel("¥" + String.format("%.2f", product.getPriceFen() / 100.0));
-            price.setFont(new Font("SansSerif", Font.BOLD, 22));
-            price.setForeground(Color.WHITE);
-
-            JButton want = ShopPalette.quietButton(product.getStockQty() > 0 ? "我想要" : "已售罄");
-            want.setEnabled(product.getStockQty() > 0);
-            want.addActionListener(event -> onAdd.accept(product));
-
-            JPanel row = new JPanel(new BorderLayout(8, 0));
-            row.setOpaque(false);
-            row.add(price, BorderLayout.WEST);
-            row.add(want, BorderLayout.EAST);
-
-            add(name, BorderLayout.NORTH);
-            add(row, BorderLayout.SOUTH);
-        }
-
-        @Override
-        protected void paintComponent(Graphics graphics) {
-            Graphics2D brush = (Graphics2D) graphics.create();
-            brush.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            brush.setPaint(new GradientPaint(
-                    0, 0, new Color(15, 23, 42, 10),
-                    0, getHeight(), new Color(15, 23, 42, 200)));
-            brush.fillRect(0, 0, getWidth(), getHeight());
-            brush.dispose();
-            super.paintComponent(graphics);
+        private static Path2D topRoundedRect(int width, int height, int radius) {
+            float r = Math.min(radius, Math.min(width, height) / 2F);
+            Path2D path = new Path2D.Float();
+            path.moveTo(r, 0);
+            path.lineTo(width - r, 0);
+            path.quadTo(width, 0, width, r);
+            path.lineTo(width, height);
+            path.lineTo(0, height);
+            path.lineTo(0, r);
+            path.quadTo(0, 0, r, 0);
+            path.closePath();
+            return path;
         }
     }
 }

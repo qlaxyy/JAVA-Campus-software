@@ -95,9 +95,23 @@ Optional<SessionInfo> session = context.sessions()
 
 Optional<UserIdentity> person = context.users()
         .findByUserId(userId);
+
+Optional<UserIdentity> samePerson = context.users()
+        .findByCampusCardNumber(campusCardNumber);
 ```
 
 会话查询用于确认当前操作者及其 `role`、`adminScopes`；用户目录查询任意已有账号时只返回 `userId`、一卡通号、姓名和启用状态。它不返回密码、角色、管理权限或其他子系统资料。子系统不能修改会话存储，也不能相信客户端传来的“我是管理员”等字段。
+
+三个接口的职责不要混用：
+
+| 调用方式 | 用途 | 返回结果 |
+|---|---|---|
+| `context.sessions().findSession(token)` | 根据请求 token 确认当前登录者 | `SessionInfo`，包含当前用户身份与权限 |
+| `context.users().findByUserId(userId)` | 根据业务表保存的 `userId` 显示某人的基础信息 | `UserIdentity` |
+| `context.users().findByCampusCardNumber(number)` | 输入一卡通号时确认已有账户 | `UserIdentity` |
+| `context.accounts().createGeneratedRegularAccount(name)` | 超级管理员批准外来人员后创建账户 | `ProvisionedAccount` |
+
+`UserIdentity` 只有 `userId`、`campusCardNumber`、`displayName`、`enabled` 四个字段。前三种调用都是只读查询；创建账户只能放在已经完成超级管理员审批的服务器流程中，不能直接暴露为普通子系统管理员的新增按钮。
 
 | 公共能力 | 谁提供 | 谁使用 |
 |---|---|---|

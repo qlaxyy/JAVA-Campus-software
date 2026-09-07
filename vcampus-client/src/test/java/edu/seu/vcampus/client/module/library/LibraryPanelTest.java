@@ -4,14 +4,17 @@ import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.infrastructure.CampusClient;
 import org.junit.jupiter.api.Test;
 
-import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableModel;
-import java.util.Arrays;
+import java.awt.Component;
+import java.awt.Container;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LibraryPanelTest {
 
@@ -70,15 +73,24 @@ class LibraryPanelTest {
         });
     }
 
+    @Test
+    void holdingDetailsUseAReadOnlyWrappingTextArea() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            LibraryPanel panel = new LibraryPanel(
+                    new ClientContext(new CampusClient("127.0.0.1", 1)));
+            JTextArea details = named(panel, JTextArea.class, "library.holdingDetails");
+
+            assertFalse(details.isEditable());
+            assertTrue(details.getLineWrap());
+            assertTrue(details.getWrapStyleWord());
+            assertTrue(details.getText().contains("完整馆藏地"));
+        });
+    }
+
     private static JTable createResultTable() {
         LibraryPanel panel = new LibraryPanel(
                 new ClientContext(new CampusClient("127.0.0.1", 1)));
-        JScrollPane scrollPane = Arrays.stream(panel.getComponents())
-                .filter(JScrollPane.class::isInstance)
-                .map(JScrollPane.class::cast)
-                .findFirst()
-                .orElseThrow();
-        JTable table = (JTable) scrollPane.getViewport().getView();
+        JTable table = named(panel, JTable.class, "library.searchResults");
         DefaultTableModel model = (DefaultTableModel) table.getModel();
         // Selection tests need rows only; no network requests or borrowed records.
         for (int index = 1; index <= 3; index++) {
@@ -86,5 +98,21 @@ class LibraryPanelTest {
                     "Book " + index, "Author", "Category", "1/1"});
         }
         return table;
+    }
+
+    private static <T extends Component> T named(Container root, Class<T> type, String name) {
+        for (Component component : root.getComponents()) {
+            if (type.isInstance(component) && name.equals(component.getName())) {
+                return type.cast(component);
+            }
+            if (component instanceof Container child) {
+                try {
+                    return named(child, type, name);
+                } catch (IllegalStateException ignored) {
+                    // Continue searching the remaining component branches.
+                }
+            }
+        }
+        throw new IllegalStateException("Component not found: " + name);
     }
 }

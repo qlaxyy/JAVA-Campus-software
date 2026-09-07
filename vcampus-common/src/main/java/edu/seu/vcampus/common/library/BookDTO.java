@@ -2,47 +2,50 @@ package edu.seu.vcampus.common.library;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.List;
 
 /** Serializable summary of one searchable library book. */
 public final class BookDTO implements Serializable {
 
     @Serial
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 3L;
 
     private final String bookId;
     private final String isbn;
     private final String title;
     private final String author;
-    private final String category;
-    private final int totalCount;
-    private final int availableCount;
+    private final String categoryId;
+    private final String categoryName;
+    private final String publisher;
+    private final Integer publicationYear;
+    private final String language;
+    private final String status;
+    private final List<BookLocationDTO> locations;
 
-    /**
-     * Creates an immutable summary of one searchable book.
-     *
-     * @param bookId stable library book identifier
-     * @param isbn international standard book number
-     * @param title display title
-     * @param author display author
-     * @param category library category
-     * @param totalCount total number of copies
-     * @param availableCount copies currently available to borrow
-     */
+    /** Creates a V2 catalog summary whose inventory is grouped by location. */
     public BookDTO(
             String bookId,
             String isbn,
             String title,
             String author,
-            String category,
-            int totalCount,
-            int availableCount) {
+            String categoryId,
+            String categoryName,
+            String publisher,
+            Integer publicationYear,
+            String language,
+            String status,
+            List<BookLocationDTO> locations) {
         this.bookId = bookId;
         this.isbn = isbn;
         this.title = title;
         this.author = author;
-        this.category = category;
-        this.totalCount = totalCount;
-        this.availableCount = availableCount;
+        this.categoryId = categoryId;
+        this.categoryName = categoryName;
+        this.publisher = publisher;
+        this.publicationYear = publicationYear;
+        this.language = language;
+        this.status = status;
+        this.locations = List.copyOf(locations);
     }
 
     /** @return stable library book identifier */
@@ -65,18 +68,30 @@ public final class BookDTO implements Serializable {
         return author;
     }
 
-    /** @return library category */
-    public String getCategory() {
-        return category;
-    }
+    /** @return stable library category identifier */
+    public String getCategoryId() { return categoryId; }
+
+    /** @return category display name */
+    public String getCategoryName() { return categoryName; }
+
+    public String getPublisher() { return publisher; }
+
+    public Integer getPublicationYear() { return publicationYear; }
+
+    public String getLanguage() { return language; }
+
+    public String getStatus() { return status; }
+
+    /** @return immutable inventory summaries grouped by location */
+    public List<BookLocationDTO> getLocations() { return locations; }
 
     /** @return total number of copies */
     public int getTotalCount() {
-        return totalCount;
+        return locations.stream().mapToInt(BookLocationDTO::getTotalCount).sum();
     }
 
     /** @return copies currently available to borrow */
     public int getAvailableCount() {
-        return availableCount;
+        return locations.stream().mapToInt(BookLocationDTO::getAvailableCount).sum();
     }
 }

@@ -36,6 +36,14 @@ public final class ErrorCodes {
     public static final String LIBRARY_BORROW_RECORD_NOT_FOUND =
             "LIBRARY_BORROW_RECORD_NOT_FOUND";
     public static final String LIBRARY_ALREADY_RETURNED = "LIBRARY_ALREADY_RETURNED";
+    public static final String LIBRARY_INVALID_STOCK = "LIBRARY_INVALID_STOCK";
+    public static final String LIBRARY_DUPLICATE_ISBN = "LIBRARY_DUPLICATE_ISBN";
+    public static final String LIBRARY_CATEGORY_NOT_FOUND = "LIBRARY_CATEGORY_NOT_FOUND";
+    public static final String LIBRARY_COPY_NOT_FOUND = "LIBRARY_COPY_NOT_FOUND";
+    public static final String LIBRARY_COPY_NOT_AVAILABLE = "LIBRARY_COPY_NOT_AVAILABLE";
+    public static final String LIBRARY_INVALID_COPY_STATUS = "LIBRARY_INVALID_COPY_STATUS";
+    public static final String LIBRARY_DUPLICATE_BARCODE = "LIBRARY_DUPLICATE_BARCODE";
+    public static final String LIBRARY_INVALID_BOOK_STATUS = "LIBRARY_INVALID_BOOK_STATUS";
 
     private ErrorCodes() {
     }

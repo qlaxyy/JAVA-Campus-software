@@ -1,8 +1,9 @@
 package edu.seu.vcampus.client.module.library;
 
 import edu.seu.vcampus.client.application.ClientContext;
-import edu.seu.vcampus.common.library.BookBorrowRequest;
+import edu.seu.vcampus.common.library.BookCategoryDTO;
 import edu.seu.vcampus.common.library.BookDTO;
+import edu.seu.vcampus.common.library.BookLocationDTO;
 import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BookSearchResult;
 import edu.seu.vcampus.common.library.LibraryActions;
@@ -10,10 +11,12 @@ import edu.seu.vcampus.common.protocol.Response;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
@@ -22,40 +25,38 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
-/** Minimal end-to-end page for searching the library catalog. */
+/** Search-only catalog page; circulation is handled by the self-service terminal. */
 public final class LibraryPanel extends JPanel {
 
     private static final String[] COLUMNS = {
-        "图书编号", "ISBN", "书名", "作者", "分类", "可借/馆藏"
+        "ISBN", "书名", "作者", "分类", "出版社 / 出版年", "语种", "馆藏地（可借/馆藏）"
     };
 
     private final ClientContext context;
     private final JTextField keywordField = new JTextField();
     private final JButton searchButton = new JButton("搜索");
-    private final JButton borrowButton = new JButton("借阅选中图书");
-    private final JLabel statusLabel = new JLabel("输入书名、作者、ISBN 或分类进行搜索");
-    private final JLabel operationLabel = new JLabel("借还操作用于模拟柜台或自助终端登记");
-    private final JTable resultTable;
+    private final JComboBox<BookCategoryDTO> categoryFilter = new JComboBox<>();
+    private final JLabel statusLabel = new JLabel("输入关键词或选择分类；留空可查看全部开放书目");
+    private final JTextArea holdingDetails = new JTextArea(4, 30);
     private final DefaultTableModel tableModel = new DefaultTableModel(COLUMNS, 0) {
         @Override
         public boolean isCellEditable(int row, int column) {
             return false;
         }
     };
-    private List<BookDTO> displayedBooks = List.of();
+    private final JTable resultTable = new JTable(tableModel);
+    private List<BookDTO> books = List.of();
     private boolean working;
     private String lastSearchKeyword;
+    private String lastCategoryId;
 
-    /**
-     * Creates the library search page.
-     *
-     * @param context shared authenticated client context
-     */
+    /** @param context shared authenticated client context */
     public LibraryPanel(ClientContext context) {
         this.context = context;
-        this.resultTable = new JTable(tableModel);
         initializeView();
+        loadCategories();
     }
 
     private void initializeView() {
@@ -64,82 +65,88 @@ public final class LibraryPanel extends JPanel {
 
         JPanel searchPanel = new JPanel(new BorderLayout(12, 0));
         searchPanel.add(new JLabel("检索关键词："), BorderLayout.WEST);
+        keywordField.setName("library.search.keyword");
         searchPanel.add(keywordField, BorderLayout.CENTER);
         searchPanel.add(searchButton, BorderLayout.EAST);
+        categoryFilter.addItem(null);
+        categoryFilter.setName("library.categoryFilter");
+        LibraryCategories.render(categoryFilter);
+        JPanel searchArea = new JPanel(new BorderLayout(8, 8));
+        searchArea.add(searchPanel, BorderLayout.CENTER);
+        searchArea.add(categoryFilter, BorderLayout.EAST);
 
+        resultTable.setName("library.searchResults");
         resultTable.setFillsViewportHeight(true);
         resultTable.setAutoCreateRowSorter(true);
         resultTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         resultTable.getTableHeader().setReorderingAllowed(false);
         resultTable.getTableHeader().setResizingAllowed(false);
-        statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        borrowButton.setEnabled(false);
+        resultTable.getColumnModel().getColumn(6).setPreferredWidth(320);
+        resultTable.getSelectionModel().addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting()) {
+                showSelectedHoldingDetails();
+            }
+        });
+
+        holdingDetails.setName("library.holdingDetails");
+        holdingDetails.setEditable(false);
+        holdingDetails.setLineWrap(true);
+        holdingDetails.setWrapStyleWord(true);
+        holdingDetails.setText("请选择一条书目查看完整馆藏地和数量");
+        JScrollPane holdingScroll = new JScrollPane(holdingDetails);
+        holdingScroll.setBorder(BorderFactory.createTitledBorder("馆藏详情"));
+
+        JPanel resultArea = new JPanel(new BorderLayout(8, 8));
+        resultArea.add(new JScrollPane(resultTable), BorderLayout.CENTER);
+        resultArea.add(holdingScroll, BorderLayout.SOUTH);
         statusLabel.setName("library.searchStatus");
-        operationLabel.setName("library.borrowOutcome");
+        statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
-        JPanel actionPanel = new JPanel(new BorderLayout(12, 0));
-        actionPanel.add(statusLabel, BorderLayout.CENTER);
-        actionPanel.add(borrowButton, BorderLayout.EAST);
-
-        JPanel footer = new JPanel(new BorderLayout(0, 8));
-        footer.add(operationLabel, BorderLayout.NORTH);
-        footer.add(actionPanel, BorderLayout.SOUTH);
-
-        add(searchPanel, BorderLayout.NORTH);
-        add(new JScrollPane(resultTable), BorderLayout.CENTER);
-        add(footer, BorderLayout.SOUTH);
+        add(searchArea, BorderLayout.NORTH);
+        add(resultArea, BorderLayout.CENTER);
+        add(statusLabel, BorderLayout.SOUTH);
 
         searchButton.addActionListener(event -> search());
         keywordField.addActionListener(event -> search());
-        borrowButton.addActionListener(event -> borrowSelectedBook());
-        resultTable.getSelectionModel().addListSelectionListener(
-                event -> updateBorrowButtonState());
     }
 
     private void search() {
-        search(keywordField.getText().trim(), false);
+        BookCategoryDTO category = (BookCategoryDTO) categoryFilter.getSelectedItem();
+        lastCategoryId = category == null ? null : category.getCategoryId();
+        search(keywordField.getText().strip());
     }
 
     void refreshIfSearched() {
         if (lastSearchKeyword != null) {
-            search(lastSearchKeyword, false);
+            search(lastSearchKeyword);
         }
     }
 
-    private void search(String keyword, boolean afterBorrow) {
+    private void search(String keyword) {
         if (working) {
             return;
         }
-        if (keyword.isEmpty()) {
-            statusLabel.setText("请输入搜索关键词");
-            keywordField.requestFocusInWindow();
-            return;
-        }
-
         lastSearchKeyword = keyword;
-        String failurePrefix = afterBorrow ? "借阅成功，但库存刷新失败：" : "搜索失败：";
-
+        String categoryId = lastCategoryId;
         setWorking(true);
         clearResults();
         statusLabel.setText("正在搜索……");
-
         new SwingWorker<Response, Void>() {
             @Override
             protected Response doInBackground() throws Exception {
-                return context.send(
-                        LibraryActions.SEARCH_BOOKS,
-                        new BookSearchRequest(keyword));
+                return context.send(LibraryActions.SEARCH_BOOKS,
+                        new BookSearchRequest(keyword, categoryId));
             }
 
             @Override
             protected void done() {
                 try {
-                    showResponse(get(), failurePrefix);
+                    showResponse(get());
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
-                    statusLabel.setText(failurePrefix + "请求已中断");
+                    statusLabel.setText("搜索已中断");
                 } catch (ExecutionException exception) {
-                    statusLabel.setText(failurePrefix + "请检查网络后重试查询");
+                    statusLabel.setText("搜索失败：请检查网络后重试");
                 } finally {
                     setWorking(false);
                 }
@@ -147,112 +154,110 @@ public final class LibraryPanel extends JPanel {
         }.execute();
     }
 
-    private void showResponse(Response response, String failurePrefix) {
+    private void showResponse(Response response) {
         clearResults();
-        if (!response.isSuccess()) {
-            statusLabel.setText(failurePrefix + LibraryMessages.failure(response));
+        if (response == null || !response.isSuccess()) {
+            statusLabel.setText("搜索失败：" + (response == null
+                    ? "服务器未返回结果" : LibraryMessages.failure(response)));
             return;
         }
         if (!(response.getData() instanceof BookSearchResult result)) {
-            statusLabel.setText(failurePrefix + "服务器返回的数据格式不正确");
+            statusLabel.setText("搜索失败：服务器返回的数据格式不正确");
             return;
         }
-
-        displayedBooks = result.getBooks();
-        for (BookDTO book : displayedBooks) {
+        books = result.getBooks();
+        for (BookDTO book : books) {
             tableModel.addRow(new Object[] {
-                book.getBookId(),
-                book.getIsbn(),
-                book.getTitle(),
-                book.getAuthor(),
-                book.getCategory(),
-                book.getAvailableCount() + "/" + book.getTotalCount()
+                book.getIsbn(), book.getTitle(), book.getAuthor(), book.getCategoryName(),
+                publication(book), blankAsDash(book.getLanguage()), formatLocations(book)
             });
         }
-        statusLabel.setText("找到 " + result.getBooks().size() + " 本图书");
-        updateBorrowButtonState();
+        statusLabel.setText("找到 " + result.getBooks().size()
+                + " 本书目；借还请使用“自助借还”页扫描实体书条码");
     }
 
-    private void borrowSelectedBook() {
-        if (working) {
-            return;
-        }
-        int selectedViewRow = resultTable.getSelectedRow();
-        if (selectedViewRow < 0) {
-            statusLabel.setText("请先选择一本图书");
-            return;
-        }
-        int selectedModelRow = resultTable.convertRowIndexToModel(selectedViewRow);
-        BookDTO selectedBook = displayedBooks.get(selectedModelRow);
-        if (selectedBook.getAvailableCount() <= 0) {
-            statusLabel.setText("暂无可借库存");
-            return;
-        }
+    private static String publication(BookDTO book) {
+        String publisher = blankAsDash(book.getPublisher());
+        return book.getPublicationYear() == null
+                ? publisher : publisher + " / " + book.getPublicationYear();
+    }
 
-        setWorking(true);
-        operationLabel.setText("正在提交借阅《" + selectedBook.getTitle() + "》");
-        statusLabel.setText("正在借阅《" + selectedBook.getTitle() + "》……");
+    private static String formatLocations(BookDTO book) {
+        if (book.getLocations().isEmpty()) {
+            return "暂无馆藏";
+        }
+        return book.getLocations().stream().map(LibraryPanel::formatLocation)
+                .collect(Collectors.joining("；"));
+    }
 
-        new SwingWorker<Response, Void>() {
+    private static String formatLocation(BookLocationDTO location) {
+        return location.getLocation() + " " + location.getAvailableCount()
+                + "/" + location.getTotalCount();
+    }
+
+    private void showSelectedHoldingDetails() {
+        int viewRow = resultTable.getSelectedRow();
+        if (viewRow < 0) {
+            holdingDetails.setText("请选择一条书目查看完整馆藏地和数量");
+            return;
+        }
+        int modelRow = resultTable.convertRowIndexToModel(viewRow);
+        if (modelRow >= books.size()) {
+            holdingDetails.setText("暂时无法显示馆藏详情，请重新搜索");
+            return;
+        }
+        BookDTO book = books.get(modelRow);
+        String locations = book.getLocations().isEmpty()
+                ? "暂无馆藏"
+                : book.getLocations().stream()
+                        .map(location -> location.getLocation() + "：可借 "
+                                + location.getAvailableCount() + " 本 / 馆藏 "
+                                + location.getTotalCount() + " 本")
+                        .collect(Collectors.joining(System.lineSeparator()));
+        holdingDetails.setText("《" + book.getTitle() + "》" + System.lineSeparator() + locations);
+        holdingDetails.setCaretPosition(0);
+    }
+
+    private static String blankAsDash(String value) {
+        return value == null || value.isBlank() ? "—" : value;
+    }
+
+    private void clearResults() {
+        books = List.of();
+        tableModel.setRowCount(0);
+        holdingDetails.setText("请选择一条书目查看完整馆藏地和数量");
+    }
+
+    private void setWorking(boolean value) {
+        working = value;
+        keywordField.setEnabled(!value);
+        categoryFilter.setEnabled(!value);
+        searchButton.setEnabled(!value);
+        resultTable.setEnabled(!value);
+    }
+
+    private void loadCategories() {
+        if (context.currentSession().isEmpty()) {
+            return;
+        }
+        new SwingWorker<List<BookCategoryDTO>, Void>() {
             @Override
-            protected Response doInBackground() throws Exception {
-                return context.send(
-                        LibraryActions.BORROW_BOOK,
-                        new BookBorrowRequest(selectedBook.getBookId()));
+            protected List<BookCategoryDTO> doInBackground() throws Exception {
+                return LibraryCategories.read(context.send(LibraryActions.LIST_CATEGORIES, null));
             }
 
             @Override
             protected void done() {
                 try {
-                    Response response = get();
-                    if (!response.isSuccess()) {
-                        operationLabel.setText("借阅失败：" + LibraryMessages.failure(response));
-                        statusLabel.setText("可刷新查询或查看我的借阅");
-                        setWorking(false);
-                        return;
+                    for (BookCategoryDTO category : get()) {
+                        categoryFilter.addItem(category);
                     }
-                    operationLabel.setText("借阅成功：《" + selectedBook.getTitle()
-                            + "》。到期时间请查看“我的借阅”。");
-                    setWorking(false);
-                    search(lastSearchKeyword, true);
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
-                    operationLabel.setText("借阅结果未确认，请到“我的借阅”核对后再操作");
-                    clearResults();
-                    statusLabel.setText("请求已中断");
-                    setWorking(false);
                 } catch (ExecutionException exception) {
-                    operationLabel.setText("借阅结果未确认，请到“我的借阅”核对后再操作");
-                    clearResults();
-                    statusLabel.setText("请检查网络连接");
-                    setWorking(false);
+                    categoryFilter.setToolTipText("分类加载失败，可继续关键词搜索");
                 }
             }
         }.execute();
-    }
-
-    private void updateBorrowButtonState() {
-        int selectedViewRow = resultTable.getSelectedRow();
-        if (working || selectedViewRow < 0) {
-            borrowButton.setEnabled(false);
-            return;
-        }
-        int selectedModelRow = resultTable.convertRowIndexToModel(selectedViewRow);
-        borrowButton.setEnabled(
-                selectedModelRow < displayedBooks.size()
-                        && displayedBooks.get(selectedModelRow).getAvailableCount() > 0);
-    }
-
-    private void clearResults() {
-        tableModel.setRowCount(0);
-        displayedBooks = List.of();
-    }
-
-    private void setWorking(boolean working) {
-        this.working = working;
-        keywordField.setEnabled(!working);
-        searchButton.setEnabled(!working);
-        resultTable.setEnabled(!working);
-        updateBorrowButtonState();
     }
 }

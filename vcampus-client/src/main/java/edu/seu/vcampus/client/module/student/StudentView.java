@@ -227,7 +227,7 @@ public class StudentView extends JPanel {
         cardContact.add(contactAction, BorderLayout.SOUTH);
         cardsGrid.add(cardContact);
 
-        // 卡片 4：学籍异动申请卡片（基于当前会话精准鉴权分发）
+        // 卡片 4：学籍异动申请卡片（基于当前会话严格鉴权）
         JPanel cardChange = createCardPanel("学籍异动申请", "申请转专业、休学与复学流程");
         JButton btnOpenChange = new JButton("办理/查看异动");
         btnOpenChange.setFont(FONT_SUB);
@@ -252,13 +252,11 @@ public class StudentView extends JPanel {
             boolean isTeacher = rawId.contains("teacher");
             boolean isAdmin = rawId.contains("admin");
 
-            // 1. 教师拦截：无权进入学籍异动
             if (isTeacher) {
                 JOptionPane.showMessageDialog(this, "权限不足：普通教师无权访问学籍异动管理模块！", "权限受限", JOptionPane.WARNING_MESSAGE);
                 return;
             }
 
-            // 2. 管理员模式：进入全局审批工作台
             if (isAdmin) {
                 StatusChangeDialog dlg = new StatusChangeDialog(
                     SwingUtilities.getWindowAncestor(this),
@@ -273,7 +271,6 @@ public class StudentView extends JPanel {
                 return;
             }
 
-            // 3. 学生端模式：仅限申请与查看本人异动
             String targetStudentId = rawId;
             if (currentProfile != null && !rawId.equals(currentProfile.getStudentId())) {
                 JOptionPane.showMessageDialog(this, "权限不足：学生仅能查看与办理本人的学籍异动！", "权限受限", JOptionPane.WARNING_MESSAGE);
@@ -291,12 +288,67 @@ public class StudentView extends JPanel {
             );
             dlg.setVisible(true);
         });
-
         cardChange.add(btnOpenChange, BorderLayout.SOUTH);
         cardsGrid.add(cardChange);
 
-        // 卡片 5~6：占位
-        cardsGrid.add(createPlaceholderCard("学籍证明下载", "在线开具并打印中英文在读证明", "后续开放"));
+        // 卡片 5：学籍证明下载（严格权限隔离）
+        JPanel cardCert = createCardPanel("学籍证明开具", "在线开具并打印中英文在读证明");
+        JButton btnDownloadCert = new JButton("开具证明");
+        btnDownloadCert.setFont(FONT_SUB);
+        btnDownloadCert.setBackground(new Color(224, 231, 255));
+        btnDownloadCert.setForeground(Color.BLACK);
+        btnDownloadCert.setFocusPainted(false);
+        btnDownloadCert.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(199, 210, 254), 1),
+            BorderFactory.createEmptyBorder(6, 12, 6, 12)
+        ));
+        btnDownloadCert.addActionListener(e -> {
+            if (currentProfile == null) {
+                JOptionPane.showMessageDialog(this, "请先输入学号查询并调取对应档案后再开具学籍证明！", "提示", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            String rawId = context.currentSession()
+                .map(s -> s.getUserId() != null ? s.getUserId().trim().toLowerCase() : "")
+                .orElse("");
+
+            if (rawId.startsWith("u-")) {
+                rawId = rawId.substring(2);
+            }
+            rawId = rawId.replace("-", "");
+
+            boolean isTeacher = rawId.contains("teacher");
+            boolean isAdmin = rawId.contains("admin");
+
+            // (1) 普通教师：完全禁止查看与开具学籍证明
+            if (isTeacher) {
+                JOptionPane.showMessageDialog(this,
+                    "权限不足：普通教师无权开具或查阅学生学籍证明！",
+                    "权限受限",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            // (2) 学生：仅允许开具本人的学籍证明，严禁代开他人
+            if (!isAdmin && !rawId.equals(currentProfile.getStudentId())) {
+                JOptionPane.showMessageDialog(this,
+                    "权限不足：学生仅能开具本人的学籍在读证明！",
+                    "权限受限",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            // (3) 验证通过，弹出证明窗口
+            StudentCertificateDialog dlg = new StudentCertificateDialog(
+                SwingUtilities.getWindowAncestor(this),
+                currentProfile
+            );
+            dlg.setVisible(true);
+        });
+        cardCert.add(btnDownloadCert, BorderLayout.SOUTH);
+        cardsGrid.add(cardCert);
+
+        // 卡片 6：学业毕业审核（保持占位）
         cardsGrid.add(createPlaceholderCard("学业毕业审核", "培养方案完成度与学分绩点核算", "后续开放"));
 
         mainContainer.add(cardsGrid);

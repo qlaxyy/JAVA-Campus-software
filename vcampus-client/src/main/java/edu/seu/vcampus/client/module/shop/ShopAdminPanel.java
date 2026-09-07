@@ -82,7 +82,7 @@ final class ShopAdminPanel extends JPanel {
         JLabel title = new JLabel("商家中心");
         title.setFont(ShopPalette.titleFont());
         title.setForeground(ShopPalette.TEXT);
-        JLabel hint = new JLabel("上架商品、上架数据与成交订单同级展示");
+        JLabel hint = new JLabel("可新增分类后再上架相机等新品；上架数据与成交订单同级展示");
         hint.setForeground(ShopPalette.MUTED);
         JPanel titles = new JPanel(new BorderLayout(0, 4));
         titles.setOpaque(false);
@@ -108,6 +108,7 @@ final class ShopAdminPanel extends JPanel {
         JPanel tools = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         tools.setOpaque(false);
         tools.add(tool("新上架", true, this::openPublish));
+        tools.add(tool("新增分类", false, this::openAddCategory));
         tools.add(tool("修改选中", false, this::openEdit));
         tools.add(tool("刷新", false, this::loadProducts));
         page.add(tools, BorderLayout.NORTH);
@@ -157,6 +158,14 @@ final class ShopAdminPanel extends JPanel {
                     BorderFactory.createLineBorder(ShopPalette.LINE),
                     BorderFactory.createEmptyBorder(8, 14, 8, 14)));
         }
+    }
+
+    private void openAddCategory() {
+        AddCategoryDialog dialog = new AddCategoryDialog(
+                javax.swing.SwingUtilities.getWindowAncestor(this),
+                context,
+                created -> statusLabel.setText("已添加分类「" + created.getName() + "」，上架时可选用。"));
+        dialog.setVisible(true);
     }
 
     private void openPublish() {

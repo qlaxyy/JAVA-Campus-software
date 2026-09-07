@@ -75,4 +75,32 @@ class InMemoryShopCatalogTest {
         assertTrue(local.listListings().stream().anyMatch(row ->
                 row.getAction().equals("调整") && row.getProductId() == 8));
     }
+
+    @Test
+    void addCategoryThenPublishUsesNewCategory() {
+        InMemoryShopCatalog local = new InMemoryShopCatalog();
+        edu.seu.vcampus.common.shop.ShopCategoryDto camera = local.addCategory("相机");
+        ProductSummaryDto published = local.publish(
+                new edu.seu.vcampus.common.shop.PublishProductRequest(
+                        "二手数码相机",
+                        camera.getCategoryId(),
+                        "快门正常，适合摄影社借用演示。",
+                        19900,
+                        1,
+                        ShopDemoPhotos.forProduct("相机", "相机")),
+                "商店管理员");
+        assertEquals("相机", published.getCategoryName());
+        assertEquals(4, local.listCategories().size());
+    }
+
+    @Test
+    void duplicateCategoryNameIsRejected() {
+        InMemoryShopCatalog local = new InMemoryShopCatalog();
+        try {
+            local.addCategory("文具");
+            org.junit.jupiter.api.Assertions.fail("expected duplicate category");
+        } catch (ShopBusinessException exception) {
+            assertEquals(edu.seu.vcampus.common.protocol.ErrorCodes.SHOP_CATEGORY_EXISTS, exception.code());
+        }
+    }
 }

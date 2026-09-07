@@ -16,6 +16,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
@@ -38,6 +39,7 @@ public final class LibraryPanel extends JPanel {
     private final JButton searchButton = new JButton("搜索");
     private final JComboBox<BookCategoryDTO> categoryFilter = new JComboBox<>();
     private final JLabel statusLabel = new JLabel("输入关键词或选择分类；留空可查看全部开放书目");
+    private final JTextArea holdingDetails = new JTextArea(4, 30);
     private final DefaultTableModel tableModel = new DefaultTableModel(COLUMNS, 0) {
         @Override
         public boolean isCellEditable(int row, int column) {
@@ -45,6 +47,7 @@ public final class LibraryPanel extends JPanel {
         }
     };
     private final JTable resultTable = new JTable(tableModel);
+    private List<BookDTO> books = List.of();
     private boolean working;
     private String lastSearchKeyword;
     private String lastCategoryId;
@@ -62,6 +65,7 @@ public final class LibraryPanel extends JPanel {
 
         JPanel searchPanel = new JPanel(new BorderLayout(12, 0));
         searchPanel.add(new JLabel("检索关键词："), BorderLayout.WEST);
+        keywordField.setName("library.search.keyword");
         searchPanel.add(keywordField, BorderLayout.CENTER);
         searchPanel.add(searchButton, BorderLayout.EAST);
         categoryFilter.addItem(null);
@@ -77,11 +81,29 @@ public final class LibraryPanel extends JPanel {
         resultTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         resultTable.getTableHeader().setReorderingAllowed(false);
         resultTable.getTableHeader().setResizingAllowed(false);
+        resultTable.getColumnModel().getColumn(6).setPreferredWidth(320);
+        resultTable.getSelectionModel().addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting()) {
+                showSelectedHoldingDetails();
+            }
+        });
+
+        holdingDetails.setName("library.holdingDetails");
+        holdingDetails.setEditable(false);
+        holdingDetails.setLineWrap(true);
+        holdingDetails.setWrapStyleWord(true);
+        holdingDetails.setText("请选择一条书目查看完整馆藏地和数量");
+        JScrollPane holdingScroll = new JScrollPane(holdingDetails);
+        holdingScroll.setBorder(BorderFactory.createTitledBorder("馆藏详情"));
+
+        JPanel resultArea = new JPanel(new BorderLayout(8, 8));
+        resultArea.add(new JScrollPane(resultTable), BorderLayout.CENTER);
+        resultArea.add(holdingScroll, BorderLayout.SOUTH);
         statusLabel.setName("library.searchStatus");
         statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
 
         add(searchArea, BorderLayout.NORTH);
-        add(new JScrollPane(resultTable), BorderLayout.CENTER);
+        add(resultArea, BorderLayout.CENTER);
         add(statusLabel, BorderLayout.SOUTH);
 
         searchButton.addActionListener(event -> search());
@@ -143,7 +165,8 @@ public final class LibraryPanel extends JPanel {
             statusLabel.setText("搜索失败：服务器返回的数据格式不正确");
             return;
         }
-        for (BookDTO book : result.getBooks()) {
+        books = result.getBooks();
+        for (BookDTO book : books) {
             tableModel.addRow(new Object[] {
                 book.getIsbn(), book.getTitle(), book.getAuthor(), book.getCategoryName(),
                 publication(book), blankAsDash(book.getLanguage()), formatLocations(book)
@@ -172,12 +195,37 @@ public final class LibraryPanel extends JPanel {
                 + "/" + location.getTotalCount();
     }
 
+    private void showSelectedHoldingDetails() {
+        int viewRow = resultTable.getSelectedRow();
+        if (viewRow < 0) {
+            holdingDetails.setText("请选择一条书目查看完整馆藏地和数量");
+            return;
+        }
+        int modelRow = resultTable.convertRowIndexToModel(viewRow);
+        if (modelRow >= books.size()) {
+            holdingDetails.setText("暂时无法显示馆藏详情，请重新搜索");
+            return;
+        }
+        BookDTO book = books.get(modelRow);
+        String locations = book.getLocations().isEmpty()
+                ? "暂无馆藏"
+                : book.getLocations().stream()
+                        .map(location -> location.getLocation() + "：可借 "
+                                + location.getAvailableCount() + " 本 / 馆藏 "
+                                + location.getTotalCount() + " 本")
+                        .collect(Collectors.joining(System.lineSeparator()));
+        holdingDetails.setText("《" + book.getTitle() + "》" + System.lineSeparator() + locations);
+        holdingDetails.setCaretPosition(0);
+    }
+
     private static String blankAsDash(String value) {
         return value == null || value.isBlank() ? "—" : value;
     }
 
     private void clearResults() {
+        books = List.of();
         tableModel.setRowCount(0);
+        holdingDetails.setText("请选择一条书目查看完整馆藏地和数量");
     }
 
     private void setWorking(boolean value) {

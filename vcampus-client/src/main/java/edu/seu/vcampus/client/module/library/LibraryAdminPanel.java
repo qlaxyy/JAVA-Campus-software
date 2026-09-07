@@ -64,7 +64,7 @@ public final class LibraryAdminPanel extends JPanel {
 
     private final JLabel copyBook = new JLabel("请先在书目维护中选择一本书");
     private final DefaultTableModel copyModel = readOnlyModel(new String[]{
-            "单册编号", "馆藏条码", "馆藏地", "索书号", "状态"
+            "单册编号", "馆藏条码", "馆藏地", "索书号", "单册状态", "当前可借性"
     });
     private final JTable copyTable = new JTable(copyModel);
     private final JTextField barcode = new JTextField(18);
@@ -320,7 +320,8 @@ public final class LibraryAdminPanel extends JPanel {
         year.setText(book.getPublicationYear() == null ? "" : book.getPublicationYear().toString());
         language.setText(book.getLanguage());
         selectCategory(book.getCategoryId());
-        copyBook.setText("当前书目：《" + book.getTitle() + "》（" + book.getBookId() + "）");
+        copyBook.setText("当前书目：《" + book.getTitle() + "》（" + book.getBookId() + "）· "
+                + displayBookStatus(book.getStatus()));
         outcome.setText("已选择《" + book.getTitle() + "》；可切换到“实体单册”维护馆藏");
         clearCopyForm();
         updateControls();
@@ -387,9 +388,11 @@ public final class LibraryAdminPanel extends JPanel {
 
     private void fillCopyTable() {
         copyModel.setRowCount(0);
+        BookDTO book = selectedBook();
         for (BookCopyDTO copy : copies) {
             copyModel.addRow(new Object[]{copy.getCopyId(), copy.getBarcode(), copy.getLocation(),
-                    copy.getCallNumber(), displayCopyStatus(copy.getStatus())});
+                    copy.getCallNumber(), displayCopyStatus(copy.getStatus()),
+                    displayCopyAvailability(book, copy)});
         }
     }
 
@@ -681,11 +684,22 @@ public final class LibraryAdminPanel extends JPanel {
 
     private static String displayCopyStatus(String value) {
         return switch (value) {
-            case AVAILABLE -> "可借";
+            case AVAILABLE -> "在架";
             case LOANED -> "已借出";
             case WAITING_SHELVING -> "待上架";
             case WITHDRAWN -> "已注销";
             default -> value;
+        };
+    }
+
+    private static String displayCopyAvailability(BookDTO book, BookCopyDTO copy) {
+        return switch (copy.getStatus()) {
+            case WITHDRAWN -> "不参与馆藏";
+            case LOANED -> "不可借（已借出）";
+            case WAITING_SHELVING -> "不可借（待上架）";
+            case AVAILABLE -> book != null && ACTIVE.equals(book.getStatus())
+                    ? "可借" : "书目已停止借阅";
+            default -> "不可借";
         };
     }
 

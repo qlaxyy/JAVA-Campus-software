@@ -35,6 +35,18 @@ class LibraryWorkflowUiTest {
             assertFalse(buttons(catalog).stream().anyMatch(button -> button.getText().contains("借阅")));
             assertFalse(buttons(records).stream().anyMatch(button -> button.getText().contains("归还选中")));
 
+            JTable searchResults = named(catalog, JTable.class, "library.searchResults");
+            JTextArea holdingDetails = named(catalog, JTextArea.class, "library.holdingDetails");
+            onEdt(() -> {
+                named(catalog, JTextField.class, "library.search.keyword").setText("9787111213826");
+                button(catalog, "搜索").doClick();
+            });
+            awaitUi(() -> searchResults.getRowCount() == 1 && searchResults.isEnabled());
+            onEdt(() -> searchResults.setRowSelectionInterval(0, 0));
+            awaitUi(() -> holdingDetails.getText().contains("九龙湖校区—中文图书阅览室3")
+                    && holdingDetails.getText().contains("可借")
+                    && holdingDetails.getText().contains("馆藏"));
+
             JTextField barcode = named(terminal, JTextField.class, "library.selfService.barcode");
             JButton borrow = button(terminal, "借书登记");
             JButton giveBack = button(terminal, "归还登记");

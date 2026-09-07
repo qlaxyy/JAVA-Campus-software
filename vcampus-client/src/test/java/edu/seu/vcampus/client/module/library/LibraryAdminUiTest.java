@@ -50,6 +50,13 @@ class LibraryAdminUiTest {
             awaitUi(deactivate::isEnabled);
             assertFalse(activate.isEnabled(), "seed catalog entries are already active");
 
+            onEdt(deactivate::doClick);
+            awaitUi(() -> books.isEnabled() && books.getRowCount() == 1
+                    && "停止借阅".equals(books.getValueAt(0, 8)));
+            assertEquals(0, books.getValueAt(0, 10));
+            onEdt(() -> books.setRowSelectionInterval(0, 0));
+            awaitUi(activate::isEnabled);
+
             JTabbedPane areas = named(admin, JTabbedPane.class, "library.admin.tabs");
             onEdt(() -> areas.setSelectedIndex(1));
             JTable copies = named(admin, JTable.class, "library.admin.copies");
@@ -60,6 +67,8 @@ class LibraryAdminUiTest {
             assertFalse(withdraw.isEnabled());
             onEdt(() -> copies.setRowSelectionInterval(0, 0));
             awaitUi(withdraw::isEnabled);
+            assertEquals("在架", copies.getValueAt(0, 4));
+            assertEquals("书目已停止借阅", copies.getValueAt(0, 5));
             assertFalse(shelf.isEnabled(), "an AVAILABLE copy must not be shelved again");
             assertFalse(named(admin, JTextField.class, "library.admin.barcode").isEnabled(),
                     "barcodes are immutable after registration");

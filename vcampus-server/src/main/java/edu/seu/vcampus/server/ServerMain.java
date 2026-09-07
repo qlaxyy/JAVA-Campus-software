@@ -31,6 +31,7 @@ public final class ServerMain {
 
         server.start();
         System.out.printf("Virtual Campus server started on port %d.%n", server.getPort());
+        System.out.println("The server is listening on all available network interfaces.");
         System.out.printf("User accounts are stored in %s.%n",
                 databasePath.toAbsolutePath().normalize());
         server.awaitTermination();

@@ -36,7 +36,7 @@ Access 中；超级管理员的账号维护操作也会写入 Access 审计表�
 终端 2：
 
 ```powershell
-java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.vcampus.client.ClientMain
+java -jar vcampus-client\target\vcampus-client-0.1.0-SNAPSHOT.jar
 ```
 
 开发期测试账号：
@@ -70,7 +70,7 @@ java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.v
 java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar 8890
 
 # 客户端
-java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.vcampus.client.ClientMain 127.0.0.1 8890
+java -jar vcampus-client\target\vcampus-client-0.1.0-SNAPSHOT.jar 127.0.0.1 8890
 ```
 
 服务器还可接收第二个参数作为数据库路径，例如：
@@ -78,6 +78,27 @@ java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.v
 ```powershell
 java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar 8888 database\test.accdb
 ```
+
+### 在多台电脑上联调
+
+服务器只在一台电脑上运行，Access 数据库也只放在服务器电脑上；其他电脑只运行客户端，不复制或打开 `vCampus.accdb`。服务器默认监听所有可用网卡，客户端通过服务器电脑的局域网 IPv4 地址连接。
+
+1. 让服务器电脑和所有客户端电脑连接同一个局域网。校园或公共 Wi-Fi 可能禁止设备互访，遇到这种情况可改用允许设备互访的路由器或手机热点。
+2. 在服务器电脑执行 `ipconfig`，找到当前 Wi-Fi 或以太网适配器的“IPv4 地址”，例如 `192.168.1.23`。
+3. 在服务器电脑启动服务器，并在 Windows 防火墙提示时允许 Java 在当前网络通信。不要把 8888 端口映射到公网。
+4. 在客户端电脑使用同一版本构建项目，然后把下面的 IP 换成服务器电脑的实际地址：
+
+```powershell
+java -jar vcampus-client\target\vcampus-client-0.1.0-SNAPSHOT.jar 192.168.1.23 8888
+```
+
+连接失败时，先在客户端电脑检查端口：
+
+```powershell
+Test-NetConnection 192.168.1.23 -Port 8888
+```
+
+看到 `TcpTestSucceeded : True` 才说明网络和防火墙已经放行。若为 `False`，应先检查 IP、两台电脑是否在同一网络、防火墙以及 Wi-Fi 是否开启客户端隔离，而不是修改业务代码。
 
 ## 2. 以后获取最新正式成果
 

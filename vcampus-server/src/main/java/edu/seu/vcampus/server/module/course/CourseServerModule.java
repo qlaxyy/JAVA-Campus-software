@@ -29,7 +29,9 @@ import edu.seu.vcampus.common.course.AdminUpdateBatchRequest;
 import edu.seu.vcampus.common.course.AdminListGradesRequest;
 import edu.seu.vcampus.common.course.AdminUpdateGradeRequest;
 import edu.seu.vcampus.common.user.Role;
+import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
 
+import java.nio.file.Path;
 
 
 
@@ -103,95 +105,150 @@ public final class CourseServerModule
      */
     private final CourseEnrollmentService
         enrollmentService;
-
-    /**
-     * 默认构造器。
-     *
-     * 当前开发阶段主要使用
-     * InMemory Repository。
-     */
     public CourseServerModule() {
 
-        /*
-         * =========================
-         * 1. 时钟
-         * =========================
-         */
-        Clock clock =
-            Clock.systemDefaultZone();
+        this(null);
+    }
+    /**
+     * 创建使用 Access 数据库的课程模块。
+     */
+    public static CourseServerModule createAccessBacked(
+        Path databasePath) {
+
+        return new CourseServerModule(
+            new AccessDatabase(
+                Objects.requireNonNull(
+                    databasePath)));
+    }
+    /**
+     * 根据数据库配置创建课程模块。
+     *
+     * database 为 null 时使用内存仓库，
+     * 不为 null 时使用 Access 仓库。
+     */
+    private CourseServerModule(
+        AccessDatabase database) {
+
+
+            /*
+             * =========================
+             * 1. 时钟
+             * =========================
+             */
+            Clock clock =
+                Clock.systemDefaultZone();
+        CourseAdminAuditRepository
+            adminAuditRepository =
+            database == null
+                ? new InMemoryCourseAdminAuditRepository()
+                : new AccessCourseAdminAuditRepository(
+                database);
+
         this.adminAuditService =
             new CourseAdminAuditService(
-                clock);
-        /*
-         * =========================
-         * 2. 选课批次
-         * =========================
-         */
+                clock,
+                adminAuditRepository);
+            /*
+             * =========================
+             * 2. 选课批次
+             * =========================
+             */
+        CourseBatchSettingsRepository
+            batchSettingsRepository =
+            database == null
+                ? new InMemoryCourseBatchSettingsRepository()
+                : new AccessCourseBatchSettingsRepository(
+                database);
         CourseBatchService batchService =
             new CourseBatchService(
                 new InMemoryCourseBatchRepository(
                     clock),
-                clock);
+                clock,
+                batchSettingsRepository);
 
-        /*
-         * =========================
-         * 3. 方案内课程 Repository
-         * =========================
-         */
-        CoursePlanRepository planRepository =
-            new InMemoryCoursePlanRepository();
+            /*
+             * =========================
+             * 3. 方案内课程 Repository
+             * =========================
+             */
+            CoursePlanRepository planRepository =
+                new InMemoryCoursePlanRepository();
 
-        /*
-         * =========================
-         * 4. 方案外课程 Repository
-         * =========================
-         */
-        CourseSubstitutionRepository
-            substitutionRepository =
-            new InMemoryCourseSubstitutionRepository();
+            /*
+             * =========================
+             * 4. 方案外课程 Repository
+             * =========================
+             */
+            CourseSubstitutionRepository
+                substitutionRepository =
+                new InMemoryCourseSubstitutionRepository();
 
+            /*
+             * =========================
+             * 5. 体育课程 Repository
+             * =========================
+             */
+            PeCourseRepository peCourseRepository =
+                new InMemoryPeCourseRepository();
+            /*
+             * =========================
+             * 通选课程 Repository
+             * =========================
+             */
+            GeneralCourseRepository generalCourseRepository =
+                new InMemoryGeneralCourseRepository();
+            /*
+             * =========================
+             * 6. 当前选课记录 Repository
+             * =========================
+             *
+             * 所有 Service 必须共享同一个
+             * enrollmentRepository。
+             *
+             * 否则会出现：
+             *
+             * selectionService 选课成功，
+             * 但 planService / peCourseService
+             * 看不到这条记录。
+             */
+            /*
+             * =========================
+             * 全校课程目录 Repository
+             * =========================
+             */
+            CourseCatalogRepository catalogRepository =
+                new InMemoryCourseCatalogRepository();
         /*
          * =========================
-         * 5. 体育课程 Repository
-         * =========================
-         */
-        PeCourseRepository peCourseRepository =
-            new InMemoryPeCourseRepository();
-        /*
-         * =========================
-         * 通选课程 Repository
-         * =========================
-         */
-        GeneralCourseRepository generalCourseRepository =
-            new InMemoryGeneralCourseRepository();
-        /*
-         * =========================
-         * 6. 当前选课记录 Repository
+         * 当前选课记录 Repository
          * =========================
          *
-         * 所有 Service 必须共享同一个
-         * enrollmentRepository。
+         * 普通构造器使用内存仓库，
+         * Access 模式使用数据库仓库。
          *
-         * 否则会出现：
-         *
-         * selectionService 选课成功，
-         * 但 planService / peCourseService
-         * 看不到这条记录。
+         * 所有选课 Service 必须共享
+         * 同一个 enrollmentRepository。
          */
-        /*
-         * =========================
-         * 全校课程目录 Repository
-         * =========================
-         */
-        CourseCatalogRepository catalogRepository =
-            new InMemoryCourseCatalogRepository();
         CourseEnrollmentRepository
             enrollmentRepository =
-            new InMemoryCourseEnrollmentRepository();
+            database == null
+                ? new InMemoryCourseEnrollmentRepository()
+                : new AccessCourseEnrollmentRepository(
+                database);
         CourseOfferingSettingsRepository
             offeringSettingsRepository =
-            new InMemoryCourseOfferingSettingsRepository();
+            database == null
+                ? new InMemoryCourseOfferingSettingsRepository()
+                : new AccessCourseOfferingSettingsRepository(
+                database);
 
+
+        CourseSettingsRepository
+            courseSettingsRepository =
+            database == null
+                ? new InMemoryCourseSettingsRepository()
+                : new AccessCourseSettingsRepository(
+                database);
         this.offeringAdministrationService =
             new CourseOfferingAdministrationService(
                 batchService,
@@ -200,171 +257,183 @@ public final class CourseServerModule
                 peCourseRepository,
                 generalCourseRepository,
                 enrollmentRepository,
-                offeringSettingsRepository);
+                offeringSettingsRepository,
+                courseSettingsRepository);
 
-        /*
-         * =========================
-         * 7. 历史修读 Repository
-         * =========================
-         */
-        CourseHistoryRepository historyRepository =
-            new InMemoryCourseHistoryRepository();
+            /*
+             * =========================
+             * 7. 历史修读 Repository
+             * =========================
+             */
+            CourseHistoryRepository historyRepository =
+                new InMemoryCourseHistoryRepository();
 
-        /*
-         * =========================
-         * 8. 学籍 Repository
-         * =========================
-         *
-         * 体育课需要读取学生性别。
-         *
-         * 当前直接复用现有
-         * StudentMemoryRepository。
-         */
-        StudentMemoryRepository
-            studentRepository =
-            new StudentMemoryRepository();
+            /*
+             * =========================
+             * 8. 学籍 Repository
+             * =========================
+             *
+             * 体育课需要读取学生性别。
+             *
+             * 当前直接复用现有
+             * StudentMemoryRepository。
+             */
+            StudentMemoryRepository
+                studentRepository =
+                new StudentMemoryRepository();
 
-        /*
-         * =========================
-         * 9. 学生性别适配 Repository
-         * =========================
-         */
-        StudentGenderRepository genderRepository =
-            new StudentProfileGenderRepository(
-                studentRepository);
+            /*
+             * =========================
+             * 9. 学生性别适配 Repository
+             * =========================
+             */
+            StudentGenderRepository genderRepository =
+                new StudentProfileGenderRepository(
+                    studentRepository);
 
-        /*
-         * =========================
-         * 10. 保存批次 Service
-         * =========================
-         */
-        this.batchService =
-            batchService;
-        this.statisticsService =
-            new CourseAdminStatisticsService(
-                this.batchService,
-                this.offeringAdministrationService);
-        /*
-         * =========================
-         * 11. 体育课程 Service
-         * =========================
-         *
-         * 要先创建体育 Service，
-         * 因为 CourseSelectionService
-         * 后面需要使用它。
-         */
-        this.peCourseService =
-            new PeCourseService(
-                batchService,
-                peCourseRepository,
-                planRepository,
-                substitutionRepository,
-                generalCourseRepository,
-                enrollmentRepository,
-                genderRepository);
-        /*
-         * =========================
-         * 通选课程 Service
-         * =========================
-         */
-        this.generalCourseService =
-            new GeneralCourseService(
-                batchService,
-                generalCourseRepository,
-                planRepository,
-                substitutionRepository,
-                peCourseRepository,
-                enrollmentRepository);
-        /*
-         * =========================
-         * 全校课程查询 Service
-         * =========================
-         */
-        this.searchService =
-            new CourseSearchService(
-                catalogRepository);
-        /*
-         * =========================
-         * 12. 方案内课程 Service
-         * =========================
-         *
-         * peCourseRepository 用于：
-         *
-         * 体育课已选后，
-         * 方案内页面也能检测时间冲突。
-         */
-        this.planService =
-            new CoursePlanService(
-                batchService,
-                planRepository,
-                generalCourseRepository,
-                substitutionRepository,
-                peCourseRepository,
-                enrollmentRepository,
-                historyRepository);
-        /*
-         * =========================
-         * 13. 方案外课程 Service
-         * =========================
-         *
-         * 同样加入体育课程，
-         * 用于跨页面时间冲突检测。
-         */
-        this.substitutionService =
-            new CourseSubstitutionService(
-                batchService,
-                substitutionRepository,
-                planRepository,
-                peCourseRepository,
-                generalCourseRepository,
-                enrollmentRepository,
-                historyRepository);
-        /*
-         * =========================
-         * 14. 选课 Service
-         * =========================
-         *
-         * 当前支持：
-         *
-         * - 方案内课程
-         * - 方案外课程
-         * - 体育课程
-         */
-        this.selectionService =
-            new CourseSelectionService(
-                batchService,
-                planRepository,
-                substitutionRepository,
-                peCourseService,
-                generalCourseService,
-                enrollmentRepository,
-                historyRepository);
-        this.selectionService
-            .setOfferingAdministrationService(
-                this.offeringAdministrationService);
-        /*
-         * =========================
-         * 15. 已选课程 / 退课 Service
-         * =========================
-         *
-         * peCourseRepository 用于
-         * 把体育选课记录解析回
-         * CourseInfo / OfferingInfo。
-         */
-        this.enrollmentService =
-            new CourseEnrollmentService(
-                batchService,
-                planRepository,
-                substitutionRepository,
-                peCourseRepository,
-                generalCourseRepository,
-                enrollmentRepository);
+            /*
+             * =========================
+             * 10. 保存批次 Service
+             * =========================
+             */
+            this.batchService =
+                batchService;
+            this.statisticsService =
+                new CourseAdminStatisticsService(
+                    this.batchService,
+                    this.offeringAdministrationService);
+            /*
+             * =========================
+             * 11. 体育课程 Service
+             * =========================
+             *
+             * 要先创建体育 Service，
+             * 因为 CourseSelectionService
+             * 后面需要使用它。
+             */
+            this.peCourseService =
+                new PeCourseService(
+                    batchService,
+                    peCourseRepository,
+                    planRepository,
+                    substitutionRepository,
+                    generalCourseRepository,
+                    enrollmentRepository,
+                    genderRepository);
+            /*
+             * =========================
+             * 通选课程 Service
+             * =========================
+             */
+            this.generalCourseService =
+                new GeneralCourseService(
+                    batchService,
+                    generalCourseRepository,
+                    planRepository,
+                    substitutionRepository,
+                    peCourseRepository,
+                    enrollmentRepository);
+            /*
+             * =========================
+             * 全校课程查询 Service
+             * =========================
+             */
+            this.searchService =
+                new CourseSearchService(
+                    catalogRepository);
+            /*
+             * =========================
+             * 12. 方案内课程 Service
+             * =========================
+             *
+             * peCourseRepository 用于：
+             *
+             * 体育课已选后，
+             * 方案内页面也能检测时间冲突。
+             */
+            this.planService =
+                new CoursePlanService(
+                    batchService,
+                    planRepository,
+                    generalCourseRepository,
+                    substitutionRepository,
+                    peCourseRepository,
+                    enrollmentRepository,
+                    historyRepository);
+            /*
+             * =========================
+             * 13. 方案外课程 Service
+             * =========================
+             *
+             * 同样加入体育课程，
+             * 用于跨页面时间冲突检测。
+             */
+            this.substitutionService =
+                new CourseSubstitutionService(
+                    batchService,
+                    substitutionRepository,
+                    planRepository,
+                    peCourseRepository,
+                    generalCourseRepository,
+                    enrollmentRepository,
+                    historyRepository);
+            /*
+             * =========================
+             * 14. 选课 Service
+             * =========================
+             *
+             * 当前支持：
+             *
+             * - 方案内课程
+             * - 方案外课程
+             * - 体育课程
+             */
+            this.selectionService =
+                new CourseSelectionService(
+                    batchService,
+                    planRepository,
+                    substitutionRepository,
+                    peCourseService,
+                    generalCourseService,
+                    enrollmentRepository,
+                    historyRepository);
+            this.selectionService
+                .setOfferingAdministrationService(
+                    this.offeringAdministrationService);
+            /*
+             * =========================
+             * 15. 已选课程 / 退课 Service
+             * =========================
+             *
+             * peCourseRepository 用于
+             * 把体育选课记录解析回
+             * CourseInfo / OfferingInfo。
+             */
+            this.enrollmentService =
+                new CourseEnrollmentService(
+                    batchService,
+                    planRepository,
+                    substitutionRepository,
+                    peCourseRepository,
+                    generalCourseRepository,
+                    enrollmentRepository);
+        CourseGradeRepository gradeRepository =
+            database == null
+                ? new InMemoryCourseGradeRepository()
+                : new AccessCourseGradeRepository(
+                database);
+
         this.gradeService =
             new CourseGradeService(
                 this.enrollmentService,
-                new InMemoryCourseGradeRepository(),
+                gradeRepository,
                 clock);
+
+        // 原来默认构造器的全部内容放在这里
     }
+
+
+
 
     /**
      * 测试或依赖注入使用的构造器。
@@ -449,7 +518,7 @@ public final class CourseServerModule
                 adminPeRepository,
                 adminGeneralRepository,
                 adminEnrollmentRepository,
-                new InMemoryCourseOfferingSettingsRepository());
+                new InMemoryCourseOfferingSettingsRepository(),new InMemoryCourseSettingsRepository());
         this.statisticsService =
             new CourseAdminStatisticsService(
                 this.batchService,

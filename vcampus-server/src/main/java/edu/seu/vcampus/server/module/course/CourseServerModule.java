@@ -26,16 +26,34 @@ import edu.seu.vcampus.common.course.CourseInfo;
 import java.util.List;
 import edu.seu.vcampus.common.course.AdminUpdateCourseRequest;
 import edu.seu.vcampus.common.course.AdminUpdateBatchRequest;
+import edu.seu.vcampus.common.course.AdminListGradesRequest;
+import edu.seu.vcampus.common.course.AdminUpdateGradeRequest;
+import edu.seu.vcampus.common.user.Role;
+
+
+
+
+
 
 /**
  * 选课模块服务器入口。
  */
 public final class CourseServerModule
     implements ServerModule {
-
+    /**
+     * 成绩管理业务。
+     */
+    private final CourseGradeService
+        gradeService;
+    /**
+     * 教务选课数据统计业务。
+     */
+    private final CourseAdminStatisticsService
+        statisticsService;
     /**
      * 选课批次业务。
      */
+
     private final CourseBatchService
         batchService;
     /**
@@ -222,7 +240,10 @@ public final class CourseServerModule
          */
         this.batchService =
             batchService;
-
+        this.statisticsService =
+            new CourseAdminStatisticsService(
+                this.batchService,
+                this.offeringAdministrationService);
         /*
          * =========================
          * 11. 体育课程 Service
@@ -338,6 +359,11 @@ public final class CourseServerModule
                 peCourseRepository,
                 generalCourseRepository,
                 enrollmentRepository);
+        this.gradeService =
+            new CourseGradeService(
+                this.enrollmentService,
+                new InMemoryCourseGradeRepository(),
+                clock);
     }
 
     /**
@@ -395,7 +421,11 @@ public final class CourseServerModule
                 "enrollmentService must not be null");
         CoursePlanRepository adminPlanRepository =
             new InMemoryCoursePlanRepository();
-
+        this.gradeService =
+            new CourseGradeService(
+                this.enrollmentService,
+                new InMemoryCourseGradeRepository(),
+                Clock.systemDefaultZone());
         CourseSubstitutionRepository
             adminSubstitutionRepository =
             new InMemoryCourseSubstitutionRepository();
@@ -420,6 +450,11 @@ public final class CourseServerModule
                 adminGeneralRepository,
                 adminEnrollmentRepository,
                 new InMemoryCourseOfferingSettingsRepository());
+        this.statisticsService =
+            new CourseAdminStatisticsService(
+                this.batchService,
+                this.offeringAdministrationService);
+
     }
 
     /**
@@ -451,6 +486,17 @@ public final class CourseServerModule
             CourseActions.ADMIN_LIST_AUDIT_LOGS,
             request ->
                 adminListAuditLogs(
+                    request,
+                    context));
+        /*
+         * =========================
+         * 教务查询选课统计
+         * =========================
+         */
+        router.register(
+            CourseActions.ADMIN_GET_STATISTICS,
+            request ->
+                adminGetStatistics(
                     request,
                     context));
         /*
@@ -519,6 +565,29 @@ public final class CourseServerModule
             CourseActions.LIST_GENERAL_COURSES,
             request ->
                 listGeneralCourses(
+                    request,
+                    context));
+        /*
+         * =========================
+         * 教务查询学生成绩
+         * =========================
+         */
+        router.register(
+            CourseActions.ADMIN_LIST_GRADES,
+            request ->
+                adminListGrades(
+                    request,
+                    context));
+
+        /*
+         * =========================
+         * 超级管理员修改成绩
+         * =========================
+         */
+        router.register(
+            CourseActions.ADMIN_UPDATE_GRADE,
+            request ->
+                adminUpdateGrade(
                     request,
                     context));
         /*
@@ -931,7 +1000,63 @@ public final class CourseServerModule
                     batchRequest.getBatchId()))
                );
     }
+    /**
+     * 教务查询指定批次的选课统计。
+     */
+    private Response adminGetStatistics(
+        Request request,
+        ServerContext context) {
 
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!session.canAdminister(
+            ModuleNames.COURSE)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "没有选课数据统计权限。");
+        }
+
+        if (!(request.getData()
+            instanceof BatchRequest
+            batchRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "选课统计请求格式错误。");
+        }
+
+        CourseAdminStatisticsResult result =
+            statisticsService.statistics(
+                batchRequest.getBatchId());
+
+        if (!result.success()) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                result.message());
+        }
+
+        return Response.success(
+            request,
+            result.message(),
+            result.statistics());
+    }
     /**
      * 教务修改教学班容量和开放状态。
      */
@@ -1107,6 +1232,131 @@ public final class CourseServerModule
             new ArrayList<>(
                 adminAuditService
                     .listAuditLogs()));
+    }
+    /**
+     * 教务查询指定学生成绩。
+     */
+    private Response adminListGrades(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!session.canAdminister(
+            ModuleNames.COURSE)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "没有成绩查询权限。");
+        }
+
+        if (!(request.getData()
+            instanceof AdminListGradesRequest
+            listRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "成绩查询请求格式错误。");
+        }
+
+        if (listRequest.getStudentId() == null
+            || listRequest.getStudentId()
+            .isBlank()) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "学生学号不能为空。");
+        }
+
+        return Response.success(
+            request,
+            "学生成绩加载成功。",
+            new ArrayList<>(
+                gradeService.listGrades(
+                    listRequest.getStudentId())));
+    }
+    /**
+     * 超级管理员新增或修改学生成绩。
+     */
+    private Response adminUpdateGrade(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        /*
+         * 修改成绩只允许超级管理员。
+         */
+        if (session.getRole()
+            != Role.SUPER_ADMIN) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "只有超级管理员可以修改成绩。");
+        }
+
+        if (!(request.getData()
+            instanceof AdminUpdateGradeRequest
+            updateRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "成绩修改请求格式错误。");
+        }
+
+        GradeUpdateResult result =
+            gradeService.updateGrade(
+                updateRequest.getStudentId(),
+                updateRequest.getEnrollmentId(),
+                updateRequest.getScore());
+
+        if (!result.success()) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                result.message());
+        }
+        adminAuditService
+            .recordUpdateGrade(
+                session.getUsername(),
+                updateRequest.getStudentId(),
+                updateRequest.getEnrollmentId(),
+                updateRequest.getScore(),
+                updateRequest.getReason());
+        return Response.success(
+            request,
+            result.message(),
+            result.grade());
     }
     /**
      * 教务为指定学生强制退课。

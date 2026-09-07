@@ -19,9 +19,9 @@ class LibrarySearchIntegrationTest {
     void searchBarcodeCirculationAndPersonalHistoryRoundTripThroughSocket() throws Exception {
         try (CampusServer server = new CampusServer(0, 3)) {
             server.start();
-            ClientContext reader = login(server, "student001");
-            ClientContext other = login(server, "teacher001");
-            ClientContext librarian = login(server, "libraryadmin");
+            ClientContext reader = login(server, "20260001");
+            ClientContext other = login(server, "20260002");
+            ClientContext librarian = login(server, "20260005");
 
             BookDTO before = search(reader, "9787111213826").getFirst();
             int availableBefore = before.getAvailableCount();

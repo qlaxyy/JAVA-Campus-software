@@ -142,7 +142,7 @@ tblHospitalDepartment
 |---|---|---:|---|
 | `requestId` | Short Text(40) | 是 | 主键，`DAR-` 加 UUID |
 | `applicationType` | Short Text(20) | 是 | `EXISTING_ACCOUNT` 或 `EXTERNAL_DOCTOR` |
-| `username` | Short Text(50) | 是 | 已有账号的登录名；外来医生待批准时保存内部占位值，批准后写入生成的账号名 |
+| `username` | Short Text(50) | 是 | 技术字段名；已有账号保存一卡通号，外来医生待批准时保存内部占位值，批准后写入自动生成的一卡通号 |
 | `displayName` | Short Text(100) | 是 | 已有账号使用账户原名称；外来医生使用申请姓名 |
 | `departmentId` | Short Text(36) | 是 | 申请进入的科室 |
 | `doctorTitle` | Short Text(50) | 是 | 医生职称 |
@@ -152,7 +152,7 @@ tblHospitalDepartment
 | `reviewedByUserId` | Short Text(36) | 否 | 审核该申请的超级管理员 |
 | `createdAt` | Date/Time | 是 | 提交时间 |
 
-规则：医院管理员只能提交申请，不能直接写入有效医生档案。关联已有账号时必须明确选择该类型，服务器校验账号存在、启用且尚未绑定医生档案，并在申请中锁定 `userId`。新建外来医生时不接收账号名，超级管理员批准后由用户模块生成唯一账号。医院模块随后用确定的 `userId` 保存医生档案。拒绝不创建账号；已审核申请不能重复处理；禁止因为账号名碰巧重复而自动复用账户。
+规则：医院管理员只能提交申请，不能直接写入有效医生档案。关联已有账号时必须明确选择该类型，服务器校验一卡通号存在、启用且尚未绑定医生档案，并在申请中锁定 `userId`。新建外来医生时不接收一卡通号，超级管理员批准后由用户模块以“当前年份 + 当年最大流水号加一”生成唯一一卡通号。医院模块随后用确定的 `userId` 保存医生档案。拒绝不创建账号；已审核申请不能重复处理；禁止因为姓名相同而自动复用账户。
 
 ### 4.4 `tblHospitalSchedule`：排班和号源
 

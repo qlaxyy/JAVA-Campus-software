@@ -1,6 +1,7 @@
 package edu.seu.vcampus.server.module.user;
 
 import edu.seu.vcampus.common.user.LoginRequest;
+import edu.seu.vcampus.common.user.CampusCardNumber;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.security.SessionLookup;
 import edu.seu.vcampus.server.security.AccountProvisioning;
@@ -17,7 +18,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.Locale;
+import java.time.Year;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -28,10 +32,16 @@ public final class InMemoryAuthenticationService
         implements SessionLookup, AccountProvisioning {
 
     private static final int TOKEN_BYTES = 32;
+    static final Duration DEFAULT_IDLE_TIMEOUT = Duration.ofMinutes(30);
+    static final Duration DEFAULT_ABSOLUTE_TIMEOUT = Duration.ofHours(8);
 
     private final SecureRandom secureRandom = new SecureRandom();
     private final UserRepository users;
-    private final ConcurrentMap<String, SessionInfo> sessions = new ConcurrentHashMap<>();
+    private final Clock clock;
+    private final Duration idleTimeout;
+    private final Duration absoluteTimeout;
+    private final UserAuditRepository auditLogs;
+    private final ConcurrentMap<String, StoredSession> sessions = new ConcurrentHashMap<>();
 
     /** Creates authentication backed by the public development accounts. */
     public InMemoryAuthenticationService() {
@@ -39,11 +49,29 @@ public final class InMemoryAuthenticationService
     }
 
     InMemoryAuthenticationService(UserRepository users) {
+        this(users, Clock.systemUTC(), DEFAULT_IDLE_TIMEOUT, DEFAULT_ABSOLUTE_TIMEOUT);
+    }
+
+    InMemoryAuthenticationService(
+            UserRepository users,
+            Clock clock,
+            Duration idleTimeout,
+            Duration absoluteTimeout) {
         this.users = Objects.requireNonNull(users, "users must not be null");
+        this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.idleTimeout = requirePositive(idleTimeout, "idleTimeout");
+        this.absoluteTimeout = requirePositive(absoluteTimeout, "absoluteTimeout");
+        this.auditLogs = users instanceof AccessUserRepository accessRepository
+                ? new AccessUserAuditRepository(accessRepository.database())
+                : new InMemoryUserAuditRepository();
     }
 
     UserRepository users() {
         return users;
+    }
+
+    UserAuditRepository auditLogs() {
+        return auditLogs;
     }
 
     /**
@@ -73,7 +101,9 @@ public final class InMemoryAuthenticationService
                 user.displayName(),
                 user.role(),
                 user.adminScopes());
-        sessions.put(session.getToken(), session);
+        Instant now = clock.instant();
+        purgeExpiredSessions(now);
+        sessions.put(session.getToken(), new StoredSession(session, now, now));
         return Optional.of(session);
     }
 
@@ -87,9 +117,28 @@ public final class InMemoryAuthenticationService
         return token != null && sessions.remove(token) != null;
     }
 
+    /** Replaces an account password after verifying its current password. */
+    synchronized boolean changePassword(
+            String userId,
+            String currentPasswordProof,
+            String newPasswordProof) {
+        if (!isPasswordProof(currentPasswordProof) || !isPasswordProof(newPasswordProof)) {
+            return false;
+        }
+        UserAccount user = users.findById(userId).orElse(null);
+        if (user == null
+                || !proofMatches(user.passwordProof(), currentPasswordProof)) {
+            return false;
+        }
+        users.save(user.withPasswordProof(newPasswordProof));
+        invalidateUserSessions(userId);
+        return true;
+    }
+
     /** Invalidates every active session belonging to an account. */
     void invalidateUserSessions(String userId) {
-        sessions.entrySet().removeIf(entry -> entry.getValue().getUserId().equals(userId));
+        sessions.entrySet().removeIf(
+                entry -> entry.getValue().session().getUserId().equals(userId));
     }
 
     @Override
@@ -97,39 +146,60 @@ public final class InMemoryAuthenticationService
         if (token == null || token.isBlank()) {
             return Optional.empty();
         }
-        return Optional.ofNullable(sessions.get(token));
+        Instant now = clock.instant();
+        StoredSession active = sessions.computeIfPresent(token, (ignored, stored) ->
+                stored.isExpired(now, idleTimeout, absoluteTimeout)
+                        ? null
+                        : stored.accessed(now));
+        return active == null ? Optional.empty() : Optional.of(active.session());
     }
 
     @Override
     public synchronized Optional<ProvisionedAccount> findAccountByUsername(String username) {
-        if (username == null) {
+        if (!CampusCardNumber.isValid(username)) {
             return Optional.empty();
         }
-        String normalized = username.trim().toLowerCase(Locale.ROOT);
-        if (!normalized.matches("[a-z0-9_]{3,32}")) {
-            return Optional.empty();
-        }
+        String normalized = CampusCardNumber.normalize(username);
         return users.findByUsername(normalized).map(InMemoryAuthenticationService::toProvisioned);
     }
 
     @Override
-    public synchronized ProvisionedAccount createGeneratedRegularAccount(
-            String usernamePrefix,
-            String displayName) {
-        String normalizedPrefix = usernamePrefix == null
-                ? "" : usernamePrefix.trim().toLowerCase(Locale.ROOT);
-        if (!normalizedPrefix.matches("[a-z]{3,12}")) {
-            throw new IllegalArgumentException("usernamePrefix format is invalid");
+    public synchronized ProvisionedAccount createGeneratedRegularAccount(String displayName) {
+        return toProvisioned(createGeneratedRegularAccount(displayName, Set.of()));
+    }
+
+    synchronized String nextGeneratedUsername() {
+        int year = Year.now().getValue();
+        int maximumSequence = users.findAll().stream()
+                .map(UserAccount::username)
+                .filter(CampusCardNumber::isValid)
+                .filter(value -> value.startsWith(Integer.toString(year)))
+                .mapToInt(CampusCardNumber::sequence)
+                .max()
+                .orElse(0);
+        if (maximumSequence >= CampusCardNumber.MAX_SEQUENCE) {
+            throw new IllegalStateException(
+                    "The campus-card sequence for " + year + " is exhausted.");
         }
+        return CampusCardNumber.format(year, maximumSequence + 1);
+    }
+
+    synchronized UserAccount createGeneratedRegularAccount(
+            String displayName,
+            Set<edu.seu.vcampus.common.user.AdminScope> adminScopes) {
+        int year = Year.now().getValue();
+        int nextSequence = CampusCardNumber.sequence(nextGeneratedUsername());
         char[] password = "123456".toCharArray();
         try {
-            for (int attempt = 0; attempt < 20; attempt++) {
-                String username = normalizedPrefix
-                        + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+            for (int sequence = nextSequence;
+                 sequence <= CampusCardNumber.MAX_SEQUENCE;
+                 sequence++) {
+                String username = CampusCardNumber.format(year, sequence);
                 CreateAccountInput input = new CreateAccountInput(
                         username,
                         displayName,
-                        PasswordProof.create(username, password));
+                        PasswordProof.create(username, password),
+                        adminScopes);
                 if (users.findByUsername(input.username()).isPresent()) {
                     continue;
                 }
@@ -138,13 +208,14 @@ public final class InMemoryAuthenticationService
                         input.username(),
                         input.displayName(),
                         Role.USER,
-                        Set.of(),
+                        input.adminScopes(),
                         input.passwordProof(),
                         true);
                 users.save(created);
-                return toProvisioned(created);
+                return created;
             }
-            throw new IllegalStateException("Cannot generate a unique login account.");
+            throw new IllegalStateException(
+                    "The campus-card sequence for " + year + " is exhausted.");
         } finally {
             Arrays.fill(password, '\0');
         }
@@ -158,14 +229,16 @@ public final class InMemoryAuthenticationService
     private record CreateAccountInput(
             String username,
             String displayName,
-            String passwordProof) {
+            String passwordProof,
+            Set<edu.seu.vcampus.common.user.AdminScope> adminScopes) {
         private CreateAccountInput {
             edu.seu.vcampus.common.user.CreateUserAccountRequest validated =
                     new edu.seu.vcampus.common.user.CreateUserAccountRequest(
-                            username, displayName, passwordProof, Set.of());
+                            username, displayName, passwordProof, adminScopes);
             username = validated.getUsername();
             displayName = validated.getDisplayName();
             passwordProof = validated.getPasswordProof();
+            adminScopes = validated.getAdminScopes();
         }
     }
 
@@ -179,5 +252,40 @@ public final class InMemoryAuthenticationService
         return MessageDigest.isEqual(
                 expected.getBytes(StandardCharsets.US_ASCII),
                 actual.getBytes(StandardCharsets.US_ASCII));
+    }
+
+    private static boolean isPasswordProof(String value) {
+        return value != null && value.matches("[0-9a-f]{64}");
+    }
+
+    private void purgeExpiredSessions(Instant now) {
+        sessions.entrySet().removeIf(entry ->
+                entry.getValue().isExpired(now, idleTimeout, absoluteTimeout));
+    }
+
+    private static Duration requirePositive(Duration value, String name) {
+        Objects.requireNonNull(value, name + " must not be null");
+        if (value.isZero() || value.isNegative()) {
+            throw new IllegalArgumentException(name + " must be positive");
+        }
+        return value;
+    }
+
+    private record StoredSession(
+            SessionInfo session,
+            Instant createdAt,
+            Instant lastAccessAt) {
+
+        private StoredSession accessed(Instant now) {
+            return new StoredSession(session, createdAt, now);
+        }
+
+        private boolean isExpired(
+                Instant now,
+                Duration idleTimeout,
+                Duration absoluteTimeout) {
+            return !now.isBefore(lastAccessAt.plus(idleTimeout))
+                    || !now.isBefore(createdAt.plus(absoluteTimeout));
+        }
     }
 }

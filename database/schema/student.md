@@ -61,7 +61,7 @@
 | changeType | Short Text(30) | 是 | 无 | 异动类别：`休学`、`复学`、`转专业`、`退学` |
 | changeDate | Date/Time | 是 | 当前时间 | 异动生效时间 |
 | reason | Short Text(255) | 否 | 无 | 异动原因说明 |
-| operator | Short Text(50) | 是 | 无 | 审核操作人员账号（如管理员 `studentadmin`） |
+| operator | Short Text(50) | 是 | 无 | 审核操作人员的稳定 `userId`，不保存登录一卡通号 |
 
 ## 4. 关联与索引
 
@@ -87,7 +87,7 @@
 ## 5. 跨模块选课联调确认项
 1. **学生主键与标识对齐**：
     - 数据表物理主键为 `tblStudent.studentId`（Long Integer），对应选课表 `tblEnrollment.studentId`。
-    - 业务和登录标识使用 `studentNo`（如 `student001`，登录会话规范化后的 `U-STUDENT-001`）。
+    - 学籍业务编号使用 `studentNo`（如 `student001`）；登录使用用户模块的一卡通号，跨模块关联和审核记录使用稳定 `userId`（如 `U-STUDENT-001`）。
 2. **体育课限额判定**：
     - `tblStudent.gender` 提供性别标识，完全匹配选课教学班的容量与性别限制。
 3. **培养方案建议学期**：

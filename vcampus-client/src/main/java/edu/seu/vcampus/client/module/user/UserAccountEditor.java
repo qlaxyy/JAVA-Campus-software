@@ -4,15 +4,14 @@ import edu.seu.vcampus.common.user.AdminScope;
 import edu.seu.vcampus.common.user.UserAccountView;
 import edu.seu.vcampus.common.user.Role;
 
-import javax.swing.JCheckBox;
+import javax.swing.ButtonGroup;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JOptionPane;
 import javax.swing.JTextField;
+import javax.swing.JRadioButton;
 import java.awt.Component;
 import java.awt.GridLayout;
-import java.util.EnumMap;
-import java.util.Map;
 import java.util.EnumSet;
 import java.util.Set;
 
@@ -22,20 +21,33 @@ final class UserAccountEditor {
     private UserAccountEditor() {
     }
 
-    static UserAccountFormData show(Component parent, UserAccountView existing) {
-        boolean creating = existing == null;
-        JTextField username = new JTextField(creating ? "" : existing.getUsername());
-        JTextField displayName = new JTextField(creating ? "" : existing.getDisplayName());
-        username.setEnabled(creating);
+    static UserAccountFormData showForCreate(Component parent, String generatedUsername) {
+        return show(parent, null, generatedUsername);
+    }
 
-        Map<AdminScope, JCheckBox> boxes = new EnumMap<>(AdminScope.class);
+    static UserAccountFormData show(Component parent, UserAccountView existing) {
+        return show(parent, existing, existing == null ? "" : existing.getUsername());
+    }
+
+    private static UserAccountFormData show(
+            Component parent,
+            UserAccountView existing,
+            String generatedUsername) {
+        boolean creating = existing == null;
+        JTextField username = new JTextField(
+                creating ? generatedUsername : existing.getUsername());
+        JTextField displayName = new JTextField(creating ? "" : existing.getDisplayName());
+        username.setEditable(false);
+
+        Set<AdminScope> scopes = EnumSet.noneOf(AdminScope.class);
         JPanel form = new JPanel(new GridLayout(0, 1, 4, 4));
-        form.add(new JLabel("账户名（小写字母、数字或下划线）："));
+        form.add(new JLabel("一卡通号："));
         form.add(username);
-        form.add(new JLabel("显示名称："));
+        form.add(new JLabel("姓名："));
         form.add(displayName);
         form.add(new JLabel("子系统管理权："));
-        addScopeBoxes(form, boxes, existing);
+        form.add(new JLabel("请选择 0–1 个权限"));
+        addScopeChoices(form, scopes, existing);
         if (creating) {
             form.add(new JLabel("初始密码统一为：123456"));
         }
@@ -46,25 +58,37 @@ final class UserAccountEditor {
         if (result != JOptionPane.OK_OPTION) {
             return null;
         }
-        Set<AdminScope> scopes = EnumSet.noneOf(AdminScope.class);
-        boxes.forEach((scope, box) -> {
-            if (box.isSelected()) {
-                scopes.add(scope);
-            }
-        });
         return new UserAccountFormData(username.getText(), displayName.getText(), scopes);
     }
 
-    private static void addScopeBoxes(
+    private static void addScopeChoices(
             JPanel form,
-            Map<AdminScope, JCheckBox> boxes,
+            Set<AdminScope> selectedScopes,
             UserAccountView existing) {
+        ButtonGroup group = new ButtonGroup();
+        boolean editable = existing == null || existing.getRole() != Role.SUPER_ADMIN;
+        AdminScope existingScope = existing == null || existing.getRole() == Role.SUPER_ADMIN
+                ? null
+                : existing.getAdminScopes().stream().sorted().findFirst().orElse(null);
+        JRadioButton none = new JRadioButton("无管理权限");
+        none.setSelected(existingScope == null);
+        none.setEnabled(editable);
+        group.add(none);
+        form.add(none);
         for (AdminScope scope : AdminScope.values()) {
-            JCheckBox box = new JCheckBox(UserAccountTableModel.scopeName(scope));
-            box.setSelected(existing != null && existing.getAdminScopes().contains(scope));
-            box.setEnabled(existing == null || existing.getRole() != Role.SUPER_ADMIN);
-            boxes.put(scope, box);
-            form.add(box);
+            JRadioButton choice = new JRadioButton(UserAccountTableModel.scopeName(scope));
+            choice.setSelected(scope == existingScope);
+            choice.setEnabled(editable);
+            choice.addActionListener(event -> {
+                selectedScopes.clear();
+                selectedScopes.add(scope);
+            });
+            group.add(choice);
+            form.add(choice);
+        }
+        none.addActionListener(event -> selectedScopes.clear());
+        if (existingScope != null) {
+            selectedScopes.add(existingScope);
         }
     }
 }

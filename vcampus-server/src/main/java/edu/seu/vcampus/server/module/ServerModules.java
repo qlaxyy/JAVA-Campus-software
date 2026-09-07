@@ -9,12 +9,11 @@ import edu.seu.vcampus.server.module.library.LibraryServerModule;
 import edu.seu.vcampus.server.module.shop.ShopServerModule;
 import edu.seu.vcampus.server.module.student.StudentServerModule;
 import edu.seu.vcampus.server.module.user.UserServerModule;
-import edu.seu.vcampus.server.module.user.InMemoryAuthenticationService;
 import edu.seu.vcampus.server.module.user.UserAuthenticationBootstrap;
 
 import java.nio.file.Path;
 import java.util.List;
-
+import edu.seu.vcampus.server.module.user.InMemoryAuthenticationService;
 /**
  * Fixed catalog of the six agreed server-side business modules.
  */

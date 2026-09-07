@@ -22,10 +22,10 @@ class LibraryAdminUiTest {
     void onlyLibraryScopedAdministratorsSeeTheManagementWorkspace() throws Exception {
         try (CampusServer server = new CampusServer(0, 3)) {
             server.start();
-            assertEquals(3, tabCount(login(server, "student001")));
-            assertEquals(3, tabCount(login(server, "shopadmin")));
-            assertEquals(4, tabCount(login(server, "libraryadmin")));
-            assertEquals(4, tabCount(login(server, "admin")));
+            assertEquals(3, tabCount(login(server, "20260001")));
+            assertEquals(3, tabCount(login(server, "20260006")));
+            assertEquals(4, tabCount(login(server, "20260005")));
+            assertEquals(4, tabCount(login(server, "20260000")));
         }
     }
 
@@ -33,7 +33,7 @@ class LibraryAdminUiTest {
     void selectionEnablesOnlyStateTransitionsKnownToBeLegal() throws Exception {
         try (CampusServer server = new CampusServer(0, 3)) {
             server.start();
-            ClientContext context = login(server, "libraryadmin");
+            ClientContext context = login(server, "20260005");
             AtomicReference<JTabbedPane> root = new AtomicReference<>();
             onEdt(() -> root.set((JTabbedPane) new LibraryClientModule().createView(context)));
             JTabbedPane navigation = root.get();

@@ -22,7 +22,7 @@ class LibraryWorkflowUiTest {
     void readerUsesCatalogTerminalAndDisplayOnlyPersonalRecords() throws Exception {
         try (CampusServer server = new CampusServer(0, 3)) {
             server.start();
-            ClientContext context = login(server, "student001");
+            ClientContext context = login(server, "20260001");
             AtomicReference<JTabbedPane> root = new AtomicReference<>();
             onEdt(() -> root.set((JTabbedPane) new LibraryClientModule().createView(context)));
             JTabbedPane tabs = root.get();
@@ -70,7 +70,7 @@ class LibraryWorkflowUiTest {
     void everyLibraryTableIsReadOnlySingleSelectionAndHasFixedHeaders() throws Exception {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
-            ClientContext context = login(server, "libraryadmin");
+            ClientContext context = login(server, "20260005");
             AtomicReference<JComponent> view = new AtomicReference<>();
             onEdt(() -> view.set(new LibraryClientModule().createView(context)));
             List<JTable> tables = descendants(view.get()).stream()
@@ -80,6 +80,8 @@ class LibraryWorkflowUiTest {
                 assertEquals(ListSelectionModel.SINGLE_SELECTION, table.getSelectionModel().getSelectionMode());
                 assertFalse(table.getTableHeader().getReorderingAllowed());
                 assertFalse(table.getTableHeader().getResizingAllowed());
+                assertFalse(table.getDragEnabled());
+                assertNotNull(table.getRowSorter());
                 for (int column = 0; column < table.getColumnCount(); column++) {
                     assertFalse(table.getModel().isCellEditable(0, column));
                 }

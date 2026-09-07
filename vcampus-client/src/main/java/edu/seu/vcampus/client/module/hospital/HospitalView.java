@@ -85,7 +85,7 @@ public final class HospitalView extends JPanel {
                                 this::loadDepartmentsForApplication),
                         new HospitalStaffHomePanel.WorkspaceFeature(
                                 "医生申请记录",
-                                "查看审核状态；申请通过后取得外来医生的登录账号。",
+                                "查看审核状态；申请通过后取得外来医生的一卡通号。",
                                 "查看申请记录",
                                 this::loadDoctorApplications),
                         new HospitalStaffHomePanel.WorkspaceFeature(
@@ -226,7 +226,7 @@ public final class HospitalView extends JPanel {
         JPanel form = new JPanel(new GridLayout(0, 1, 4, 4));
         form.add(new JLabel("申请类型："));
         form.add(applicationType);
-        form.add(new JLabel("已有校园登录账号（仅关联已有账号时填写）："));
+        form.add(new JLabel("已有一卡通号（仅关联已有账号时填写）："));
         form.add(username);
         form.add(new JLabel("外来医生姓名（仅新建账号时填写）："));
         form.add(displayName);
@@ -325,7 +325,7 @@ public final class HospitalView extends JPanel {
             return;
         }
         String[] columns = {
-                "申请时间", "申请类型", "姓名", "科室", "职称", "状态", "登录账号"
+                "申请时间", "申请类型", "姓名", "科室", "职称", "状态", "一卡通号"
         };
         Object[][] rows = applications.stream()
                 .map(application -> new Object[]{
@@ -353,7 +353,7 @@ public final class HospitalView extends JPanel {
         JPanel content = new JPanel(new java.awt.BorderLayout(0, 10));
         content.add(scroll, java.awt.BorderLayout.CENTER);
         content.add(new JLabel(
-                "外来医生账号获批后初始密码为 123456；关联已有账号时继续使用原密码。"),
+                "外来医生获批后自动取得一卡通号，初始密码为 123456；关联已有账号时继续使用原密码。"),
                 java.awt.BorderLayout.SOUTH);
         JOptionPane.showMessageDialog(
                 this, content, "医生申请记录", JOptionPane.PLAIN_MESSAGE);

@@ -21,15 +21,52 @@ final class ShopCartStore {
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
 
     void add(ProductSummaryDto product) {
+        add(product, 1);
+    }
+
+    void add(ProductSummaryDto product, int quantity) {
+        int extra = Math.max(1, quantity);
+        int stock = Math.max(0, product.getStockQty());
+        if (stock == 0) {
+            return;
+        }
+        extra = Math.min(extra, stock);
         for (int index = 0; index < lines.size(); index++) {
             Line line = lines.get(index);
             if (line.product().getProductId() == product.getProductId()) {
-                lines.set(index, new Line(product, line.quantity() + 1));
+                int next = Math.min(stock, line.quantity() + extra);
+                lines.set(index, new Line(product, next));
                 notifyListeners();
                 return;
             }
         }
-        lines.add(new Line(product, 1));
+        lines.add(new Line(product, extra));
+        notifyListeners();
+    }
+
+    void setQuantity(long productId, int quantity) {
+        for (int index = 0; index < lines.size(); index++) {
+            Line line = lines.get(index);
+            if (line.product().getProductId() != productId) {
+                continue;
+            }
+            if (quantity < 1) {
+                lines.remove(index);
+            } else {
+                int next = Math.min(line.product().getStockQty(), quantity);
+                lines.set(index, new Line(line.product(), next));
+            }
+            notifyListeners();
+            return;
+        }
+    }
+
+    void remove(long productId) {
+        setQuantity(productId, 0);
+    }
+
+    void clear() {
+        lines.clear();
         notifyListeners();
     }
 

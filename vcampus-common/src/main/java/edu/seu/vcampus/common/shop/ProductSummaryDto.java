@@ -117,6 +117,39 @@ public final class ProductSummaryDto implements Serializable {
         return saleStatus;
     }
 
+    /**
+     * Returns a copy with a different remaining quantity.
+     *
+     * @param stockQty remaining quantity
+     * @return updated catalog row
+     */
+    public ProductSummaryDto withStockQty(int stockQty) {
+        return withCatalog(name, description, priceFen, stockQty);
+    }
+
+    /**
+     * Returns a copy with edited merchant fields.
+     *
+     * @param name product title
+     * @param description seller copy
+     * @param priceFen unit price
+     * @param stockQty remaining quantity
+     * @return updated catalog row
+     */
+    public ProductSummaryDto withCatalog(String name, String description, int priceFen, int stockQty) {
+        return new ProductSummaryDto(
+                productId,
+                categoryId,
+                categoryName,
+                name,
+                description,
+                sellerName,
+                priceFen,
+                stockQty,
+                saleStatus,
+                photos);
+    }
+
     /** @return product photos in display order */
     public List<byte[]> getPhotos() {
         return List.copyOf(photos);

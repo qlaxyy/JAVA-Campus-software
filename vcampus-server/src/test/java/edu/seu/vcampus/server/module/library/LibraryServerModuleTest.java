@@ -44,6 +44,8 @@ class LibraryServerModuleTest {
         ActionRouter router = router();
         assertEquals(ErrorCodes.AUTH_REQUIRED, dispatch(router, LibraryActions.SEARCH_BOOKS,
                 null, new BookSearchRequest("", null)).getCode());
+        assertEquals(ErrorCodes.AUTH_REQUIRED, dispatch(router, LibraryActions.GET_BORROW_RECORDS,
+                "expired-token", null).getCode());
         assertEquals(ErrorCodes.COMMON_INVALID_REQUEST, dispatch(router, LibraryActions.SEARCH_BOOKS,
                 READER.getToken(), new CopyBorrowRequest("SEU-B001-001")).getCode());
         assertEquals(ErrorCodes.COMMON_INVALID_REQUEST, dispatch(router, LibraryActions.GET_BORROW_RECORDS,

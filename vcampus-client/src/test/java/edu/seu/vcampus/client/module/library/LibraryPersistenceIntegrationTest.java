@@ -39,7 +39,7 @@ class LibraryPersistenceIntegrationTest {
         int availableBefore;
 
         try (CampusServer first = persistentServer(database)) {
-            ClientContext reader = login(first, "student001");
+            ClientContext reader = login(first, "20260001");
             availableBefore = search(reader, "9787111213826").getAvailableCount();
             Response borrowed = reader.send(
                     LibraryActions.BORROW_COPY, new CopyBorrowRequest(barcode));
@@ -47,7 +47,7 @@ class LibraryPersistenceIntegrationTest {
         }
 
         try (CampusServer second = persistentServer(database)) {
-            ClientContext reader = login(second, "student001");
+            ClientContext reader = login(second, "20260001");
             BorrowRecordDTO current = records(reader).getFirst();
             assertEquals("BORROWED", current.getStatus());
             assertEquals(barcode, current.getBarcode());
@@ -59,13 +59,13 @@ class LibraryPersistenceIntegrationTest {
         }
 
         try (CampusServer third = persistentServer(database)) {
-            ClientContext reader = login(third, "student001");
+            ClientContext reader = login(third, "20260001");
             assertEquals("RETURNED", records(reader).getFirst().getStatus());
             assertEquals(availableBefore - 1,
                     search(reader, "9787111213826").getAvailableCount(),
                     "a returned copy is unavailable until a librarian shelves it");
 
-            ClientContext librarian = login(third, "libraryadmin");
+            ClientContext librarian = login(third, "20260005");
             BookCopyDTO copy = copies(librarian, "B001").stream()
                     .filter(value -> barcode.equals(value.getBarcode()))
                     .findFirst().orElseThrow();

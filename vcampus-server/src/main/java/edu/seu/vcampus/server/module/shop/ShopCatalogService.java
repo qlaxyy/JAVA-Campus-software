@@ -4,9 +4,11 @@ import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.ModuleNames;
 import edu.seu.vcampus.common.protocol.Request;
 import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.common.shop.ListListingsResponse;
 import edu.seu.vcampus.common.shop.ListProductsRequest;
 import edu.seu.vcampus.common.shop.ListProductsResponse;
 import edu.seu.vcampus.common.shop.PublishProductRequest;
+import edu.seu.vcampus.common.shop.UpdateProductRequest;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.module.ServerContext;
 
@@ -96,6 +98,85 @@ public final class ShopCatalogService {
                     ErrorCodes.COMMON_INVALID_REQUEST,
                     "上架信息不完整。请至少上传一张照片，并填写标题、分类、价格、描述和数量。");
         }
+    }
+
+    /**
+     * Updates an on-sale product for a shop administrator.
+     *
+     * @param request incoming request
+     * @param context shared session lookup
+     * @return updated product or an error
+     */
+    public Response updateProduct(Request request, ServerContext context) {
+        Objects.requireNonNull(request, "request must not be null");
+        Objects.requireNonNull(context, "context must not be null");
+        Optional<SessionInfo> session = context.sessions().findSession(request.getToken());
+        if (session.isEmpty()) {
+            return Response.failure(
+                    request.getRequestId(),
+                    ErrorCodes.AUTH_REQUIRED,
+                    "请先登录。");
+        }
+        if (!session.get().canAdminister(ModuleNames.SHOP)) {
+            return Response.failure(
+                    request.getRequestId(),
+                    ErrorCodes.AUTH_FORBIDDEN,
+                    "只有商店管理员可以修改商品。");
+        }
+        if (!(request.getData() instanceof UpdateProductRequest payload)) {
+            return Response.failure(
+                    request.getRequestId(),
+                    ErrorCodes.COMMON_INVALID_REQUEST,
+                    "修改信息不完整。");
+        }
+        try {
+            return Response.success(
+                    request,
+                    "商品已更新。",
+                    catalog.update(
+                            payload.getProductId(),
+                            payload.getName(),
+                            payload.getDescription(),
+                            payload.getPriceFen(),
+                            payload.getAddStockQty(),
+                            session.get().getDisplayName()));
+        } catch (ShopBusinessException exception) {
+            return Response.failure(request.getRequestId(), exception.code(), exception.getMessage());
+        } catch (IllegalArgumentException exception) {
+            return Response.failure(
+                    request.getRequestId(),
+                    ErrorCodes.COMMON_INVALID_REQUEST,
+                    "修改信息不完整。");
+        }
+    }
+
+    /**
+     * Lists listing records for a shop administrator.
+     *
+     * @param request incoming request
+     * @param context shared session lookup
+     * @return listing log or an error
+     */
+    public Response listListings(Request request, ServerContext context) {
+        Objects.requireNonNull(request, "request must not be null");
+        Objects.requireNonNull(context, "context must not be null");
+        Optional<SessionInfo> session = context.sessions().findSession(request.getToken());
+        if (session.isEmpty()) {
+            return Response.failure(
+                    request.getRequestId(),
+                    ErrorCodes.AUTH_REQUIRED,
+                    "请先登录。");
+        }
+        if (!session.get().canAdminister(ModuleNames.SHOP)) {
+            return Response.failure(
+                    request.getRequestId(),
+                    ErrorCodes.AUTH_FORBIDDEN,
+                    "只有商店管理员可以查看上架数据。");
+        }
+        return Response.success(
+                request,
+                "已返回上架数据。",
+                new ListListingsResponse(catalog.listListings()));
     }
 
     private static ListProductsRequest readFilter(Request request) {

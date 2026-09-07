@@ -36,7 +36,8 @@ class LibraryServerModuleTest {
                 LibraryActions.ADMIN_SEARCH_BOOKS, LibraryActions.ADD_BOOK, LibraryActions.UPDATE_BOOK,
                 LibraryActions.SET_BOOK_STATUS, LibraryActions.ADD_BOOK_COPY, LibraryActions.LIST_BOOK_COPIES,
                 LibraryActions.UPDATE_BOOK_COPY, LibraryActions.SHELVE_BOOK_COPY,
-                LibraryActions.WITHDRAW_BOOK_COPY, LibraryActions.ADMIN_QUERY_BORROWS), actions);
+                LibraryActions.WITHDRAW_BOOK_COPY, LibraryActions.RESTORE_BOOK_COPY,
+                LibraryActions.ADMIN_QUERY_BORROWS), actions);
     }
 
     @Test
@@ -68,6 +69,11 @@ class LibraryServerModuleTest {
                 ADMIN.getToken(), new UpdateBookCopyRequest(
                         "CP-B001-001", "九龙湖校区", "TP312/EDIT"));
         assertEquals(ErrorCodes.LIBRARY_INVALID_COPY_STATUS, editWithdrawn.getCode());
+        assertEquals(ErrorCodes.AUTH_FORBIDDEN,
+                dispatch(router, LibraryActions.RESTORE_BOOK_COPY, READER.getToken(),
+                        new BookCopyIdRequest("CP-B001-001")).getCode());
+        assertTrue(dispatch(router, LibraryActions.RESTORE_BOOK_COPY, ADMIN.getToken(),
+                new BookCopyIdRequest("CP-B001-001")).isSuccess());
     }
 
     @Test

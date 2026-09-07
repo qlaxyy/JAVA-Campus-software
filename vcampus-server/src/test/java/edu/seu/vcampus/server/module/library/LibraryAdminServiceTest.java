@@ -67,6 +67,15 @@ class LibraryAdminServiceTest {
                         new UpdateBookCopyRequest(copy.getCopyId(), "九龙湖", "TP312/2")));
         failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
                 () -> service.withdrawBookCopy(ADMIN, new BookCopyIdRequest(copy.getCopyId())));
+        failure(ErrorCodes.AUTH_FORBIDDEN,
+                () -> service.restoreBookCopy(READER, new BookCopyIdRequest(copy.getCopyId())));
+
+        BookCopyDTO restored = service.restoreBookCopy(ADMIN, new BookCopyIdRequest(copy.getCopyId()));
+        assertEquals("AVAILABLE", restored.getStatus());
+        assertEquals(1, service.searchBooksForAdmin(ADMIN,
+                new BookSearchRequest(created.getIsbn(), null)).getBooks().getFirst().getTotalCount());
+        failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
+                () -> service.restoreBookCopy(ADMIN, new BookCopyIdRequest(copy.getCopyId())));
     }
 
     @Test

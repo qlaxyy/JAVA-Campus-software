@@ -50,8 +50,9 @@
 
 - 借书：`AVAILABLE -> LOANED`；
 - 归还：`LOANED -> WAITING_SHELVING`；
-- 管理员确认上架：`WAITING_SHELVING -> AVAILABLE`；
+- 管理员确认归架：`WAITING_SHELVING -> AVAILABLE`；
 - 管理员注销：`AVAILABLE/WAITING_SHELVING -> WITHDRAWN`；`LOANED` 单册禁止注销。
+- 管理员恢复：`WITHDRAWN -> AVAILABLE`；其他状态不能执行恢复。
 
 ### `tblBookCategory`
 

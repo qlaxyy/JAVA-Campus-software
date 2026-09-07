@@ -44,7 +44,7 @@ V1 的 `BORROW_BOOK`、`RETURN_BOOK`、`UPDATE_STOCK`、`DELETE_BOOK` 以及对�
 - 借期固定 30 天，时间由服务器生成；
 - 借书必须同时完成 `BookCopy -> LOANED` 和创建 `BORROWED` 记录；
 - 归还必须同时完成记录 `-> RETURNED`、写入 `returnTime` 和单册 `-> WAITING_SHELVING`；
-- 归还后不会立即恢复可借数，管理员确认上架后才变为 `AVAILABLE`；
+- 归还后不会立即恢复可借数，管理员确认归架后才变为 `AVAILABLE`；
 - 书目停用不妨碍已有借阅归还；逾期由 `BORROWED && now > dueTime` 动态计算；
 - 同一单册同一时刻最多一条 `BORROWED` 记录，`LOANED` 与当前借阅记录保持对应。
 
@@ -57,7 +57,7 @@ InMemory 版本仍通过第二步失败时补偿第一步维持测试状态一�
 
 - Service：关键词和分类校验、馆藏地汇总、停用书目过滤；
 - 借还：条码定位、30 天借期、五本上限、同书目重复、逾期停借、他人归还拒绝；
-- 状态机：`AVAILABLE -> LOANED -> WAITING_SHELVING -> AVAILABLE`；
+- 状态机：`AVAILABLE -> LOANED -> WAITING_SHELVING -> AVAILABLE`，最后一步由管理员确认归架；
 - 一致性：同一条码并发只有一次借阅成功，任一写入失败不留下半完成状态；
 - Socket：真实登录、检索、借书、个人记录、归还、管理员上架及库存变化；
 - Access：四类 Repository 映射、唯一索引、借还失败回滚，以及两次服务器重启后的借阅和上架状态；

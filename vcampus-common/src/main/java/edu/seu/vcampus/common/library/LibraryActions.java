@@ -49,6 +49,9 @@ public final class LibraryActions {
     /** Logically withdraws one physical copy. */
     public static final String WITHDRAW_BOOK_COPY =
             ActionNames.of(ModuleNames.LIBRARY, "WITHDRAW_BOOK_COPY");
+    /** Restores one logically withdrawn physical copy to the available collection. */
+    public static final String RESTORE_BOOK_COPY =
+            ActionNames.of(ModuleNames.LIBRARY, "RESTORE_BOOK_COPY");
     /** Queries all-library current, history or overdue borrow records. */
     public static final String ADMIN_QUERY_BORROWS =
             ActionNames.of(ModuleNames.LIBRARY, "ADMIN_QUERY_BORROWS");

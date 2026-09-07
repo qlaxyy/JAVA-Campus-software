@@ -2,6 +2,8 @@ package edu.seu.vcampus.client.module.library;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.infrastructure.CampusClient;
+import edu.seu.vcampus.common.library.BookCopyIdRequest;
+import edu.seu.vcampus.common.library.LibraryActions;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
 import org.junit.jupiter.api.Test;
 
@@ -42,6 +44,10 @@ class LibraryAdminUiTest {
 
             JTable books = named(admin, JTable.class, "library.admin.books");
             awaitUi(() -> books.getRowCount() > 0 && books.isEnabled());
+            JButton newBook = button(admin, "＋ 新建书目");
+            assertTrue(newBook.isEnabled());
+            assertTrue(newBook.getFont().isBold());
+            assertNotEquals(newBook.getBackground(), newBook.getForeground());
             JButton activate = button(admin, "开放借阅");
             JButton deactivate = button(admin, "停止借阅");
             assertFalse(activate.isEnabled());
@@ -61,17 +67,36 @@ class LibraryAdminUiTest {
             onEdt(() -> areas.setSelectedIndex(1));
             JTable copies = named(admin, JTable.class, "library.admin.copies");
             awaitUi(() -> copies.getRowCount() > 0 && copies.isEnabled());
-            JButton shelf = button(admin, "确认上架");
+            JButton newCopy = button(admin, "＋ 登记新单册");
+            assertTrue(newCopy.isEnabled());
+            assertTrue(newCopy.getFont().isBold());
+            assertNotEquals(newCopy.getBackground(), newCopy.getForeground());
+            JButton shelf = button(admin, "确认归架");
+            JButton restore = button(admin, "恢复单册");
             JButton withdraw = button(admin, "注销单册");
             assertFalse(shelf.isEnabled());
+            assertFalse(restore.isEnabled());
             assertFalse(withdraw.isEnabled());
             onEdt(() -> copies.setRowSelectionInterval(0, 0));
             awaitUi(withdraw::isEnabled);
             assertEquals("在架", copies.getValueAt(0, 4));
             assertEquals("书目已停止借阅", copies.getValueAt(0, 5));
             assertFalse(shelf.isEnabled(), "an AVAILABLE copy must not be shelved again");
+            assertFalse(restore.isEnabled(), "an AVAILABLE copy must not be restored");
             assertFalse(named(admin, JTextField.class, "library.admin.barcode").isEnabled(),
                     "barcodes are immutable after registration");
+
+            String copyId = String.valueOf(copies.getValueAt(0, 0));
+            assertTrue(context.send(LibraryActions.WITHDRAW_BOOK_COPY,
+                    new BookCopyIdRequest(copyId)).isSuccess());
+            onEdt(() -> button(admin, "刷新单册").doClick());
+            awaitUi(() -> copies.isEnabled() && "已注销".equals(copies.getValueAt(0, 4)));
+            onEdt(() -> copies.setRowSelectionInterval(0, 0));
+            awaitUi(restore::isEnabled);
+            assertFalse(withdraw.isEnabled());
+            assertFalse(named(admin, JTextField.class, "library.admin.location").isEnabled());
+            onEdt(restore::doClick);
+            awaitUi(() -> copies.isEnabled() && "在架".equals(copies.getValueAt(0, 4)));
 
             onEdt(() -> areas.setSelectedIndex(2));
             JTable borrows = named(admin, JTable.class, "library.admin.borrows");

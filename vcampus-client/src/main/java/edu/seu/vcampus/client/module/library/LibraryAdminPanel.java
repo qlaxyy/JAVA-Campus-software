@@ -45,7 +45,7 @@ public final class LibraryAdminPanel extends JPanel {
     private final JTabbedPane areas = new JTabbedPane();
     private final JTextField keyword = new JTextField(20);
     private final JButton refreshBooks = new JButton("查询 / 刷新");
-    private final JButton newBook = new JButton("新建书目");
+    private final JButton newBook = primaryAction("＋ 新建书目");
     private final JButton saveBook = new JButton("保存书目信息");
     private final JButton activateBook = new JButton("开放借阅");
     private final JButton deactivateBook = new JButton("停止借阅");
@@ -70,10 +70,11 @@ public final class LibraryAdminPanel extends JPanel {
     private final JTextField barcode = new JTextField(18);
     private final JTextField location = new JTextField(18);
     private final JTextField callNumber = new JTextField(18);
-    private final JButton newCopy = new JButton("登记新单册");
+    private final JButton newCopy = primaryAction("＋ 登记新单册");
     private final JButton addCopy = new JButton("确认登记");
     private final JButton updateCopy = new JButton("保存位置与索书号");
-    private final JButton shelfCopy = new JButton("确认上架");
+    private final JButton shelfCopy = new JButton("确认归架");
+    private final JButton restoreCopy = new JButton("恢复单册");
     private final JButton withdrawCopy = new JButton("注销单册");
     private final JButton refreshCopies = new JButton("刷新单册");
 
@@ -192,6 +193,7 @@ public final class LibraryAdminPanel extends JPanel {
         actions.add(addCopy);
         actions.add(updateCopy);
         actions.add(shelfCopy);
+        actions.add(restoreCopy);
         actions.add(withdrawCopy);
         c.gridx = 0;
         c.gridy = 3;
@@ -232,6 +234,7 @@ public final class LibraryAdminPanel extends JPanel {
         addCopy.addActionListener(event -> addCopy());
         updateCopy.addActionListener(event -> updateCopy());
         shelfCopy.addActionListener(event -> mutateCopy(LibraryActions.SHELVE_BOOK_COPY, "上架"));
+        restoreCopy.addActionListener(event -> mutateCopy(LibraryActions.RESTORE_BOOK_COPY, "恢复"));
         withdrawCopy.addActionListener(event -> mutateCopy(LibraryActions.WITHDRAW_BOOK_COPY, "注销"));
         refreshCopies.addActionListener(event -> loadCopies());
         copyTable.getSelectionModel().addListSelectionListener(event -> {
@@ -445,9 +448,19 @@ public final class LibraryAdminPanel extends JPanel {
         BookCopyDTO copy = selectedCopy();
         if (working || copy == null) { return; }
         if (LibraryActions.SHELVE_BOOK_COPY.equals(action) && !WAITING_SHELVING.equals(copy.getStatus())) { return; }
+        if (LibraryActions.RESTORE_BOOK_COPY.equals(action) && !WITHDRAWN.equals(copy.getStatus())) { return; }
         if (LibraryActions.WITHDRAW_BOOK_COPY.equals(action)
                 && (LOANED.equals(copy.getStatus()) || WITHDRAWN.equals(copy.getStatus()))) { return; }
+        if (LibraryActions.WITHDRAW_BOOK_COPY.equals(action) && !confirmWithdrawal(copy)) { return; }
         submitCopy(action, new BookCopyIdRequest(copy.getCopyId()), operation);
+    }
+
+    private boolean confirmWithdrawal(BookCopyDTO copy) {
+        return JOptionPane.showConfirmDialog(this,
+                "确定注销馆藏条码 “" + copy.getBarcode() + "” 吗？\n"
+                        + "注销后不计入馆藏，但会保留历史记录，也可由管理员恢复。",
+                "确认注销单册", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE)
+                == JOptionPane.YES_OPTION;
     }
 
     private void submitCopy(String action, Serializable request, String operation) {
@@ -631,11 +644,14 @@ public final class LibraryAdminPanel extends JPanel {
         copyTable.setEnabled(!working);
         newCopy.setEnabled(ready && selectedBookId != null);
         barcode.setEnabled(ready && addingCopy);
-        location.setEnabled(ready && (addingCopy || copy != null));
-        callNumber.setEnabled(ready && (addingCopy || copy != null));
+        boolean copyEditable = ready && (addingCopy
+                || copy != null && !WITHDRAWN.equals(copy.getStatus()));
+        location.setEnabled(copyEditable);
+        callNumber.setEnabled(copyEditable);
         addCopy.setEnabled(ready && addingCopy);
         updateCopy.setEnabled(ready && !addingCopy && copy != null && !WITHDRAWN.equals(copy.getStatus()));
         shelfCopy.setEnabled(ready && copy != null && WAITING_SHELVING.equals(copy.getStatus()));
+        restoreCopy.setEnabled(ready && copy != null && WITHDRAWN.equals(copy.getStatus()));
         withdrawCopy.setEnabled(ready && copy != null
                 && !LOANED.equals(copy.getStatus()) && !WITHDRAWN.equals(copy.getStatus()));
         borrowScope.setEnabled(!working);
@@ -647,6 +663,20 @@ public final class LibraryAdminPanel extends JPanel {
             @Override
             public boolean isCellEditable(int row, int column) { return false; }
         };
+    }
+
+    private static JButton primaryAction(String text) {
+        JButton button = new JButton(text);
+        Color accent = new Color(15, 118, 110);
+        button.setBackground(Color.WHITE);
+        button.setForeground(accent);
+        button.setFont(button.getFont().deriveFont(Font.BOLD));
+        button.setFocusPainted(false);
+        button.setOpaque(true);
+        button.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(accent, 2),
+                BorderFactory.createEmptyBorder(5, 12, 5, 12)));
+        return button;
     }
 
     private static void configureTable(JTable table, String name) {

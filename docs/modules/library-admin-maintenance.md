@@ -12,12 +12,13 @@
 
 1. **书目维护**：查询全部书目（含 `INACTIVE`），新增/编辑 ISBN、书名、作者、分类、出版社、出版年和语种，
    通过专用操作切换“开放借阅 / 停止借阅”。新增书目初始馆藏为 0。
-2. **实体单册**：为选中的书目登记唯一馆藏条码，维护馆藏地和索书号，确认归还单册上架，或软注销单册。
+2. **实体单册**：为选中的书目登记唯一馆藏条码，维护馆藏地和索书号，确认归还单册归架，软注销单册，
+   或恢复误注销的单册。
    登记后的 barcode、bookId 和 status 不能通过通用编辑修改。
 3. **借阅查询**：查询全馆当前借阅、借阅历史或逾期未还，展示稳定 `userId`、书名、馆藏条码和时间。
 
-已知不合法操作直接禁用：`AVAILABLE` 不能再次上架，`LOANED` 和 `WITHDRAWN` 不能注销，
-`WITHDRAWN` 不能再编辑；条码登记后不可编辑。服务器仍对所有状态进行权威校验。
+已知不合法操作直接禁用：`AVAILABLE` 不能再次归架，`LOANED` 和 `WITHDRAWN` 不能注销，
+只有 `WITHDRAWN` 可以恢复，且 `WITHDRAWN` 不能直接编辑；条码登记后不可编辑。服务器仍对所有状态进行权威校验。
 
 ## 管理契约
 
@@ -32,6 +33,7 @@
 | `UPDATE_BOOK_COPY` | `UpdateBookCopyRequest` | `BookCopyDTO` |
 | `SHELVE_BOOK_COPY` | `BookCopyIdRequest` | `BookCopyDTO` |
 | `WITHDRAW_BOOK_COPY` | `BookCopyIdRequest` | `BookCopyDTO` |
+| `RESTORE_BOOK_COPY` | `BookCopyIdRequest` | `BookCopyDTO` |
 | `ADMIN_QUERY_BORROWS` | `AdminBorrowQueryRequest` | `List<AdminBorrowRecordDTO>` |
 
 ## 关键业务规则
@@ -42,6 +44,7 @@
 - 新增书目与登记实体单册分离，同 ISBN 不能重复新增；同一 barcode 全馆唯一；
 - `UPDATE_BOOK_COPY` 只接收 `copyId / location / callNumber`，不能绕过状态机；
 - 注销是 `BookCopy -> WITHDRAWN` 的软删除，不物理删除书目或借阅历史；借出中的单册禁止注销；
+- 管理员可以将误注销的单册恢复为 `AVAILABLE`，恢复前仍须确认不存在当前借阅记录；
 - `WITHDRAWN` 不计馆藏和可借数，但仍可用于解释历史借阅；
 - 当前、历史、逾期查询由 BorrowRecord 推导，不另存借阅数量或逾期布尔状态；
 - 所有写操作和借还共用同一个 Service 临界区，避免管理操作与流通操作交错破坏状态。

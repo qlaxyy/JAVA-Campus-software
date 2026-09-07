@@ -259,6 +259,25 @@ final class LibraryService {
         }
     }
 
+    BookCopyDTO restoreBookCopy(SessionInfo actor, BookCopyIdRequest request) {
+        requireAdministrator(actor);
+        Objects.requireNonNull(request, "request must not be null");
+        synchronized (circulationLock) {
+            BookCopy copy = requireCopy(request.getCopyId());
+            if (copy.status() != BookCopyStatus.WITHDRAWN) {
+                throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
+                        "只有已注销单册可以恢复");
+            }
+            if (borrowRecordRepository.findBorrowedByCopyId(copy.copyId()).isPresent()) {
+                throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
+                        "存在未结束借阅记录的单册不能恢复");
+            }
+            BookCopy restored = copy.withStatus(BookCopyStatus.AVAILABLE);
+            bookCopyRepository.update(restored);
+            return toBookCopyDTO(restored);
+        }
+    }
+
     private void requireAdministrator(SessionInfo actor) {
         if (actor == null || !actor.canAdminister(ModuleNames.LIBRARY)) {
             throw failure(ErrorCodes.AUTH_FORBIDDEN, "需要图书馆管理权限");

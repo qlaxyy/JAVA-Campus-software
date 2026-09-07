@@ -32,6 +32,9 @@ class LibraryWorkflowUiTest {
             LibraryPanel catalog = (LibraryPanel) tabs.getComponentAt(0);
             SelfServicePanel terminal = (SelfServicePanel) tabs.getComponentAt(1);
             MyBorrowPanel records = (MyBorrowPanel) tabs.getComponentAt(2);
+            JLabel terminalUser = named(terminal, JLabel.class, "library.selfService.user");
+            assertEquals("当前用户：演示学生", terminalUser.getText());
+            assertFalse(terminalUser.getText().contains("U-STUDENT-001"));
             assertFalse(buttons(catalog).stream().anyMatch(button -> button.getText().contains("借阅")));
             assertFalse(buttons(records).stream().anyMatch(button -> button.getText().contains("归还选中")));
 

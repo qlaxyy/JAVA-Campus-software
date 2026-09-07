@@ -101,6 +101,8 @@ public final class LibraryServerModule implements ServerModule {
                 request, context, BookCopyIdRequest.class, service::shelveBookCopy));
         router.register(LibraryActions.WITHDRAW_BOOK_COPY, request -> administer(
                 request, context, BookCopyIdRequest.class, service::withdrawBookCopy));
+        router.register(LibraryActions.RESTORE_BOOK_COPY, request -> administer(
+                request, context, BookCopyIdRequest.class, service::restoreBookCopy));
         router.register(LibraryActions.ADMIN_QUERY_BORROWS, request -> administer(
                 request, context, AdminBorrowQueryRequest.class,
                 (actor, data) -> new ArrayList<>(service.queryBorrows(actor, data))));

@@ -43,7 +43,7 @@ public final class SelfServicePanel extends JPanel {
 
         SessionInfo session = context.currentSession().orElse(null);
         String identity = session == null ? "未登录"
-                : session.getDisplayName() + "（" + session.getUserId() + "）";
+                : session.getDisplayName();
         JLabel user = new JLabel("当前用户：" + identity, SwingConstants.CENTER);
         user.setName("library.selfService.user");
         add(user, BorderLayout.NORTH);

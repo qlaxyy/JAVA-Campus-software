@@ -10,7 +10,11 @@ interface BorrowRecordRepository {
 
     List<BorrowRecord> findByUserId(String userId);
 
+    List<BorrowRecord> findAll();
+
     Optional<BorrowRecord> findById(String recordId);
+
+    Optional<BorrowRecord> findBorrowedByCopyId(String copyId);
 
     /** Inserts a new record; on failure the repository must remain unchanged. */
     void save(BorrowRecord record);

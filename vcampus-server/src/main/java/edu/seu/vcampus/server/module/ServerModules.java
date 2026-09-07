@@ -24,104 +24,65 @@ public final class ServerModules {
     }
 
     /**
-     * Builds the in-memory router and lets every module
-     * register its handlers.
+     * Builds the in-memory router and lets every module register its handlers.
      *
-     * @return fully initialised router
+     * @return fully initialized router
      */
     public static ActionRouter createRouter() {
-
         return createRouter(
-            new InMemoryAuthenticationService(),
-            new HospitalServerModule(),
-            new CourseServerModule());
+                new InMemoryAuthenticationService(),
+                new CourseServerModule(),
+                new LibraryServerModule(),
+                new HospitalServerModule());
     }
 
-    /**
-     * Builds the production router with persistent
-     * Access-backed modules.
-     */
-    public static ActionRouter createPersistentRouter(
-        Path databasePath) {
-
+    /** Builds the production router with supported module data persisted in Access. */
+    public static ActionRouter createPersistentRouter(Path databasePath) {
         return createRouter(
-            UserAuthenticationBootstrap
-                .createAccessBacked(
-                    databasePath),
-            HospitalServerModule
-                .createAccessBacked(
-                    databasePath),
-            CourseServerModule
-                .createAccessBacked(
-                    databasePath));
+                UserAuthenticationBootstrap.createAccessBacked(databasePath),
+                CourseServerModule.createAccessBacked(databasePath),
+                LibraryServerModule.createAccessBacked(databasePath),
+                HospitalServerModule.createAccessBacked(databasePath));
     }
 
-    /**
-     * Creates the router using the supplied module
-     * implementations.
-     */
     private static ActionRouter createRouter(
-        InMemoryAuthenticationService authentication,
-        HospitalServerModule hospitalModule,
-        CourseServerModule courseModule) {
-
-        ActionRouter router =
-            new ActionRouter();
-
-        ServerContext context =
-            new ServerContext(
-                authentication,
-                authentication,
-                authentication);
-
-        router.register(
-            Actions.PING,
-            request ->
-                Response.success(
-                    request,
-                    "Server is reachable.",
-                    "PONG"));
-
-        modules(
-            authentication,
-            hospitalModule,
-            courseModule)
-            .forEach(module ->
-                module.registerHandlers(
-                    router,
-                    context));
+            InMemoryAuthenticationService authentication,
+            CourseServerModule courseModule,
+            LibraryServerModule libraryModule,
+            HospitalServerModule hospitalModule) {
+        ActionRouter router = new ActionRouter();
+        ServerContext context = new ServerContext(authentication, authentication, authentication);
+        router.register(Actions.PING, request ->
+                Response.success(request, "Server is reachable.", "PONG"));
+        modules(authentication, courseModule, libraryModule, hospitalModule)
+                .forEach(module -> module.registerHandlers(router, context));
         return router;
     }
 
     /**
-     * Returns the fixed module catalogue using
-     * in-memory implementations.
+     * Returns the fixed module catalog. New optional modules require team review.
      *
      * @return immutable six-module list
      */
     public static List<ServerModule> modules() {
-
         return modules(
-            new InMemoryAuthenticationService(),
-            new HospitalServerModule(),
-            new CourseServerModule());
+                new InMemoryAuthenticationService(),
+                new CourseServerModule(),
+                new LibraryServerModule(),
+                new HospitalServerModule());
     }
 
-    /**
-     * Returns all server business modules.
-     */
     private static List<ServerModule> modules(
-        InMemoryAuthenticationService authentication,
-        HospitalServerModule hospitalModule,
-        CourseServerModule courseModule) {
-
+            InMemoryAuthenticationService authentication,
+            CourseServerModule courseModule,
+            LibraryServerModule libraryModule,
+            HospitalServerModule hospitalModule) {
         return List.of(
-            new UserServerModule(
-                authentication),
-            new StudentServerModule(),
-            courseModule,
-            new LibraryServerModule(),
-            new ShopServerModule(),
-            hospitalModule);
+                new UserServerModule(authentication),
+                new StudentServerModule(),
+                courseModule,
+                libraryModule,
+                new ShopServerModule(),
+                hospitalModule);
     }
 }

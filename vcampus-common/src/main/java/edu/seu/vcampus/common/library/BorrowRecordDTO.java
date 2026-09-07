@@ -8,11 +8,13 @@ import java.time.LocalDateTime;
 public final class BorrowRecordDTO implements Serializable {
 
     @Serial
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 2L;
 
     private final String recordId;
     private final String bookId;
     private final String bookTitle;
+    private final String copyId;
+    private final String barcode;
     private final LocalDateTime borrowTime;
     private final LocalDateTime dueTime;
     private final LocalDateTime returnTime;
@@ -23,6 +25,8 @@ public final class BorrowRecordDTO implements Serializable {
      * @param recordId borrow record identifier
      * @param bookId book identifier
      * @param bookTitle display title
+     * @param copyId internal physical-copy identifier
+     * @param barcode immutable physical-copy barcode
      * @param borrowTime server borrowing time
      * @param dueTime server due time
      * @param returnTime actual return time, or null while borrowed
@@ -30,11 +34,14 @@ public final class BorrowRecordDTO implements Serializable {
      * @param overdue whether the active record is overdue at query time
      */
     public BorrowRecordDTO(String recordId, String bookId, String bookTitle,
+            String copyId, String barcode,
             LocalDateTime borrowTime, LocalDateTime dueTime, LocalDateTime returnTime,
             String status, boolean overdue) {
         this.recordId = recordId;
         this.bookId = bookId;
         this.bookTitle = bookTitle;
+        this.copyId = copyId;
+        this.barcode = barcode;
         this.borrowTime = borrowTime;
         this.dueTime = dueTime;
         this.returnTime = returnTime;
@@ -50,6 +57,12 @@ public final class BorrowRecordDTO implements Serializable {
 
     /** @return display title */
     public String getBookTitle() { return bookTitle; }
+
+    /** @return internal physical-copy identifier */
+    public String getCopyId() { return copyId; }
+
+    /** @return immutable physical-copy barcode */
+    public String getBarcode() { return barcode; }
 
     /** @return borrowing time */
     public LocalDateTime getBorrowTime() { return borrowTime; }

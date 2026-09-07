@@ -20,6 +20,10 @@ final class InMemoryBorrowRecordRepository implements BorrowRecordRepository {
 
     @Override
     public synchronized void save(BorrowRecord record) {
+        if (record.status() == BorrowStatus.BORROWED
+                && findBorrowedByCopyId(record.copyId()).isPresent()) {
+            throw new IllegalStateException("Physical copy already has an active borrow record.");
+        }
         if (records.putIfAbsent(record.recordId(), record) != null) {
             throw new IllegalStateException("Borrow record identifier already exists.");
         }
@@ -33,14 +37,36 @@ final class InMemoryBorrowRecordRepository implements BorrowRecordRepository {
     }
 
     @Override
+    public synchronized List<BorrowRecord> findAll() {
+        return List.copyOf(records.values());
+    }
+
+    @Override
     public synchronized Optional<BorrowRecord> findById(String recordId) {
         return Optional.ofNullable(records.get(recordId));
     }
 
     @Override
+    public synchronized Optional<BorrowRecord> findBorrowedByCopyId(String copyId) {
+        return records.values().stream()
+                .filter(record -> record.copyId().equals(copyId))
+                .filter(record -> record.status() == BorrowStatus.BORROWED)
+                .findFirst();
+    }
+
+    @Override
     public synchronized void update(BorrowRecord record) {
-        if (!records.containsKey(record.recordId())) {
+        BorrowRecord original = records.get(record.recordId());
+        if (original == null) {
             throw new IllegalStateException("Borrow record does not exist.");
+        }
+        if (!original.userId().equals(record.userId())
+                || !original.copyId().equals(record.copyId())
+                || !original.borrowTime().equals(record.borrowTime())
+                || !original.dueTime().equals(record.dueTime())
+                || original.status() != BorrowStatus.BORROWED
+                || record.status() != BorrowStatus.RETURNED) {
+            throw new IllegalArgumentException("Invalid borrow-record state transition.");
         }
         records.put(record.recordId(), record);
     }

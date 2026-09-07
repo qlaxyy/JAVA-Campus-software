@@ -44,7 +44,8 @@ public final class ServerModules {
             InMemoryAuthenticationService authentication,
             HospitalServerModule hospitalModule) {
         ActionRouter router = new ActionRouter();
-        ServerContext context = new ServerContext(authentication, authentication);
+        ServerContext context = new ServerContext(
+                authentication, authentication, authentication);
         router.register(Actions.PING, request ->
                 Response.success(request, "Server is reachable.", "PONG"));
         modules(authentication, hospitalModule)

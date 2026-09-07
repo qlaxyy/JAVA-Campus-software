@@ -20,12 +20,28 @@ final class CourseBatchService {
     private final Clock clock;
 
     private final CourseBatchSettingsRepository
-        settingsRepository =
-        new InMemoryCourseBatchSettingsRepository();
-
+        settingsRepository;
+    /**
+     * 默认使用内存批次设置仓库。
+     */
     CourseBatchService(
         CourseBatchRepository repository,
         Clock clock) {
+
+        this(
+            repository,
+            clock,
+            new InMemoryCourseBatchSettingsRepository());
+    }
+
+    /**
+     * 使用指定批次设置仓库。
+     */
+    CourseBatchService(
+        CourseBatchRepository repository,
+        Clock clock,
+        CourseBatchSettingsRepository
+            settingsRepository) {
 
         this.repository =
             Objects.requireNonNull(
@@ -36,8 +52,12 @@ final class CourseBatchService {
             Objects.requireNonNull(
                 clock,
                 "clock must not be null");
-    }
 
+        this.settingsRepository =
+            Objects.requireNonNull(
+                settingsRepository,
+                "settingsRepository must not be null");
+    }
     /**
      * 返回当前学期全部启用的选课批次。
      */

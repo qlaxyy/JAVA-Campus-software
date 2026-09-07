@@ -46,7 +46,12 @@ public final class CreateUserAccountRequest implements Serializable {
     }
 
     static String normalizeUsername(String value) {
-        return CampusCardNumber.normalize(value);
+        String normalized = CampusCardNumber.normalize(value);
+        if (!CampusCardNumber.isRegularAccountNumber(normalized)) {
+            throw new IllegalArgumentException(
+                    "campusCardNumber yyyy0000 is reserved for the super administrator");
+        }
+        return normalized;
     }
 
     static String requireText(String value, String fieldName) {

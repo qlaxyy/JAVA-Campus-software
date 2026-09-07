@@ -29,17 +29,17 @@ final class DemoUserAccounts {
                 Role.USER, Set.of()));
         repository.save(account("U-TEACHER-001", "20260002", "演示教师",
                 Role.USER, Set.of()));
-        repository.save(account("U-ADMIN-001", "20260003", "演示超级管理员",
+        repository.save(account("U-ADMIN-001", "20260000", "演示超级管理员",
                 Role.SUPER_ADMIN, EnumSet.allOf(AdminScope.class)));
-        repository.save(account("U-STUDENT-ADMIN-001", "20260004", "演示学籍管理员",
+        repository.save(account("U-STUDENT-ADMIN-001", "20260003", "演示学籍管理员",
                 Role.USER, Set.of(AdminScope.STUDENT)));
-        repository.save(account("U-COURSE-ADMIN-001", "20260005", "演示选课管理员",
+        repository.save(account("U-COURSE-ADMIN-001", "20260004", "演示选课管理员",
                 Role.USER, Set.of(AdminScope.COURSE)));
-        repository.save(account("U-LIBRARY-ADMIN-001", "20260006", "演示图书馆管理员",
+        repository.save(account("U-LIBRARY-ADMIN-001", "20260005", "演示图书馆管理员",
                 Role.USER, Set.of(AdminScope.LIBRARY)));
-        repository.save(account("U-SHOP-ADMIN-001", "20260007", "演示商店管理员",
+        repository.save(account("U-SHOP-ADMIN-001", "20260006", "演示商店管理员",
                 Role.USER, Set.of(AdminScope.SHOP)));
-        repository.save(account("U-HOSPITAL-ADMIN-001", "20260008", "演示医院管理员",
+        repository.save(account("U-HOSPITAL-ADMIN-001", "20260007", "演示医院管理员",
                 Role.USER, Set.of(AdminScope.HOSPITAL)));
     }
 

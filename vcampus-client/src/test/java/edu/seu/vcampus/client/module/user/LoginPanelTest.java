@@ -47,14 +47,25 @@ class LoginPanelTest {
         assertTrue(labels.contains("以下账号统一密码：123456"));
         assertFalse(labels.contains("用户登录"));
         assertFalse(labels.contains("开发期基础登录"));
+        assertTrue(labels.contains("超级管理员  20260000"));
         assertTrue(labels.contains("普通账号  20260001"));
         assertTrue(labels.contains("医生演示  20260002"));
-        assertTrue(labels.contains("超级管理员  20260003"));
-        assertTrue(labels.contains("学籍管理员  20260004"));
-        assertTrue(labels.contains("选课管理员  20260005"));
-        assertTrue(labels.contains("图书馆管理员  20260006"));
-        assertTrue(labels.contains("商店管理员  20260007"));
-        assertTrue(labels.contains("医院管理员  20260008"));
+        assertTrue(labels.contains("学籍管理员  20260003"));
+        assertTrue(labels.contains("选课管理员  20260004"));
+        assertTrue(labels.contains("图书馆管理员  20260005"));
+        assertTrue(labels.contains("商店管理员  20260006"));
+        assertTrue(labels.contains("医院管理员  20260007"));
+        assertEquals(List.of(
+                "超级管理员  20260000",
+                "普通账号  20260001",
+                "医生演示  20260002",
+                "学籍管理员  20260003",
+                "选课管理员  20260004",
+                "图书馆管理员  20260005",
+                "商店管理员  20260006",
+                "医院管理员  20260007"),
+                labels.stream().filter(text -> text.matches(".*2026\\d{4}"))
+                        .toList());
     }
 
     @Test
@@ -66,7 +77,8 @@ class LoginPanelTest {
         assertNull(LoginPanel.validationMessage("20260001", "123456".toCharArray()));
         assertEquals("20260009", CampusCardNumber.format(2026, 9));
         assertEquals(9, CampusCardNumber.sequence("20260009"));
-        assertFalse(CampusCardNumber.isValid("20260000"));
+        assertTrue(CampusCardNumber.isValid("20260000"));
+        assertFalse(CampusCardNumber.isRegularAccountNumber("20260000"));
         assertThrows(IllegalArgumentException.class,
                 () -> CampusCardNumber.format(2026, 10_000));
     }

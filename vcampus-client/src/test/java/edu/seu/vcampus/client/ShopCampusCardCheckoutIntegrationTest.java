@@ -31,7 +31,7 @@ class ShopCampusCardCheckoutIntegrationTest {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
             assertEquals(10_000, balance("20260001", server.getPort()));
-            assertEquals(10_000, balance("20260007", server.getPort()));
+            assertEquals(10_000, balance("20260006", server.getPort()));
         }
     }
 

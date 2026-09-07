@@ -37,7 +37,7 @@ class HospitalSearchIntegrationTest {
             assertFalse(doctorAccess.canAccess(HospitalMode.ADMIN));
 
             assertTrue(context.logout().isSuccess());
-            assertTrue(context.login("20260008", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260007", "123456".toCharArray()).isSuccess());
             Response adminResponse = context.send(HospitalActions.GET_MODE_ACCESS, null);
             HospitalModeAccessView adminAccess = assertInstanceOf(
                     HospitalModeAccessView.class, adminResponse.getData());

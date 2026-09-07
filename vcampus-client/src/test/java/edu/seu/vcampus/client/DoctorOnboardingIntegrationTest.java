@@ -40,14 +40,14 @@ class DoctorOnboardingIntegrationTest {
             server.start();
             ClientContext hospitalAdministrator = client(server);
             assertTrue(hospitalAdministrator.login(
-                    "20260008", password()).isSuccess());
+                    "20260007", password()).isSuccess());
             Response submitted = hospitalAdministrator.send(
                     HospitalActions.SUBMIT_DOCTOR_APPLICATION,
                     existingApplication("20260001"));
             assertTrue(submitted.isSuccess());
 
             ClientContext administrator = client(server);
-            assertTrue(administrator.login("20260003", password()).isSuccess());
+            assertTrue(administrator.login("20260000", password()).isSuccess());
             DoctorApplicationView pending = pendingApplication(administrator);
             Response approved = administrator.send(
                     HospitalActions.REVIEW_DOCTOR_APPLICATION,
@@ -74,13 +74,13 @@ class DoctorOnboardingIntegrationTest {
             server.start();
             ClientContext hospitalAdministrator = client(server);
             assertTrue(hospitalAdministrator.login(
-                    "20260008", password()).isSuccess());
+                    "20260007", password()).isSuccess());
             assertTrue(hospitalAdministrator.send(
                     HospitalActions.SUBMIT_DOCTOR_APPLICATION,
                     externalApplication("新医生")).isSuccess());
 
             ClientContext administrator = client(server);
-            assertTrue(administrator.login("20260003", password()).isSuccess());
+            assertTrue(administrator.login("20260000", password()).isSuccess());
             DoctorApplicationView pending = pendingApplication(administrator);
             Response approval = administrator.send(
                     HospitalActions.REVIEW_DOCTOR_APPLICATION,
@@ -88,7 +88,7 @@ class DoctorOnboardingIntegrationTest {
             assertTrue(approval.isSuccess());
             DoctorApplicationView reviewed = assertInstanceOf(
                     DoctorApplicationView.class, approval.getData());
-            assertEquals("20260009", reviewed.getUsername());
+            assertEquals("20260008", reviewed.getUsername());
             assertFalse(reviewed.getUsername().equals("20260001"));
 
             DoctorApplicationListResponse hospitalHistory = assertInstanceOf(
@@ -141,13 +141,13 @@ class DoctorOnboardingIntegrationTest {
             first.start();
             ClientContext hospitalAdministrator = client(first);
             assertTrue(hospitalAdministrator.login(
-                    "20260008", password()).isSuccess());
+                    "20260007", password()).isSuccess());
             assertTrue(hospitalAdministrator.send(
                     HospitalActions.SUBMIT_DOCTOR_APPLICATION,
                     externalApplication("持久化医生")).isSuccess());
 
             ClientContext administrator = client(first);
-            assertTrue(administrator.login("20260003", password()).isSuccess());
+            assertTrue(administrator.login("20260000", password()).isSuccess());
             DoctorApplicationView pending = pendingApplication(administrator);
             Response approval = administrator.send(
                     HospitalActions.REVIEW_DOCTOR_APPLICATION,
@@ -175,13 +175,13 @@ class DoctorOnboardingIntegrationTest {
             server.start();
             ClientContext hospitalAdministrator = client(server);
             assertTrue(hospitalAdministrator.login(
-                    "20260008", password()).isSuccess());
+                    "20260007", password()).isSuccess());
             assertTrue(hospitalAdministrator.send(
                     HospitalActions.SUBMIT_DOCTOR_APPLICATION,
                     externalApplication("与学生同名的医生")).isSuccess());
 
             ClientContext administrator = client(server);
-            assertTrue(administrator.login("20260003", password()).isSuccess());
+            assertTrue(administrator.login("20260000", password()).isSuccess());
             DoctorApplicationView pending = pendingApplication(administrator);
             Response approval = administrator.send(
                     HospitalActions.REVIEW_DOCTOR_APPLICATION,
@@ -201,7 +201,7 @@ class DoctorOnboardingIntegrationTest {
             server.start();
             ClientContext hospitalAdministrator = client(server);
             assertTrue(hospitalAdministrator.login(
-                    "20260008", password()).isSuccess());
+                    "20260007", password()).isSuccess());
 
             Response response = hospitalAdministrator.send(
                     HospitalActions.SUBMIT_DOCTOR_APPLICATION,
@@ -228,7 +228,7 @@ class DoctorOnboardingIntegrationTest {
             assertTrue(access.canAccess(HospitalMode.DOCTOR));
 
             ClientContext administrator = client(server);
-            assertTrue(administrator.login("20260003", password()).isSuccess());
+            assertTrue(administrator.login("20260000", password()).isSuccess());
             DoctorApplicationListResponse applications = assertInstanceOf(
                     DoctorApplicationListResponse.class,
                     administrator.send(

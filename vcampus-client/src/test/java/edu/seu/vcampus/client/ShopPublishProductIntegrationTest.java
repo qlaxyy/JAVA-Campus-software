@@ -31,7 +31,7 @@ class ShopPublishProductIntegrationTest {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
             ClientContext admin = new ClientContext(new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(admin.login("20260007", "123456".toCharArray()).isSuccess());
+            assertTrue(admin.login("20260006", "123456".toCharArray()).isSuccess());
 
             Response published = admin.send(
                     ShopActions.PUBLISH_PRODUCT,
@@ -83,7 +83,7 @@ class ShopPublishProductIntegrationTest {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
             ClientContext admin = new ClientContext(new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(admin.login("shopadmin", "123456".toCharArray()).isSuccess());
+            assertTrue(admin.login("20260006", "123456".toCharArray()).isSuccess());
 
             Response updated = admin.send(
                     ShopActions.UPDATE_PRODUCT,
@@ -111,7 +111,7 @@ class ShopPublishProductIntegrationTest {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
             ClientContext student = new ClientContext(new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(student.login("student001", "123456".toCharArray()).isSuccess());
+            assertTrue(student.login("20260001", "123456".toCharArray()).isSuccess());
             Response response = student.send(
                     ShopActions.UPDATE_PRODUCT,
                     new edu.seu.vcampus.common.shop.UpdateProductRequest(

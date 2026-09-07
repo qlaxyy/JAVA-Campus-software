@@ -27,7 +27,7 @@ public final class LoginPanel extends JPanel {
     private final JTextField usernameField = new JTextField();
     private final JPasswordField passwordField = new JPasswordField();
     private final JButton loginButton = new JButton("登录");
-    private final JLabel statusLabel = new JLabel("请输入账号和密码", SwingConstants.CENTER);
+    private final JLabel statusLabel = new JLabel(" ", SwingConstants.CENTER);
 
     /**
      * Creates the shared login page.

@@ -44,7 +44,7 @@ class ShopListProductsIntegrationTest {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(context.login("20260007", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260006", "123456".toCharArray()).isSuccess());
 
             Response response = context.send(
                     ShopActions.LIST_PRODUCTS,

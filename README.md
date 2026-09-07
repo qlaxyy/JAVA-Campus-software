@@ -29,9 +29,12 @@ mvn clean verify
 java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar
 ```
 
-首次启动会自动创建 `database/vCampus.accdb`、用户表、医生申请/档案表和 8 个开发期账号。看到
-`Virtual Campus server started on port 8888.` 后保持终端运行。账号修改会保存在
-Access 中；token 会话仍保存在服务器内存，服务器重启后需要重新登录。
+首次启动会自动创建 `database/vCampus.accdb`、用户表、图书馆四张业务表、医生申请/档案表、
+8 个开发期账号和图书馆演示馆藏。看到 `Virtual Campus server started on port 8888.` 后保持终端运行。
+账号、书目、实体单册和借阅记录会保存在 Access 中；token 会话仍保存在服务器内存，服务器重启后需要重新登录。
+
+图书馆 V2 是首次正式接入 Access，不迁移早期开发数据库中的旧版图书表。若已有旧结构的 `.accdb`，
+请先备份，并通过服务器第二个参数改用新的数据库路径，或确认无需旧数据后重新创建开发库。
 
 终端 2：
 

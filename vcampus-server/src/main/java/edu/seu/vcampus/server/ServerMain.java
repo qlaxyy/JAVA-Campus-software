@@ -17,7 +17,7 @@ public final class ServerMain {
     }
 
     /**
-     * Starts the server using an Access-backed account repository.
+     * Starts the server using the shared Access-backed production repositories.
      *
      * @param args optional port and database path
      * @throws Exception when the server cannot start or is interrupted
@@ -31,7 +31,7 @@ public final class ServerMain {
 
         server.start();
         System.out.printf("Virtual Campus server started on port %d.%n", server.getPort());
-        System.out.printf("User accounts are stored in %s.%n",
+        System.out.printf("Persistent server data is stored in %s.%n",
                 databasePath.toAbsolutePath().normalize());
         server.awaitTermination();
     }

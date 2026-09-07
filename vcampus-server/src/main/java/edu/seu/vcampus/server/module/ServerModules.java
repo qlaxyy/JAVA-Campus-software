@@ -31,24 +31,27 @@ public final class ServerModules {
     public static ActionRouter createRouter() {
         return createRouter(
                 new InMemoryAuthenticationService(),
+                new LibraryServerModule(),
                 new HospitalServerModule());
     }
 
-    /** Builds the production router with accounts persisted in Access. */
+    /** Builds the production router with supported module data persisted in Access. */
     public static ActionRouter createPersistentRouter(Path databasePath) {
         return createRouter(
                 UserAuthenticationBootstrap.createAccessBacked(databasePath),
+                LibraryServerModule.createAccessBacked(databasePath),
                 HospitalServerModule.createAccessBacked(databasePath));
     }
 
     private static ActionRouter createRouter(
             InMemoryAuthenticationService authentication,
+            LibraryServerModule libraryModule,
             HospitalServerModule hospitalModule) {
         ActionRouter router = new ActionRouter();
         ServerContext context = new ServerContext(authentication, authentication);
         router.register(Actions.PING, request ->
                 Response.success(request, "Server is reachable.", "PONG"));
-        modules(authentication, hospitalModule)
+        modules(authentication, libraryModule, hospitalModule)
                 .forEach(module -> module.registerHandlers(router, context));
         return router;
     }
@@ -59,17 +62,19 @@ public final class ServerModules {
      * @return immutable six-module list
      */
     public static List<ServerModule> modules() {
-        return modules(new InMemoryAuthenticationService(), new HospitalServerModule());
+        return modules(new InMemoryAuthenticationService(),
+                new LibraryServerModule(), new HospitalServerModule());
     }
 
     private static List<ServerModule> modules(
             InMemoryAuthenticationService authentication,
+            LibraryServerModule libraryModule,
             HospitalServerModule hospitalModule) {
         return List.of(
                 new UserServerModule(authentication),
                 new StudentServerModule(),
                 new CourseServerModule(),
-                new LibraryServerModule(),
+                libraryModule,
                 new ShopServerModule(),
                 hospitalModule);
     }

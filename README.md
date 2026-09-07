@@ -40,7 +40,7 @@ token 会话仍保存在服务器内存，连续 30 分钟无操作或单次登�
 终端 2：
 
 ```powershell
-java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.vcampus.client.ClientMain
+java -jar vcampus-client\target\vcampus-client-0.1.0-SNAPSHOT.jar
 ```
 
 开发期测试账号：
@@ -74,7 +74,7 @@ java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.v
 java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar 8890
 
 # 客户端
-java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.vcampus.client.ClientMain 127.0.0.1 8890
+java -jar vcampus-client\target\vcampus-client-0.1.0-SNAPSHOT.jar 127.0.0.1 8890
 ```
 
 服务器还可接收第二个参数作为数据库路径，例如：
@@ -82,6 +82,29 @@ java -cp "vcampus-common\target\classes;vcampus-client\target\classes" edu.seu.v
 ```powershell
 java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar 8888 database\test.accdb
 ```
+
+### 使用 Radmin VPN 在多台电脑上联调
+
+服务器只在一台电脑上运行，Access 数据库也只放在服务器电脑上；其他电脑只运行客户端，不复制或打开 `vCampus.accdb`。Java 程序仍使用 TCP Socket，Radmin VPN 只负责让不同电脑组成可互通的虚拟局域网。
+
+1. 所有电脑安装 Radmin VPN。由服务器电脑创建一个网络，组员使用相同的网络名称和密码加入；Radmin VPN 中各电脑应显示“在线”。
+2. 记录服务器电脑在 Radmin VPN 中显示的虚拟 IPv4 地址。服务器启动后也会列出可用地址，并将 Radmin 网卡标为推荐。
+3. 在服务器电脑运行下方原有服务器命令，并在 Windows 防火墙提示时允许 Java 通信。无需修改服务器启动命令，也不要把 8888 端口映射到公网。
+4. 在客户端电脑切到与服务器一致的 Git 版本并完成构建，然后把下方示例 IP 换成服务器的 Radmin VPN 地址：
+
+```powershell
+java -jar vcampus-client\target\vcampus-client-0.1.0-SNAPSHOT.jar 26.12.34.56 8888
+```
+
+连接失败时，先在客户端电脑检查端口：
+
+```powershell
+Test-NetConnection 26.12.34.56 -Port 8888
+```
+
+看到 `TcpTestSucceeded : True` 才说明 Radmin VPN 链路和防火墙已经放行。若为 `False`，依次检查 Radmin 中双方是否在线、所填地址是否为服务器的 Radmin IPv4、服务器是否仍在运行，以及服务器防火墙是否允许 Java/8888 端口。不要填写客户端自己的 IP，也不要把数据库文件发给客户端。
+
+验收时至少同时打开两个客户端，分别完成登录、会话查询和一项业务操作；其中一个客户端退出后，另一个客户端应仍能正常操作。Radmin VPN 仅用于课程组可信成员之间的联调，本项目当前 Socket 协议没有 TLS，不应开放给不可信网络。
 
 ## 2. 以后获取最新正式成果
 

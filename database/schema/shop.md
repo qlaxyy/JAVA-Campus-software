@@ -63,6 +63,7 @@
 分类编号：1 文具、2 日常用品、3 食品。  
 上架：`SHOP.PUBLISH_PRODUCT` 需商店管理权，照片 1–9 张。
 校园卡演示：`20260001`、`20260006` 各 100.00 元。商店不再生成第二套卡号，一卡通号直接使用用户模块账号。
+分类：`SHOP.LIST_CATEGORIES` 已登录可查；`SHOP.ADD_CATEGORY` 需商店管理权，名称唯一，便于后续上架相机等新品。
 
 ## 6. Socket 动作（校园卡支付端口）
 
@@ -71,6 +72,8 @@
 - `SHOP.CREATE_ORDER`：仅 `CAMPUS_CARD`；余额不足返回 `SHOP_INSUFFICIENT_BALANCE`，文案「余额不足，请充值！」。
 - `SHOP.LIST_ORDERS` / `SHOP.CANCEL_ORDER`：我的订单与退款。
 - `SHOP.LIST_SALES`：商店管理员成交列表。
+- `SHOP.LIST_CATEGORIES`：查询商品分类。
+- `SHOP.ADD_CATEGORY`：商店管理员新增分类。
 
 ## 7. 待评审问题
 

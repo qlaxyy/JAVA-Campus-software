@@ -11,6 +11,8 @@ import edu.seu.vcampus.common.protocol.ModuleNames;
 public final class ShopActions {
 
     public static final String LIST_PRODUCTS = ActionNames.of(ModuleNames.SHOP, "LIST_PRODUCTS");
+    public static final String LIST_CATEGORIES = ActionNames.of(ModuleNames.SHOP, "LIST_CATEGORIES");
+    public static final String ADD_CATEGORY = ActionNames.of(ModuleNames.SHOP, "ADD_CATEGORY");
     public static final String PUBLISH_PRODUCT = ActionNames.of(ModuleNames.SHOP, "PUBLISH_PRODUCT");
     public static final String GET_CAMPUS_CARD = ActionNames.of(ModuleNames.SHOP, "GET_CAMPUS_CARD");
     public static final String RECHARGE_CAMPUS_CARD = ActionNames.of(ModuleNames.SHOP, "RECHARGE_CAMPUS_CARD");

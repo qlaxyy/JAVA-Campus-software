@@ -25,7 +25,7 @@ public final class PublishProductRequest implements Serializable {
      * Creates a publish request.
      *
      * @param name product title
-     * @param categoryId stationery, daily goods or food
+     * @param categoryId existing catalog category
      * @param description seller copy
      * @param priceFen unit price in fen
      * @param stockQty quantity to sell
@@ -39,8 +39,8 @@ public final class PublishProductRequest implements Serializable {
             int stockQty,
             List<byte[]> photos) {
         this.name = requireText(name, "name");
-        if (!ShopCategories.isSupported(categoryId)) {
-            throw new IllegalArgumentException("categoryId is not supported");
+        if (categoryId <= 0) {
+            throw new IllegalArgumentException("categoryId must be positive");
         }
         this.categoryId = categoryId;
         this.description = requireText(description, "description");

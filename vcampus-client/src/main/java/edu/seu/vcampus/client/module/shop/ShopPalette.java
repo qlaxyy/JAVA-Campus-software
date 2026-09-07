@@ -25,6 +25,8 @@ final class ShopPalette {
     static final Color LINE = new Color(215, 227, 224);
     static final Color TEXT = new Color(25, 50, 47);
     static final Color MUTED = new Color(91, 116, 111);
+    /** Xianyu-like price accent, distinct from name and photo. */
+    static final Color PRICE = new Color(255, 87, 34);
     static final Color HEADER_TEXT = Color.WHITE;
 
     private ShopPalette() {

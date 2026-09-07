@@ -2,10 +2,12 @@ package edu.seu.vcampus.client.module.shop;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.common.shop.ListCategoriesResponse;
 import edu.seu.vcampus.common.shop.ProductSummaryDto;
 import edu.seu.vcampus.common.shop.PublishProductRequest;
 import edu.seu.vcampus.common.shop.ShopActions;
 import edu.seu.vcampus.common.shop.ShopCategories;
+import edu.seu.vcampus.common.shop.ShopCategoryDto;
 
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -39,19 +41,13 @@ import java.util.List;
  */
 final class PublishProductDialog extends JDialog {
 
-    private static final CategoryChoice[] CATEGORIES = {
-            new CategoryChoice("文具", ShopCategories.STATIONERY),
-            new CategoryChoice("日常用品", ShopCategories.DAILY),
-            new CategoryChoice("食品", ShopCategories.FOOD)
-    };
-
     private final ClientContext context;
     private final Runnable onPublished;
     private final List<byte[]> photos = new ArrayList<>();
     private final JPanel photoStrip = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));
     private final JTextField titleField = new JTextField();
     private final JTextArea descriptionArea = new JTextArea(6, 28);
-    private final JComboBox<CategoryChoice> categoryBox = new JComboBox<>(CATEGORIES);
+    private final JComboBox<CategoryChoice> categoryBox = new JComboBox<>();
     private final JTextField priceField = new JTextField();
     private final JSpinner quantitySpinner = new JSpinner(new SpinnerNumberModel(1, 1, 9999, 1));
     private final JLabel statusLabel = new JLabel("至少 1 张照片，最多 9 张");
@@ -67,6 +63,8 @@ final class PublishProductDialog extends JDialog {
         add(buildFooter(), BorderLayout.SOUTH);
         setSize(520, 680);
         setLocationRelativeTo(owner);
+        fillSeedCategories();
+        loadCategories();
         refreshPhotoStrip();
     }
 
@@ -173,6 +171,40 @@ final class PublishProductDialog extends JDialog {
         photoStrip.revalidate();
         photoStrip.repaint();
         statusLabel.setText("已选 " + photos.size() + " 张照片，至少 1 张");
+    }
+
+    private void fillSeedCategories() {
+        categoryBox.removeAllItems();
+        for (ShopCategoryDto category : ShopCategories.seed()) {
+            categoryBox.addItem(new CategoryChoice(category.getName(), category.getCategoryId()));
+        }
+    }
+
+    private void loadCategories() {
+        new SwingWorker<Response, Void>() {
+            @Override
+            protected Response doInBackground() throws Exception {
+                return context.send(ShopActions.LIST_CATEGORIES, null);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    Response response = get();
+                    if (!response.isSuccess()
+                            || !(response.getData() instanceof ListCategoriesResponse payload)
+                            || payload.getCategories().isEmpty()) {
+                        return;
+                    }
+                    categoryBox.removeAllItems();
+                    for (ShopCategoryDto category : payload.getCategories()) {
+                        categoryBox.addItem(new CategoryChoice(category.getName(), category.getCategoryId()));
+                    }
+                } catch (Exception ignored) {
+                    fillSeedCategories();
+                }
+            }
+        }.execute();
     }
 
     private void publish() {

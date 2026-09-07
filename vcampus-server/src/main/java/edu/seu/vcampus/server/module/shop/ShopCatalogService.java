@@ -4,6 +4,8 @@ import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.ModuleNames;
 import edu.seu.vcampus.common.protocol.Request;
 import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.common.shop.AddCategoryRequest;
+import edu.seu.vcampus.common.shop.ListCategoriesResponse;
 import edu.seu.vcampus.common.shop.ListListingsResponse;
 import edu.seu.vcampus.common.shop.ListProductsRequest;
 import edu.seu.vcampus.common.shop.ListProductsResponse;
@@ -59,6 +61,69 @@ public final class ShopCatalogService {
     }
 
     /**
+     * Lists product categories for an authenticated user.
+     *
+     * @param request incoming request
+     * @param context shared session lookup
+     * @return category list or an authentication error
+     */
+    public Response listCategories(Request request, ServerContext context) {
+        Objects.requireNonNull(request, "request must not be null");
+        Objects.requireNonNull(context, "context must not be null");
+        if (context.sessions().findSession(request.getToken()).isEmpty()) {
+            return Response.failure(
+                    request.getRequestId(),
+                    ErrorCodes.AUTH_REQUIRED,
+                    "请先登录。");
+        }
+        return Response.success(
+                request,
+                "已返回商品分类。",
+                new ListCategoriesResponse(catalog.listCategories()));
+    }
+
+    /**
+     * Adds a product category for a shop administrator.
+     *
+     * @param request incoming request
+     * @param context shared session lookup
+     * @return created category or an error
+     */
+    public Response addCategory(Request request, ServerContext context) {
+        Objects.requireNonNull(request, "request must not be null");
+        Objects.requireNonNull(context, "context must not be null");
+        Optional<SessionInfo> session = context.sessions().findSession(request.getToken());
+        if (session.isEmpty()) {
+            return Response.failure(
+                    request.getRequestId(),
+                    ErrorCodes.AUTH_REQUIRED,
+                    "请先登录。");
+        }
+        if (!session.get().canAdminister(ModuleNames.SHOP)) {
+            return Response.failure(
+                    request.getRequestId(),
+                    ErrorCodes.AUTH_FORBIDDEN,
+                    "只有商店管理员可以添加分类。");
+        }
+        if (!(request.getData() instanceof AddCategoryRequest payload)) {
+            return Response.failure(
+                    request.getRequestId(),
+                    ErrorCodes.COMMON_INVALID_REQUEST,
+                    "请填写分类名称。");
+        }
+        try {
+            return Response.success(request, "分类已添加。", catalog.addCategory(payload.getName()));
+        } catch (ShopBusinessException exception) {
+            return Response.failure(request.getRequestId(), exception.code(), exception.getMessage());
+        } catch (IllegalArgumentException exception) {
+            return Response.failure(
+                    request.getRequestId(),
+                    ErrorCodes.COMMON_INVALID_REQUEST,
+                    "请填写 1 到 40 个字的分类名称。");
+        }
+    }
+
+    /**
      * Publishes a new on-sale product for a shop administrator.
      *
      * @param request incoming request
@@ -92,6 +157,8 @@ public final class ShopCatalogService {
                     request,
                     "商品已上架。",
                     catalog.publish(payload, session.get().getDisplayName()));
+        } catch (ShopBusinessException exception) {
+            return Response.failure(request.getRequestId(), exception.code(), exception.getMessage());
         } catch (IllegalArgumentException exception) {
             return Response.failure(
                     request.getRequestId(),

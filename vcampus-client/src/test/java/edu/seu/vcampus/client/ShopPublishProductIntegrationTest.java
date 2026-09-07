@@ -121,6 +121,46 @@ class ShopPublishProductIntegrationTest {
         }
     }
 
+    @Test
+    void shopAdminCanAddCategoryAndStudentCannot() throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext admin = new ClientContext(new CampusClient("127.0.0.1", server.getPort()));
+            assertTrue(admin.login("20260006", "123456".toCharArray()).isSuccess());
+            Response added = admin.send(
+                    ShopActions.ADD_CATEGORY,
+                    new edu.seu.vcampus.common.shop.AddCategoryRequest("相机"));
+            assertTrue(added.isSuccess());
+            edu.seu.vcampus.common.shop.ShopCategoryDto created = assertInstanceOf(
+                    edu.seu.vcampus.common.shop.ShopCategoryDto.class, added.getData());
+            assertEquals("相机", created.getName());
+
+            Response listed = admin.send(ShopActions.LIST_CATEGORIES, null);
+            edu.seu.vcampus.common.shop.ListCategoriesResponse payload = assertInstanceOf(
+                    edu.seu.vcampus.common.shop.ListCategoriesResponse.class, listed.getData());
+            assertTrue(payload.getCategories().stream().anyMatch(item -> "相机".equals(item.getName())));
+
+            Response published = admin.send(
+                    ShopActions.PUBLISH_PRODUCT,
+                    new PublishProductRequest(
+                            "二手数码相机",
+                            created.getCategoryId(),
+                            "快门正常，适合摄影社借用演示。",
+                            19900,
+                            1,
+                            List.of(samplePhoto())));
+            assertTrue(published.isSuccess());
+
+            ClientContext student = new ClientContext(new CampusClient("127.0.0.1", server.getPort()));
+            assertTrue(student.login("20260001", "123456".toCharArray()).isSuccess());
+            Response forbidden = student.send(
+                    ShopActions.ADD_CATEGORY,
+                    new edu.seu.vcampus.common.shop.AddCategoryRequest("耳机"));
+            assertFalse(forbidden.isSuccess());
+            assertEquals(ErrorCodes.AUTH_FORBIDDEN, forbidden.getCode());
+        }
+    }
+
     private static byte[] samplePhoto() throws Exception {
         BufferedImage image = new BufferedImage(80, 80, BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = image.createGraphics();

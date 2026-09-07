@@ -34,6 +34,8 @@ public final class ShopServerModule implements ServerModule {
     @Override
     public void registerHandlers(ActionRouter router, ServerContext context) {
         router.register(ShopActions.LIST_PRODUCTS, request -> catalogService.listProducts(request, context));
+        router.register(ShopActions.LIST_CATEGORIES, request -> catalogService.listCategories(request, context));
+        router.register(ShopActions.ADD_CATEGORY, request -> catalogService.addCategory(request, context));
         router.register(ShopActions.PUBLISH_PRODUCT, request -> catalogService.publishProduct(request, context));
         router.register(ShopActions.UPDATE_PRODUCT, request -> catalogService.updateProduct(request, context));
         router.register(ShopActions.LIST_LISTINGS, request -> catalogService.listListings(request, context));

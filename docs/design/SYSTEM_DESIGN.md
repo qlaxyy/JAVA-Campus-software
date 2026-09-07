@@ -87,18 +87,22 @@ sequenceDiagram
 
 `ServerContext` 是服务器启动时创建并传给各个 `ServerModule` 的公共服务容器，不是 Socket 网络接口，也不是让客户端调用的 API。
 
-子系统可以通过它获得只读会话查询能力：
+子系统可以通过它获得只读会话查询和基础用户目录查询能力：
 
 ```java
 Optional<SessionInfo> session = context.sessions()
         .findSession(request.getToken());
+
+Optional<UserIdentity> person = context.users()
+        .findByUserId(userId);
 ```
 
-由此获得 `userId`、`role` 和 `adminScopes`。子系统不能修改会话存储，也不能相信客户端传来的“我是管理员”等字段。
+会话查询用于确认当前操作者及其 `role`、`adminScopes`；用户目录查询任意已有账号时只返回 `userId`、一卡通号、姓名和启用状态。它不返回密码、角色、管理权限或其他子系统资料。子系统不能修改会话存储，也不能相信客户端传来的“我是管理员”等字段。
 
 | 公共能力 | 谁提供 | 谁使用 |
 |---|---|---|
 | `ServerContext` / `SessionLookup` | 总控公共框架 | 各服务器子系统 |
+| `ServerContext.users()` / `UserDirectory` | 用户模块 | 需要按 `userId` 或一卡通号确认基础身份的服务器子系统 |
 | token 创建、保存、失效 | 用户服务器模块 | 登录和退出流程 |
 | 使用 token 查询会话 | 公共会话服务 | 每个需要登录的 Action |
 
@@ -112,7 +116,9 @@ Optional<SessionInfo> session = context.sessions()
 
 `SUPER_ADMIN` 的全系统管理能力来自 `Role`，不受上述单个子系统限制。修改自己的密码时，客户端携带当前密码证明和新密码证明；服务器通过 token 确定被修改的账号，验证当前密码后保存新密码，并清除该账号的全部旧会话。
 
-模块内部再用 `SessionInfo.userId` 查询本模块数据。例如医院模式：
+登录服务器按一卡通号记录短期失败次数。同一账号在 10 分钟内连续失败 5 次后暂停登录 5 分钟；成功登录会清除该账号的失败记录。账号不存在、密码错误和暂时受限均返回相同的“账号或密码错误”响应，避免向客户端泄露一卡通号是否存在。该限制保存在服务器内存中，服务器重启后清空，不写入业务数据库。
+
+模块内部再用 `SessionInfo.userId` 查询本模块数据。没有登录会话但已知 `userId` 或一卡通号时，可先通过 `UserDirectory` 获得基础身份；科室、职称、学籍、借阅记录等仍必须到本模块的数据表查询。例如医院模式：
 
 | 模式 | 服务器判断 |
 |---|---|

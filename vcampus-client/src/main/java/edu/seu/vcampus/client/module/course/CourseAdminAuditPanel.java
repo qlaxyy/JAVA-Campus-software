@@ -450,6 +450,8 @@ final class CourseAdminAuditPanel
                 "修改课程";
             case "UPDATE_BATCH" ->
                 "修改选课批次";
+            case "UPDATE_GRADE" ->
+                "修改成绩";
             default ->
                 operationType;
         };

@@ -280,10 +280,12 @@ flowchart TD
     E --> F[Socket 发送到服务器]
     F --> G{data 是否为 LoginRequest}
     G -- 否 --> H[返回 COMMON_INVALID_REQUEST]
-    G -- 是 --> I[查询启用账号并校验 proof]
-    I --> J{验证是否成功}
-    J -- 否 --> K[返回 AUTH_INVALID_CREDENTIALS]
-    J -- 是 --> L[生成随机 token]
+    G -- 是 --> I{该一卡通号是否暂时受限}
+    I -- 是 --> K[返回 AUTH_INVALID_CREDENTIALS]
+    I -- 否 --> J[查询启用账号并校验 proof]
+    J --> Q{验证是否成功}
+    Q -- 否 --> R[累计失败次数] --> K
+    Q -- 是 --> S[清除失败记录] --> L[生成随机 token]
     L --> M[保存 token 到 SessionInfo 映射]
     M --> N[Response.data 返回 SessionInfo]
     N --> O[客户端保存 ClientSession]
@@ -301,6 +303,7 @@ sequenceDiagram
     participant CS as CampusServer
     participant UM as UserServerModule
     participant AS as AuthenticationService
+    participant AL as LoginAttemptLimiter
     participant UR as UserRepository
 
     User->>UI: 输入账号和密码
@@ -310,11 +313,23 @@ sequenceDiagram
     NC->>CS: Socket/ObjectOutputStream
     CS->>UM: ActionRouter.dispatch(request)
     UM->>AS: login(loginRequest)
-    AS->>UR: findByUsername(username)
-    UR-->>AS: UserAccount / empty
-    AS->>AS: 检查 enabled 和 passwordProof
-    AS->>AS: 生成 token，保存 SessionInfo
-    AS-->>UM: Optional<SessionInfo>
+    AS->>AL: isBlocked(username)
+    AL-->>AS: 是否暂停登录
+    alt 已暂停登录
+        AS-->>UM: Optional.empty
+    else 允许尝试
+        AS->>UR: findByUsername(username)
+        UR-->>AS: UserAccount / empty
+        AS->>AS: 检查 enabled 和 passwordProof
+        alt 验证失败
+            AS->>AL: recordFailure(username)
+            AS-->>UM: Optional.empty
+        else 验证成功
+            AS->>AL: recordSuccess(username)
+            AS->>AS: 生成 token，保存 SessionInfo
+            AS-->>UM: Optional<SessionInfo>
+        end
+    end
     UM-->>CS: Response
     CS-->>NC: ObjectInputStream
     NC-->>CC: Response
@@ -393,10 +408,21 @@ classDiagram
     class InMemoryAuthenticationService {
         -SecureRandom secureRandom
         -UserRepository users
+        -LoginAttemptLimiter loginAttempts
         -Map~String, SessionInfo~ sessions
         +login(LoginRequest request) Optional~SessionInfo~
         +logout(String token) boolean
         +findSession(String token) Optional~SessionInfo~
+    }
+
+    class LoginAttemptLimiter {
+        -int maximumFailures
+        -Duration failureWindow
+        -Duration lockDuration
+        -Map~String, FailureState~ failures
+        ~isBlocked(String username, Instant now) boolean
+        ~recordFailure(String username, Instant now) void
+        ~recordSuccess(String username) void
     }
 
     class UserRepository {
@@ -438,6 +464,7 @@ classDiagram
     CampusServer --> ActionRouter : 持有并分派
     UserServerModule ..> ActionRouter : 注册处理器
     UserServerModule --> InMemoryAuthenticationService : 持有
+    InMemoryAuthenticationService *-- LoginAttemptLimiter : 创建并管理
     InMemoryAuthenticationService --> UserRepository : 通过接口查询
     UserRepository <|.. InMemoryUserRepository : 实现
     UserRepository <|.. AccessUserRepository : 生产实现
@@ -787,7 +814,7 @@ flowchart LR
 
 ### 14.4 会话存储
 
-会话不写入 Access，而由用户服务器进程中的 `ConcurrentHashMap` 保存。每条记录包含创建时间和最后访问时间，空闲超时为 30 分钟，绝对有效期为 8 小时；每次成功查询会话会更新最后访问时间，但不会延长绝对有效期。其他服务器模块通过 `ServerContext.sessions()` 提供的只读 `SessionLookup` 查询 token；客户端不能调用 `ServerContext`，也不能直接读取服务器会话表。
+会话不写入 Access，而由用户服务器进程中的 `ConcurrentHashMap` 保存。每条记录包含创建时间和最后访问时间，空闲超时为 30 分钟，绝对有效期为 8 小时；每次成功查询会话会更新最后访问时间，但不会延长绝对有效期。其他服务器模块通过 `ServerContext.sessions()` 提供的只读 `SessionLookup` 查询 token；需要确认任意已有账号时，通过 `ServerContext.users()` 提供的 `UserDirectory` 按 `userId` 或一卡通号查询，只能得到 `userId`、一卡通号、姓名和启用状态。客户端不能调用 `ServerContext`，也不能直接读取服务器会话表或用户 DAO。
 
 如需跨进程共享或服务器重启后保持登录，应单独设计持久化方案，不能直接把完整 token 写入普通日志、数据库明文字段或审计表。
 

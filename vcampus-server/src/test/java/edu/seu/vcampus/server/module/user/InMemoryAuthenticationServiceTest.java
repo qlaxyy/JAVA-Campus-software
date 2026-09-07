@@ -48,11 +48,52 @@ class InMemoryAuthenticationServiceTest {
         assertFalse(authentication.findSession(session.getToken()).isPresent());
     }
 
+    @Test
+    void fiveFailuresTemporarilyBlockLoginAndSuccessfulLoginClearsFailures() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-09-07T00:00:00Z"));
+        InMemoryAuthenticationService authentication = new InMemoryAuthenticationService(
+                DemoUserAccounts.createRepository(), clock,
+                Duration.ofMinutes(30), Duration.ofHours(8));
+
+        for (int index = 0; index < 5; index++) {
+            assertFalse(loginWithPassword(authentication, "wrong-password").isPresent());
+        }
+        assertFalse(loginWithPassword(authentication, "123456").isPresent());
+
+        clock.advance(Duration.ofMinutes(5));
+        assertTrue(loginWithPassword(authentication, "123456").isPresent());
+
+        assertFalse(loginWithPassword(authentication, "wrong-password").isPresent());
+        assertTrue(loginWithPassword(authentication, "123456").isPresent());
+        assertTrue(loginWithPassword(authentication, "123456").isPresent());
+    }
+
+    @Test
+    void failuresOutsideTheWindowDoNotAccumulate() {
+        MutableClock clock = new MutableClock(Instant.parse("2026-09-07T00:00:00Z"));
+        InMemoryAuthenticationService authentication = new InMemoryAuthenticationService(
+                DemoUserAccounts.createRepository(), clock,
+                Duration.ofMinutes(30), Duration.ofHours(8));
+
+        for (int index = 0; index < 4; index++) {
+            assertFalse(loginWithPassword(authentication, "wrong-password").isPresent());
+        }
+        clock.advance(Duration.ofMinutes(10));
+        assertFalse(loginWithPassword(authentication, "wrong-password").isPresent());
+        assertTrue(loginWithPassword(authentication, "123456").isPresent());
+    }
+
     private static SessionInfo login(InMemoryAuthenticationService authentication) {
-        char[] password = "123456".toCharArray();
+        return loginWithPassword(authentication, "123456").orElseThrow();
+    }
+
+    private static java.util.Optional<SessionInfo> loginWithPassword(
+            InMemoryAuthenticationService authentication,
+            String passwordText) {
+        char[] password = passwordText.toCharArray();
         try {
             return authentication.login(new LoginRequest(
-                    "20260001", PasswordProof.create("20260001", password))).orElseThrow();
+                    "20260001", PasswordProof.create("20260001", password)));
         } finally {
             Arrays.fill(password, '\0');
         }

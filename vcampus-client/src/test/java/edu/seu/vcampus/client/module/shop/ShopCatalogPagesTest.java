@@ -50,13 +50,14 @@ class ShopCatalogPagesTest {
     }
 
     @Test
-    void autoGridUsesSquareCells() {
+    void autoGridUsesSquarePhotosPlusTextBands() {
         ShopCatalogGrid.Plan plan = ShopCatalogGrid.plan(900, 520, null);
 
         assertTrue(plan.columns() >= 2);
         assertTrue(plan.rows() >= 1);
         assertEquals(plan.columns() * plan.rows(), plan.pageSize());
         assertTrue(plan.cellSize() >= ShopCatalogGrid.MIN_CELL);
+        assertEquals(plan.cellSize() + ShopCatalogGrid.NAME_BAND + ShopCatalogGrid.PRICE_BAND, plan.cardHeight());
     }
 
     @Test

@@ -29,7 +29,7 @@ import java.util.Locale;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
-/** Customer storefront: square tiles, adjustable density, and a web-style pager. */
+/** Customer storefront: photo-name-price tiles, adjustable density, and a pager. */
 final class ProductCatalogPanel extends JPanel {
 
     private static final CategoryChoice[] CATEGORIES = {
@@ -263,7 +263,7 @@ final class ProductCatalogPanel extends JPanel {
         while (grid.getComponentCount() < plan.pageSize()) {
             JPanel empty = new JPanel();
             empty.setOpaque(false);
-            empty.setPreferredSize(new Dimension(plan.cellSize(), plan.cellSize()));
+            empty.setPreferredSize(new Dimension(plan.cellSize(), plan.cardHeight()));
             grid.add(empty);
         }
         rebuildPager();
@@ -272,7 +272,7 @@ final class ProductCatalogPanel extends JPanel {
             statusLabel.setText("没有符合条件的商品");
         } else {
             statusLabel.setText("共 " + catalog.size() + " 件 · 每页 " + plan.pageSize()
-                    + " 件正方形卡片 · 第 " + pageIndex + " / " + pages + " 页");
+                    + " 件商品卡片 · 第 " + pageIndex + " / " + pages + " 页");
         }
         canvas.revalidate();
         grid.revalidate();

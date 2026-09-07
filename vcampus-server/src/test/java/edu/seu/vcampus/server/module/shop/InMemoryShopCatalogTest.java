@@ -64,4 +64,15 @@ class InMemoryShopCatalogTest {
         catalog.incrementStock(8, 3);
         assertEquals(200, catalog.findById(8).orElseThrow().getStockQty());
     }
+
+    @Test
+    void updateChangesPriceAndWritesListing() {
+        InMemoryShopCatalog local = new InMemoryShopCatalog();
+        ProductSummaryDto updated = local.update(
+                8, "矿泉水 550ml", "冰柜常温都有。上课带走方便，瓶身轻。", 250, 10, "演示商店管理员");
+        assertEquals(250, updated.getPriceFen());
+        assertEquals(210, updated.getStockQty());
+        assertTrue(local.listListings().stream().anyMatch(row ->
+                row.getAction().equals("调整") && row.getProductId() == 8));
+    }
 }

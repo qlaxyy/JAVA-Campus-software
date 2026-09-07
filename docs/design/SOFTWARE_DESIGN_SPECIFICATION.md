@@ -802,7 +802,7 @@ flowchart LR
 
 ### 14.4 会话存储
 
-会话不写入 Access，而由用户服务器进程中的 `ConcurrentHashMap` 保存。每条记录包含创建时间和最后访问时间，空闲超时为 30 分钟，绝对有效期为 8 小时；每次成功查询会话会更新最后访问时间，但不会延长绝对有效期。其他服务器模块通过 `ServerContext.sessions()` 提供的只读 `SessionLookup` 查询 token；客户端不能调用 `ServerContext`，也不能直接读取服务器会话表。
+会话不写入 Access，而由用户服务器进程中的 `ConcurrentHashMap` 保存。每条记录包含创建时间和最后访问时间，空闲超时为 30 分钟，绝对有效期为 8 小时；每次成功查询会话会更新最后访问时间，但不会延长绝对有效期。其他服务器模块通过 `ServerContext.sessions()` 提供的只读 `SessionLookup` 查询 token；需要确认任意已有账号时，通过 `ServerContext.users()` 提供的 `UserDirectory` 按 `userId` 或一卡通号查询，只能得到 `userId`、一卡通号、姓名和启用状态。客户端不能调用 `ServerContext`，也不能直接读取服务器会话表或用户 DAO。
 
 如需跨进程共享或服务器重启后保持登录，应单独设计持久化方案，不能直接把完整 token 写入普通日志、数据库明文字段或审计表。
 

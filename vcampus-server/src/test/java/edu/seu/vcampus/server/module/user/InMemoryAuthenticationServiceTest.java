@@ -3,6 +3,7 @@ package edu.seu.vcampus.server.module.user;
 import edu.seu.vcampus.common.user.LoginRequest;
 import edu.seu.vcampus.common.user.PasswordProof;
 import edu.seu.vcampus.common.user.SessionInfo;
+import edu.seu.vcampus.server.security.UserIdentity;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -12,9 +13,26 @@ import java.time.ZoneId;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class InMemoryAuthenticationServiceTest {
+
+    @Test
+    void looksUpOnlyMinimalIdentityByUserIdOrCampusCardNumber() {
+        InMemoryAuthenticationService authentication = new InMemoryAuthenticationService();
+
+        UserIdentity byCard = authentication
+                .findByCampusCardNumber("20260001").orElseThrow();
+        UserIdentity byId = authentication.findByUserId(byCard.userId()).orElseThrow();
+
+        assertEquals(byCard, byId);
+        assertEquals("20260001", byId.campusCardNumber());
+        assertFalse(byId.displayName().isBlank());
+        assertTrue(byId.enabled());
+        assertTrue(authentication.findByUserId("missing-user").isEmpty());
+        assertTrue(authentication.findByCampusCardNumber("not-a-card").isEmpty());
+    }
 
     @Test
     void idleSessionExpiresButActiveSessionExtendsItsIdleDeadline() {

@@ -116,7 +116,7 @@ public final class HospitalServerModule implements ServerModule {
                     request,
                     "医生申请已提交，等待超级管理员审核。",
                     service.submitDoctorApplication(
-                            data, session.get().getUserId(), context.accounts()));
+                            data, session.get().getUserId(), context.users()));
         } catch (HospitalWorkflowException exception) {
             return workflowFailure(request, exception);
         } catch (IllegalArgumentException exception) {
@@ -161,7 +161,8 @@ public final class HospitalServerModule implements ServerModule {
                     request,
                     message,
                     service.reviewDoctorApplication(
-                            data, session.get().getUserId(), context.accounts()));
+                            data, session.get().getUserId(),
+                            context.users(), context.accounts()));
         } catch (HospitalWorkflowException exception) {
             return workflowFailure(request, exception);
         } catch (IllegalArgumentException exception) {

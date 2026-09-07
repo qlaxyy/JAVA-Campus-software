@@ -6,6 +6,8 @@ import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.security.SessionLookup;
 import edu.seu.vcampus.server.security.AccountProvisioning;
 import edu.seu.vcampus.server.security.ProvisionedAccount;
+import edu.seu.vcampus.server.security.UserDirectory;
+import edu.seu.vcampus.server.security.UserIdentity;
 import edu.seu.vcampus.common.user.PasswordProof;
 import edu.seu.vcampus.common.user.Role;
 
@@ -29,7 +31,7 @@ import java.util.concurrent.ConcurrentMap;
  * Authentication service with in-memory sessions and a pluggable account repository.
  */
 public final class InMemoryAuthenticationService
-        implements SessionLookup, AccountProvisioning {
+        implements SessionLookup, AccountProvisioning, UserDirectory {
 
     private static final int TOKEN_BYTES = 32;
     static final Duration DEFAULT_IDLE_TIMEOUT = Duration.ofMinutes(30);
@@ -180,6 +182,24 @@ public final class InMemoryAuthenticationService
     }
 
     @Override
+    public synchronized Optional<UserIdentity> findByUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return Optional.empty();
+        }
+        return users.findById(userId).map(InMemoryAuthenticationService::toIdentity);
+    }
+
+    @Override
+    public synchronized Optional<UserIdentity> findByCampusCardNumber(
+            String campusCardNumber) {
+        if (!CampusCardNumber.isValid(campusCardNumber)) {
+            return Optional.empty();
+        }
+        String normalized = CampusCardNumber.normalize(campusCardNumber);
+        return users.findByUsername(normalized).map(InMemoryAuthenticationService::toIdentity);
+    }
+
+    @Override
     public synchronized ProvisionedAccount createGeneratedRegularAccount(String displayName) {
         return toProvisioned(createGeneratedRegularAccount(displayName, Set.of()));
     }
@@ -239,6 +259,11 @@ public final class InMemoryAuthenticationService
 
     private static ProvisionedAccount toProvisioned(UserAccount account) {
         return new ProvisionedAccount(
+                account.userId(), account.username(), account.displayName(), account.enabled());
+    }
+
+    private static UserIdentity toIdentity(UserAccount account) {
+        return new UserIdentity(
                 account.userId(), account.username(), account.displayName(), account.enabled());
     }
 

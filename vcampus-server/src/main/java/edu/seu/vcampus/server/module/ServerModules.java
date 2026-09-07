@@ -71,6 +71,7 @@ public final class ServerModules {
         ServerContext context =
             new ServerContext(
                 authentication,
+                authentication,
                 authentication);
 
         router.register(
@@ -89,7 +90,6 @@ public final class ServerModules {
                 module.registerHandlers(
                     router,
                     context));
-
         return router;
     }
 

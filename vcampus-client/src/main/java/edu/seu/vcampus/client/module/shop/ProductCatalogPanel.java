@@ -2,10 +2,13 @@ package edu.seu.vcampus.client.module.shop;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.common.shop.ListCategoriesResponse;
 import edu.seu.vcampus.common.shop.ListProductsRequest;
 import edu.seu.vcampus.common.shop.ListProductsResponse;
 import edu.seu.vcampus.common.shop.ProductSummaryDto;
 import edu.seu.vcampus.common.shop.ShopActions;
+import edu.seu.vcampus.common.shop.ShopCategories;
+import edu.seu.vcampus.common.shop.ShopCategoryDto;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -32,12 +35,7 @@ import java.util.function.Consumer;
 /** Customer storefront: photo-name-price tiles, adjustable density, and a pager. */
 final class ProductCatalogPanel extends JPanel {
 
-    private static final CategoryChoice[] CATEGORIES = {
-            new CategoryChoice("全部分类", null),
-            new CategoryChoice("文具", 1L),
-            new CategoryChoice("日常用品", 2L),
-            new CategoryChoice("食品", 3L)
-    };
+    private static final CategoryChoice ALL_CATEGORIES = new CategoryChoice("全部分类", null);
 
     private static final DensityChoice[] DENSITIES = {
             new DensityChoice("每页自适应", null),
@@ -51,7 +49,7 @@ final class ProductCatalogPanel extends JPanel {
     private final Consumer<ProductSummaryDto> onWant;
     private final Consumer<ProductSummaryDto> onAddToCart;
     private final JTextField keywordField = new JTextField(16);
-    private final JComboBox<CategoryChoice> categoryBox = new JComboBox<>(CATEGORIES);
+    private final JComboBox<CategoryChoice> categoryBox = new JComboBox<>();
     private final JComboBox<DensityChoice> densityBox = new JComboBox<>(DENSITIES);
     private final JButton searchButton = ShopPalette.accentButton("搜索");
     private final JLabel statusLabel = new JLabel("登录后可浏览上架商品");
@@ -65,6 +63,7 @@ final class ProductCatalogPanel extends JPanel {
     private int renderedPage = -1;
     private List<ProductSummaryDto> renderedCatalog = List.of();
     private int queryGeneration;
+    private boolean replacingCategories;
 
     ProductCatalogPanel(
             ClientContext context,
@@ -85,7 +84,11 @@ final class ProductCatalogPanel extends JPanel {
         add(createFooter(), BorderLayout.SOUTH);
         keywordField.addActionListener(event -> query(true));
         searchButton.addActionListener(event -> query(true));
-        categoryBox.addActionListener(event -> query(true));
+        categoryBox.addActionListener(event -> {
+            if (!replacingCategories) {
+                query(true);
+            }
+        });
         densityBox.addActionListener(event -> {
             pageIndex = 1;
             renderPage();
@@ -98,14 +101,65 @@ final class ProductCatalogPanel extends JPanel {
         });
         addHierarchyListener(event -> {
             if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && isShowing()) {
+                loadCategories();
                 query(false);
             }
         });
+        fillSeedCategories();
         query(true);
+        loadCategories();
     }
 
     void reload() {
+        loadCategories();
         query(false);
+    }
+
+    private void fillSeedCategories() {
+        replacingCategories = true;
+        categoryBox.removeAllItems();
+        categoryBox.addItem(ALL_CATEGORIES);
+        for (ShopCategoryDto category : ShopCategories.seed()) {
+            categoryBox.addItem(new CategoryChoice(category.getName(), category.getCategoryId()));
+        }
+        replacingCategories = false;
+    }
+
+    private void loadCategories() {
+        new SwingWorker<Response, Void>() {
+            @Override
+            protected Response doInBackground() throws Exception {
+                return context.send(ShopActions.LIST_CATEGORIES, null);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    Response response = get();
+                    if (!response.isSuccess()
+                            || !(response.getData() instanceof ListCategoriesResponse payload)
+                            || payload.getCategories().isEmpty()) {
+                        return;
+                    }
+                    Long selected = selectedCategoryId();
+                    replacingCategories = true;
+                    categoryBox.removeAllItems();
+                    categoryBox.addItem(ALL_CATEGORIES);
+                    CategoryChoice restore = ALL_CATEGORIES;
+                    for (ShopCategoryDto category : payload.getCategories()) {
+                        CategoryChoice choice = new CategoryChoice(category.getName(), category.getCategoryId());
+                        categoryBox.addItem(choice);
+                        if (selected != null && selected == category.getCategoryId()) {
+                            restore = choice;
+                        }
+                    }
+                    categoryBox.setSelectedItem(restore);
+                    replacingCategories = false;
+                } catch (Exception ignored) {
+                    replacingCategories = false;
+                }
+            }
+        }.execute();
     }
 
     private JPanel createSearchBar() {

@@ -5,6 +5,7 @@ import edu.seu.vcampus.common.shop.ListProductsRequest;
 import edu.seu.vcampus.common.shop.ProductSaleStatus;
 import edu.seu.vcampus.common.shop.ProductSummaryDto;
 import edu.seu.vcampus.common.shop.PublishProductRequest;
+import edu.seu.vcampus.common.shop.ShopCategoryDto;
 import edu.seu.vcampus.common.shop.ShopListingRecordDto;
 import edu.seu.vcampus.common.shop.ShopCategories;
 
@@ -25,8 +26,10 @@ public final class InMemoryShopCatalog {
 
     private final List<ProductSummaryDto> products = new ArrayList<>(seed());
     private final List<ShopListingRecordDto> listings = new ArrayList<>();
+    private final List<ShopCategoryDto> categories = new ArrayList<>(ShopCategories.seed());
     private long nextId = 11L;
     private long nextListingId = 1L;
+    private long nextCategoryId = 4L;
 
     public InMemoryShopCatalog() {
         for (ProductSummaryDto product : products) {
@@ -84,7 +87,7 @@ public final class InMemoryShopCatalog {
         ProductSummaryDto product = new ProductSummaryDto(
                 nextId++,
                 request.getCategoryId(),
-                ShopCategories.nameOf(request.getCategoryId()),
+                requireCategoryName(request.getCategoryId()),
                 request.getName(),
                 request.getDescription(),
                 sellerName,
@@ -165,6 +168,33 @@ public final class InMemoryShopCatalog {
     }
 
     /**
+     * Lists active product categories in catalog order.
+     *
+     * @return seed categories plus any admin-created rows
+     */
+    public synchronized List<ShopCategoryDto> listCategories() {
+        return List.copyOf(categories);
+    }
+
+    /**
+     * Adds a unique product category.
+     *
+     * @param name display name
+     * @return stored category
+     */
+    public synchronized ShopCategoryDto addCategory(String name) {
+        ShopCategoryDto created = new ShopCategoryDto(nextCategoryId, name);
+        for (ShopCategoryDto existing : categories) {
+            if (existing.getName().equalsIgnoreCase(created.getName())) {
+                throw new ShopBusinessException(ErrorCodes.SHOP_CATEGORY_EXISTS, "该分类已存在。");
+            }
+        }
+        nextCategoryId++;
+        categories.add(created);
+        return created;
+    }
+
+    /**
      * Finds a catalog row by id.
      *
      * @param productId catalog key
@@ -223,6 +253,15 @@ public final class InMemoryShopCatalog {
             products.set(index, product.withStockQty(product.getStockQty() + quantity));
             return;
         }
+    }
+
+    private String requireCategoryName(long categoryId) {
+        for (ShopCategoryDto category : categories) {
+            if (category.getCategoryId() == categoryId) {
+                return category.getName();
+            }
+        }
+        throw new ShopBusinessException(ErrorCodes.SHOP_CATEGORY_NOT_FOUND, "分类不存在。");
     }
 
     private static boolean matchesKeyword(ProductSummaryDto product, String needle) {

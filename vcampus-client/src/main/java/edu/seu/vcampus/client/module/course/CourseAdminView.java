@@ -176,17 +176,13 @@ final class CourseAdminView extends JPanel {
 
         tabs.addTab(
             "成绩管理",
-            createPlaceholder(
-                "成绩管理",
-                canEditGrades
-                    ? "查询、录入和修改学生成绩。"
-                    : "查询学生成绩。当前账号没有成绩修改权限。"));
+            new CourseAdminGradePanel(
+                context));
 
         tabs.addTab(
             "数据统计",
-            createPlaceholder(
-                "数据统计",
-                "查看教学班人数、剩余容量和选退课统计。"));
+            new CourseAdminStatisticsPanel(
+                context));
 
         return tabs;
     }

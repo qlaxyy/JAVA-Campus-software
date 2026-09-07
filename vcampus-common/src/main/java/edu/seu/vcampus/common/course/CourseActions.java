@@ -44,7 +44,21 @@ public final class CourseActions {
         ActionNames.of(
             ModuleNames.COURSE,
             "LIST_GENERAL_COURSES");
-
+    /** 教务查询指定学生的成绩。 */
+    public static final String ADMIN_LIST_GRADES =
+        ActionNames.of(
+            ModuleNames.COURSE,
+            "ADMIN_LIST_GRADES");
+    /** 教务查询指定批次的选课统计。 */
+    public static final String ADMIN_GET_STATISTICS =
+        ActionNames.of(
+            ModuleNames.COURSE,
+            "ADMIN_GET_STATISTICS");
+    /** 超级管理员修改学生成绩。 */
+    public static final String ADMIN_UPDATE_GRADE =
+        ActionNames.of(
+            ModuleNames.COURSE,
+            "ADMIN_UPDATE_GRADE");
     /** 教务修改选课批次。 */
     public static final String ADMIN_UPDATE_BATCH =
         ActionNames.of(

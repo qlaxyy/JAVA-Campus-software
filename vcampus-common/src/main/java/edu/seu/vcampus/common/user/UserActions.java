@@ -31,6 +31,12 @@ public final class UserActions {
             ActionNames.of(ModuleNames.USER, "ADMIN_RESET_PASSWORD");
     public static final String ADMIN_LIST_AUDIT_LOGS =
             ActionNames.of(ModuleNames.USER, "ADMIN_LIST_AUDIT_LOGS");
+    public static final String CURRENT_TEACHER_PROFILE =
+            ActionNames.of(ModuleNames.USER, "CURRENT_TEACHER_PROFILE");
+    public static final String ADMIN_LIST_TEACHERS =
+            ActionNames.of(ModuleNames.USER, "ADMIN_LIST_TEACHERS");
+    public static final String ADMIN_SAVE_TEACHER_PROFILE =
+            ActionNames.of(ModuleNames.USER, "ADMIN_SAVE_TEACHER_PROFILE");
 
     private UserActions() {
     }

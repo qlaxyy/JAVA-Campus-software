@@ -3,7 +3,6 @@ package edu.seu.vcampus.server.module.course;
 import edu.seu.vcampus.common.course.CourseInfo;
 import edu.seu.vcampus.common.course.OfferingInfo;
 import edu.seu.vcampus.common.course.TeacherStudentInfo;
-import edu.seu.vcampus.common.course.TemporaryCourseTeacherDirectory;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -37,26 +36,15 @@ final class CourseTeacherService {
     }
 
     /**
-     * 判断账号是否为临时教师。
-     */
-    boolean isTeacher(
-        String username) {
-
-        return TemporaryCourseTeacherDirectory
-            .isTeacher(
-                username);
-    }
-
-    /**
      * 判断教师是否负责指定教学班。
      */
     boolean canManageOffering(
-        String username,
+        String userId,
         long offeringId) {
 
-        return TemporaryCourseTeacherDirectory
+        return TemporaryCourseTeacherAssignmentDirectory
             .isAssignedToOffering(
-                username,
+                userId,
                 offeringId);
     }
 
@@ -64,14 +52,8 @@ final class CourseTeacherService {
      * 查询教师在指定批次负责的课程。
      */
     List<CourseInfo> listTeacherCourses(
-        String username,
+        String userId,
         long batchId) {
-
-        if (!isTeacher(
-            username)) {
-
-            return List.of();
-        }
 
         List<CourseInfo> result =
             new ArrayList<>();
@@ -87,7 +69,7 @@ final class CourseTeacherService {
                     .stream()
                     .filter(offering ->
                         canManageOffering(
-                            username,
+                            userId,
                             offering
                                 .getOfferingId()))
                     .toList();
@@ -116,12 +98,12 @@ final class CourseTeacherService {
      * 查询教师负责教学班中的学生名单。
      */
     List<TeacherStudentInfo> listStudents(
-        String username,
+        String userId,
         long batchId,
         long offeringId) {
 
         if (!canManageOffering(
-            username,
+            userId,
             offeringId)) {
 
             return List.of();
@@ -150,15 +132,9 @@ final class CourseTeacherService {
      * 判断选课记录是否属于该教师负责的教学班。
      */
     boolean canManageEnrollment(
-        String username,
+        String userId,
         String studentId,
         long enrollmentId) {
-
-        if (!isTeacher(
-            username)) {
-
-            return false;
-        }
 
         if (studentId == null
             || studentId.isBlank()
@@ -185,7 +161,7 @@ final class CourseTeacherService {
         }
 
         return canManageOffering(
-            username,
+            userId,
             record.offeringId());
     }
 

@@ -17,6 +17,7 @@ import edu.seu.vcampus.common.user.UserActions;
 import edu.seu.vcampus.common.user.UserAccountView;
 import edu.seu.vcampus.common.user.UserAuditLogEntry;
 import edu.seu.vcampus.common.user.UserAuditLogResponse;
+import edu.seu.vcampus.common.user.SaveTeacherProfileRequest;
 import edu.seu.vcampus.server.infrastructure.ActionRouter;
 import edu.seu.vcampus.server.module.ServerModule;
 import edu.seu.vcampus.server.module.ServerContext;
@@ -69,6 +70,9 @@ public final class UserServerModule implements ServerModule {
         router.register(UserActions.ADMIN_UPDATE_STATUS, this::updateStatus);
         router.register(UserActions.ADMIN_RESET_PASSWORD, this::resetPassword);
         router.register(UserActions.ADMIN_LIST_AUDIT_LOGS, this::listAuditLogs);
+        router.register(UserActions.CURRENT_TEACHER_PROFILE, this::currentTeacherProfile);
+        router.register(UserActions.ADMIN_LIST_TEACHERS, this::listTeachers);
+        router.register(UserActions.ADMIN_SAVE_TEACHER_PROFILE, this::saveTeacherProfile);
     }
 
     private Response login(Request request) {
@@ -232,6 +236,50 @@ public final class UserServerModule implements ServerModule {
                 request,
                 "操作记录加载成功。",
                 () -> new UserAuditLogResponse(auditLogs.findAll()));
+    }
+
+    private Response currentTeacherProfile(Request request) {
+        Optional<SessionInfo> session = authentication.findSession(request.getToken());
+        if (session.isEmpty()) {
+            return authenticationRequired(request);
+        }
+        return authentication.teachers().profileView(session.get().getUserId())
+                .filter(edu.seu.vcampus.common.user.TeacherProfileView::isActive)
+                .map(profile -> Response.success(
+                        request, "教师信息加载成功。", profile))
+                .orElseGet(() -> Response.failure(
+                        request.getRequestId(),
+                        ErrorCodes.AUTH_FORBIDDEN,
+                        "当前账号没有教师资格。"));
+    }
+
+    private Response listTeachers(Request request) {
+        Response denied = administrationFailure(request);
+        if (denied != null) {
+            return denied;
+        }
+        return executeAdministration(
+                request, "教师名单加载成功。", authentication.teachers()::listProfiles);
+    }
+
+    private Response saveTeacherProfile(Request request) {
+        if (!(request.getData() instanceof SaveTeacherProfileRequest data)) {
+            return Response.failure(
+                    request.getRequestId(),
+                    ErrorCodes.COMMON_INVALID_REQUEST,
+                    "教师档案请求数据无效。");
+        }
+        Response denied = administrationFailure(request);
+        if (denied != null) {
+            return denied;
+        }
+        SessionInfo actor = authentication.findSession(request.getToken()).orElseThrow();
+        return executeAuditedAdministration(
+                request,
+                data.isActive() ? "教师档案已保存。" : "教师资格已停用。",
+                UserActions.ADMIN_SAVE_TEACHER_PROFILE,
+                accountTarget(data.getUserId()),
+                () -> authentication.teachers().saveProfile(data, actor.getUserId()));
     }
 
     private Response executeAuditedAdministration(

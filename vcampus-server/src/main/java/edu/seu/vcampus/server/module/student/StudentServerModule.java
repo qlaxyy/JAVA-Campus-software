@@ -64,7 +64,9 @@ public final class StudentServerModule implements ServerModule {
             System.out.println("[学籍服务] 收到查询请求 -> 登录用户: [" + rawUserId + " -> " + cleanUserId + "], 目标学号: [" + targetStudentId + " -> " + cleanTargetId + "]");
 
             boolean isAdmin = cleanUserId.contains("admin");
-            boolean isTeacher = cleanUserId.contains("teacher");
+            boolean isTeacher = context.teachers()
+                    .findByUserId(session.getUserId())
+                    .isPresent();
             boolean isStudent = !isAdmin && !isTeacher;
 
             // 权限控制：
@@ -117,7 +119,9 @@ public final class StudentServerModule implements ServerModule {
             System.out.println("[学籍服务] 收到更新请求 -> 登录用户: [" + rawUserId + " -> " + cleanUserId + "], 目标学号: [" + targetStudentId + " -> " + cleanTargetId + "]");
 
             boolean isAdmin = cleanUserId.contains("admin");
-            boolean isTeacher = cleanUserId.contains("teacher");
+            boolean isTeacher = context.teachers()
+                    .findByUserId(session.getUserId())
+                    .isPresent();
 
             // 教师账号只读
             if (isTeacher) {
@@ -206,7 +210,9 @@ public final class StudentServerModule implements ServerModule {
             var session = sessionOpt.get();
             String cleanUserId = normalizeId(session.getUserId());
             boolean isAdmin = cleanUserId.contains("admin");
-            boolean isTeacher = cleanUserId.contains("teacher");
+            boolean isTeacher = context.teachers()
+                    .findByUserId(session.getUserId())
+                    .isPresent();
 
             String studentId = request.getData() instanceof String s ? s : null;
 

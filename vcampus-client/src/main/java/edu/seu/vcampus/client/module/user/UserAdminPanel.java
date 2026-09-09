@@ -14,6 +14,9 @@ import edu.seu.vcampus.common.user.UserActions;
 import edu.seu.vcampus.common.user.UserAccountView;
 import edu.seu.vcampus.common.user.UserAuditLogEntry;
 import edu.seu.vcampus.common.user.UserAuditLogResponse;
+import edu.seu.vcampus.common.user.SaveTeacherProfileRequest;
+import edu.seu.vcampus.common.user.TeacherProfileListResponse;
+import edu.seu.vcampus.common.user.TeacherProfileView;
 import edu.seu.vcampus.common.hospital.DoctorApplicationListResponse;
 import edu.seu.vcampus.common.hospital.DoctorApplicationStatus;
 import edu.seu.vcampus.common.hospital.DoctorApplicationType;
@@ -32,6 +35,8 @@ import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingWorker;
 import javax.swing.SwingUtilities;
+import javax.swing.JCheckBox;
+import javax.swing.JTextField;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
@@ -62,6 +67,8 @@ public final class UserAdminPanel extends JPanel {
     private final JButton refreshButton = new JButton("刷新");
     private final JButton doctorReviewButton = new JButton("医生申请审核");
     private final JButton auditButton = new JButton("操作记录");
+    private final JButton teacherProfileButton = new JButton("教师档案");
+    private final JButton teacherListButton = new JButton("教师名单");
     private boolean loaded;
 
     public UserAdminPanel(ClientContext context) {
@@ -79,6 +86,8 @@ public final class UserAdminPanel extends JPanel {
         actions.add(editButton);
         actions.add(statusButton);
         actions.add(resetButton);
+        actions.add(teacherProfileButton);
+        actions.add(teacherListButton);
         actions.add(doctorReviewButton);
         actions.add(auditButton);
         actions.add(refreshButton);
@@ -94,6 +103,8 @@ public final class UserAdminPanel extends JPanel {
         editButton.addActionListener(event -> editAccount());
         statusButton.addActionListener(event -> changeStatus());
         resetButton.addActionListener(event -> resetPassword());
+        teacherProfileButton.addActionListener(event -> editTeacherProfile());
+        teacherListButton.addActionListener(event -> loadTeacherProfiles());
         doctorReviewButton.addActionListener(event -> loadDoctorApplications());
         auditButton.addActionListener(event -> loadAuditLogs());
         refreshButton.addActionListener(event -> refreshAccounts());
@@ -119,6 +130,7 @@ public final class UserAdminPanel extends JPanel {
         editButton.setEnabled(selected);
         statusButton.setEnabled(selected);
         resetButton.setEnabled(selected);
+        teacherProfileButton.setEnabled(selected);
     }
 
     private void refreshAccounts() {
@@ -285,6 +297,114 @@ public final class UserAdminPanel extends JPanel {
                 });
     }
 
+    private void editTeacherProfile() {
+        UserAccountView selected = selectedAccount();
+        if (selected == null) {
+            return;
+        }
+        runRequest(
+                "正在加载教师档案……",
+                () -> context.send(UserActions.ADMIN_LIST_TEACHERS, null),
+                response -> {
+                    if (!response.isSuccess()
+                            || !(response.getData() instanceof TeacherProfileListResponse data)) {
+                        showFailure(response);
+                        return;
+                    }
+                    TeacherProfileView existing = data.getTeachers().stream()
+                            .filter(profile -> profile.getUserId().equals(selected.getUserId()))
+                            .findFirst()
+                            .orElse(null);
+                    SwingUtilities.invokeLater(() -> showTeacherProfileDialog(selected, existing));
+                });
+    }
+
+    private void showTeacherProfileDialog(
+            UserAccountView account,
+            TeacherProfileView existing) {
+        JTextField department = new JTextField(
+                existing == null ? "" : existing.getDepartment(), 24);
+        JTextField title = new JTextField(
+                existing == null ? "" : existing.getTitle(), 24);
+        JCheckBox active = new JCheckBox(
+                "教师资格有效", existing == null || existing.isActive());
+        JPanel form = new JPanel(new java.awt.GridLayout(0, 1, 4, 4));
+        form.add(new JLabel("一卡通号：" + account.getUsername()));
+        form.add(new JLabel("姓名：" + account.getDisplayName()));
+        form.add(new JLabel("院系"));
+        form.add(department);
+        form.add(new JLabel("职称"));
+        form.add(title);
+        form.add(active);
+        int result = JOptionPane.showConfirmDialog(
+                this,
+                form,
+                existing == null ? "新增教师档案" : "编辑教师档案",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) {
+            return;
+        }
+        try {
+            SaveTeacherProfileRequest request = new SaveTeacherProfileRequest(
+                    account.getUserId(), department.getText(), title.getText(), active.isSelected());
+            runRequest(
+                    "正在保存教师档案……",
+                    () -> context.send(UserActions.ADMIN_SAVE_TEACHER_PROFILE, request),
+                    response -> {
+                        if (response.isSuccess()) {
+                            statusLabel.setText(response.getMessage());
+                        } else {
+                            showFailure(response);
+                        }
+                    });
+        } catch (IllegalArgumentException exception) {
+            showValidationError("院系和职称不能为空。 ");
+        }
+    }
+
+    private void loadTeacherProfiles() {
+        runRequest(
+                "正在加载教师名单……",
+                () -> context.send(UserActions.ADMIN_LIST_TEACHERS, null),
+                response -> {
+                    if (response.isSuccess()
+                            && response.getData() instanceof TeacherProfileListResponse data) {
+                        showTeacherProfiles(data.getTeachers());
+                        statusLabel.setText("已加载 " + data.getTeachers().size() + " 条教师档案");
+                    } else {
+                        showFailure(response);
+                    }
+                });
+    }
+
+    private void showTeacherProfiles(List<TeacherProfileView> teachers) {
+        String[] columns = {"一卡通号", "姓名", "院系", "职称", "教师资格"};
+        Object[][] rows = new Object[teachers.size()][columns.length];
+        for (int index = 0; index < teachers.size(); index++) {
+            TeacherProfileView teacher = teachers.get(index);
+            rows[index] = new Object[]{
+                    teacher.getCampusCardNumber(),
+                    teacher.getDisplayName(),
+                    teacher.getDepartment(),
+                    teacher.getTitle(),
+                    teacher.isActive() ? "有效" : "已停用"
+            };
+        }
+        DefaultTableModel model = new DefaultTableModel(rows, columns) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        JTable teacherTable = new JTable(model);
+        teacherTable.setAutoCreateRowSorter(true);
+        JScrollPane scrollPane = new JScrollPane(teacherTable);
+        scrollPane.setPreferredSize(new java.awt.Dimension(820, 360));
+        JOptionPane.showMessageDialog(
+                this, scrollPane, "公共教师名单", JOptionPane.PLAIN_MESSAGE);
+    }
+
     private void loadAuditLogs() {
         runRequest(
                 "正在加载操作记录……",
@@ -350,6 +470,9 @@ public final class UserAdminPanel extends JPanel {
         }
         if (UserActions.ADMIN_RESET_PASSWORD.equals(actionCode)) {
             return "重置密码";
+        }
+        if (UserActions.ADMIN_SAVE_TEACHER_PROFILE.equals(actionCode)) {
+            return "维护教师档案";
         }
         return actionCode;
     }
@@ -484,6 +607,8 @@ public final class UserAdminPanel extends JPanel {
         editButton.setEnabled(enabled);
         statusButton.setEnabled(enabled);
         resetButton.setEnabled(enabled);
+        teacherProfileButton.setEnabled(enabled);
+        teacherListButton.setEnabled(enabled);
         doctorReviewButton.setEnabled(enabled);
         auditButton.setEnabled(enabled);
     }

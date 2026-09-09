@@ -8,6 +8,9 @@ import edu.seu.vcampus.common.user.Role;
 import edu.seu.vcampus.common.user.AdminScope;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.common.user.UserActions;
+import edu.seu.vcampus.common.user.SaveTeacherProfileRequest;
+import edu.seu.vcampus.common.user.TeacherProfileListResponse;
+import edu.seu.vcampus.common.user.TeacherProfileView;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
 import org.junit.jupiter.api.Test;
 
@@ -75,6 +78,51 @@ class AuthenticationIntegrationTest {
             assertEquals("演示教师", session.getDisplayName());
             assertEquals(Role.USER, session.getRole());
             assertTrue(session.getAdminScopes().isEmpty());
+
+            Response profileResponse = context.send(
+                    UserActions.CURRENT_TEACHER_PROFILE, null);
+            assertTrue(profileResponse.isSuccess());
+            TeacherProfileView profile = assertInstanceOf(
+                    TeacherProfileView.class, profileResponse.getData());
+            assertEquals("计算机科学与工程学院", profile.getDepartment());
+            assertEquals("讲师", profile.getTitle());
+        }
+    }
+
+    @Test
+    void superAdministratorCanCreateAndDisableTeacherQualification() throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext administrator = new ClientContext(
+                    new CampusClient("127.0.0.1", server.getPort()));
+            ClientContext student = new ClientContext(
+                    new CampusClient("127.0.0.1", server.getPort()));
+            assertTrue(administrator.login(
+                    "20260000", "123456".toCharArray()).isSuccess());
+            assertTrue(student.login("20260001", "123456".toCharArray()).isSuccess());
+
+            Response created = administrator.send(
+                    UserActions.ADMIN_SAVE_TEACHER_PROFILE,
+                    new SaveTeacherProfileRequest(
+                            "U-STUDENT-001", "电子科学与工程学院", "实验师", true));
+            assertTrue(created.isSuccess());
+            assertTrue(student.send(UserActions.CURRENT_TEACHER_PROFILE, null).isSuccess());
+
+            Response list = administrator.send(UserActions.ADMIN_LIST_TEACHERS, null);
+            TeacherProfileListResponse profiles = assertInstanceOf(
+                    TeacherProfileListResponse.class, list.getData());
+            assertEquals(2, profiles.getTeachers().size());
+
+            Response disabled = administrator.send(
+                    UserActions.ADMIN_SAVE_TEACHER_PROFILE,
+                    new SaveTeacherProfileRequest(
+                            "U-STUDENT-001", "电子科学与工程学院", "实验师", false));
+            assertTrue(disabled.isSuccess());
+            Response noLongerTeacher = student.send(
+                    UserActions.CURRENT_TEACHER_PROFILE, null);
+            assertFalse(noLongerTeacher.isSuccess());
+            assertEquals(ErrorCodes.AUTH_FORBIDDEN, noLongerTeacher.getCode());
+            assertTrue(student.send(UserActions.CURRENT_SESSION, null).isSuccess());
         }
     }
 

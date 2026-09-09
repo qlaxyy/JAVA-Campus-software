@@ -18,6 +18,7 @@ import edu.seu.vcampus.common.user.UserAccountView;
 import edu.seu.vcampus.common.user.UserAuditLogEntry;
 import edu.seu.vcampus.common.user.UserAuditLogResponse;
 import edu.seu.vcampus.common.user.SaveTeacherProfileRequest;
+import edu.seu.vcampus.common.user.BatchSaveTeacherProfilesRequest;
 import edu.seu.vcampus.server.infrastructure.ActionRouter;
 import edu.seu.vcampus.server.module.ServerModule;
 import edu.seu.vcampus.server.module.ServerContext;
@@ -73,6 +74,7 @@ public final class UserServerModule implements ServerModule {
         router.register(UserActions.CURRENT_TEACHER_PROFILE, this::currentTeacherProfile);
         router.register(UserActions.ADMIN_LIST_TEACHERS, this::listTeachers);
         router.register(UserActions.ADMIN_SAVE_TEACHER_PROFILE, this::saveTeacherProfile);
+        router.register(UserActions.ADMIN_BATCH_SAVE_TEACHERS, this::saveTeacherProfiles);
     }
 
     private Response login(Request request) {
@@ -280,6 +282,26 @@ public final class UserServerModule implements ServerModule {
                 UserActions.ADMIN_SAVE_TEACHER_PROFILE,
                 accountTarget(data.getUserId()),
                 () -> authentication.teachers().saveProfile(data, actor.getUserId()));
+    }
+
+    private Response saveTeacherProfiles(Request request) {
+        if (!(request.getData() instanceof BatchSaveTeacherProfilesRequest data)) {
+            return Response.failure(
+                    request.getRequestId(),
+                    ErrorCodes.COMMON_INVALID_REQUEST,
+                    "教师批量导入请求数据无效。");
+        }
+        Response denied = administrationFailure(request);
+        if (denied != null) {
+            return denied;
+        }
+        SessionInfo actor = authentication.findSession(request.getToken()).orElseThrow();
+        return executeAuditedAdministration(
+                request,
+                "成功导入 " + data.getTeachers().size() + " 位教师。",
+                UserActions.ADMIN_BATCH_SAVE_TEACHERS,
+                "批量教师：" + data.getTeachers().size() + " 位",
+                () -> authentication.teachers().saveProfiles(data, actor.getUserId()));
     }
 
     private Response executeAuditedAdministration(

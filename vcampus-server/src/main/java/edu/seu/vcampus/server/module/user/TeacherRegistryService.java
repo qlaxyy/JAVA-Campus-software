@@ -2,6 +2,7 @@ package edu.seu.vcampus.server.module.user;
 
 import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.user.SaveTeacherProfileRequest;
+import edu.seu.vcampus.common.user.BatchSaveTeacherProfilesRequest;
 import edu.seu.vcampus.common.user.TeacherProfileListResponse;
 import edu.seu.vcampus.common.user.TeacherProfileView;
 import edu.seu.vcampus.server.security.TeacherDirectory;
@@ -94,6 +95,35 @@ final class TeacherRegistryService implements TeacherDirectory {
         return toView(profile, account);
     }
 
+    synchronized TeacherProfileListResponse saveProfiles(
+            BatchSaveTeacherProfilesRequest request,
+            String actorUserId) {
+        Instant now = clock.instant();
+        List<ProfileWithAccount> validated = request.getTeachers().stream()
+                .map(item -> {
+                    UserAccount account = users.findById(item.getUserId())
+                            .orElseThrow(() -> new UserAdministrationException(
+                                    ErrorCodes.USER_ACCOUNT_NOT_FOUND,
+                                    "批量导入包含不存在的账号。"));
+                    TeacherProfile old = teachers.findByUserId(account.userId()).orElse(null);
+                    TeacherProfile profile = new TeacherProfile(
+                            account.userId(),
+                            item.getDepartment(),
+                            item.getTitle(),
+                            item.isActive(),
+                            old == null ? actorUserId : old.createdByUserId(),
+                            old == null ? now : old.createdAt(),
+                            now);
+                    return new ProfileWithAccount(profile, account);
+                })
+                .toList();
+        teachers.saveAll(validated.stream().map(ProfileWithAccount::profile).toList());
+        return new TeacherProfileListResponse(validated.stream()
+                .map(item -> toView(item.profile(), item.account()))
+                .sorted(Comparator.comparing(TeacherProfileView::getCampusCardNumber))
+                .toList());
+    }
+
     synchronized Optional<TeacherProfileView> profileView(String userId) {
         return teachers.findByUserId(userId)
                 .flatMap(profile -> users.findById(userId)
@@ -126,5 +156,8 @@ final class TeacherRegistryService implements TeacherDirectory {
         return new TeacherProfileView(
                 account.userId(), account.username(), account.displayName(),
                 profile.department(), profile.title(), profile.active());
+    }
+
+    private record ProfileWithAccount(TeacherProfile profile, UserAccount account) {
     }
 }

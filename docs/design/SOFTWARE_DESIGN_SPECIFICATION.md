@@ -568,6 +568,10 @@ classDiagram
         -boolean active
     }
 
+    class BatchSaveTeacherProfilesRequest {
+        -List~SaveTeacherProfileRequest~ teachers
+    }
+
     class TeacherProfileView {
         -String userId
         -String campusCardNumber
@@ -586,6 +590,8 @@ classDiagram
     SessionInfo --> Role : 使用
     SessionInfo "1" o-- "0..*" AdminScope : 包含管理范围
     Request --> SaveTeacherProfileRequest : 管理教师档案时作为 data
+    Request --> BatchSaveTeacherProfilesRequest : 批量导入时作为 data
+    BatchSaveTeacherProfilesRequest "1" o-- "1..*" SaveTeacherProfileRequest : 包含教师资料
     Response --> TeacherProfileView : 教师查询或保存成功时作为 data
     TeacherProfileListResponse "1" o-- "0..*" TeacherProfileView : 包含教师档案
 ```
@@ -685,6 +691,7 @@ classDiagram
 | `USER.CURRENT_TEACHER_PROFILE` | 必填 | `null` | `TeacherProfileView` | 查询当前登录账号的有效教师档案；无教师资格时返回禁止访问。 |
 | `USER.ADMIN_LIST_TEACHERS` | 必填 | `null` | `TeacherProfileListResponse` | 超级管理员查看全部教师档案。 |
 | `USER.ADMIN_SAVE_TEACHER_PROFILE` | 必填 | `SaveTeacherProfileRequest` | `TeacherProfileView` | 超级管理员为已有账号创建或更新教师档案。 |
+| `USER.ADMIN_BATCH_SAVE_TEACHERS` | 必填 | `BatchSaveTeacherProfilesRequest` | `TeacherProfileListResponse` | 超级管理员批量新增或更新已有账号的教师档案。 |
 
 ### 11.2 Request
 

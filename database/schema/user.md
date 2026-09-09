@@ -120,6 +120,7 @@
 | `USER.CURRENT_TEACHER_PROFILE` | 任意已登录账号 | 查询本人是否具有有效教师资格及院系、职称 |
 | `USER.ADMIN_LIST_TEACHERS` | `SUPER_ADMIN` | 查看全部教师档案，包括已停用资格 |
 | `USER.ADMIN_SAVE_TEACHER_PROFILE` | `SUPER_ADMIN` | 为已有账号新增或更新教师档案，并启用或停用教师资格 |
+| `USER.ADMIN_BATCH_SAVE_TEACHERS` | `SUPER_ADMIN` | 批量新增或更新已有账号的教师档案 |
 
 上述账号 Action 已通过 `UserRepository` 使用 Access。新增、批量导入、编辑、启停和重置密码的成功结果及业务失败会追加到 `tblUserAuditLog`；查询审计记录只允许 `SUPER_ADMIN`，且没有修改或删除审计记录的 Action。创建和编辑普通账号时，客户端提示“选择 0–1 个权限”，服务器也会拒绝同时提交多个管理范围。第一版不提供创建其他超级管理员或修改全局角色。
 
@@ -128,6 +129,10 @@
 批量导入 CSV 使用 UTF-8 编码，第一行为 `campusCardNumber,displayName`。初始密码统一为
 `123456`，文件中不保存密码和管理范围。服务器会再次检查已有账号和文件内重复账号；
 任意一行失败时 Access 事务整体回滚。
+
+教师管理页面使用独立的 UTF-8 CSV，首行固定为
+`campusCardNumber,department,title`。一卡通号必须已经存在于账号名单；导入只新增或更新
+`tblTeacherProfile` 并启用教师资格，不创建、禁用或删除登录账号，任意一行失败时整批回滚。
 
 旧开发数据库启动时会把 `student001`、`teacher001`、`admin` 等 8 个演示登录名迁移为
 `20260000` 至 `20260007`，保留原 `userId`、显示名称、角色、管理范围和启停状态；新增的教师演示账号固定使用 `20260008`，并在 `tblTeacherProfile` 中建立资格记录。由于开发期

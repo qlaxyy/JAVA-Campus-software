@@ -57,13 +57,40 @@ final class AccessTeacherRepository implements TeacherRepository {
     @Override
     public synchronized void save(TeacherProfile profile) {
         try (Connection connection = database.openConnection()) {
-            if (exists(connection, profile.userId())) {
-                update(connection, profile);
-            } else {
-                insert(connection, profile);
-            }
+            upsert(connection, profile);
         } catch (SQLException exception) {
             throw failure("Cannot save teacher profile.", exception);
+        }
+    }
+
+    @Override
+    public synchronized void saveAll(List<TeacherProfile> profiles) {
+        try (Connection connection = database.openConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                for (TeacherProfile profile : profiles) {
+                    upsert(connection, profile);
+                }
+                connection.commit();
+            } catch (SQLException | RuntimeException exception) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackFailure) {
+                    exception.addSuppressed(rollbackFailure);
+                }
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            throw failure("Cannot save teacher profiles.", exception);
+        }
+    }
+
+    private static void upsert(Connection connection, TeacherProfile profile)
+            throws SQLException {
+        if (exists(connection, profile.userId())) {
+            update(connection, profile);
+        } else {
+            insert(connection, profile);
         }
     }
 

@@ -37,6 +37,8 @@ public final class UserActions {
             ActionNames.of(ModuleNames.USER, "ADMIN_LIST_TEACHERS");
     public static final String ADMIN_SAVE_TEACHER_PROFILE =
             ActionNames.of(ModuleNames.USER, "ADMIN_SAVE_TEACHER_PROFILE");
+    public static final String ADMIN_BATCH_SAVE_TEACHERS =
+            ActionNames.of(ModuleNames.USER, "ADMIN_BATCH_SAVE_TEACHERS");
 
     private UserActions() {
     }

@@ -9,6 +9,7 @@ import edu.seu.vcampus.common.user.AdminScope;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.common.user.UserActions;
 import edu.seu.vcampus.common.user.SaveTeacherProfileRequest;
+import edu.seu.vcampus.common.user.BatchSaveTeacherProfilesRequest;
 import edu.seu.vcampus.common.user.TeacherProfileListResponse;
 import edu.seu.vcampus.common.user.TeacherProfileView;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
@@ -123,6 +124,33 @@ class AuthenticationIntegrationTest {
             assertFalse(noLongerTeacher.isSuccess());
             assertEquals(ErrorCodes.AUTH_FORBIDDEN, noLongerTeacher.getCode());
             assertTrue(student.send(UserActions.CURRENT_SESSION, null).isSuccess());
+        }
+    }
+
+    @Test
+    void superAdministratorCanImportSeveralTeacherProfiles() throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext administrator = new ClientContext(
+                    new CampusClient("127.0.0.1", server.getPort()));
+            assertTrue(administrator.login(
+                    "20260000", "123456".toCharArray()).isSuccess());
+
+            Response imported = administrator.send(
+                    UserActions.ADMIN_BATCH_SAVE_TEACHERS,
+                    new BatchSaveTeacherProfilesRequest(List.of(
+                            new SaveTeacherProfileRequest(
+                                    "U-STUDENT-001", "计算机学院", "讲师", true),
+                            new SaveTeacherProfileRequest(
+                                    "U-TEACHER-001", "医学院", "副教授", true))));
+
+            assertTrue(imported.isSuccess(), imported.getCode() + ": " + imported.getMessage());
+            TeacherProfileListResponse profiles = assertInstanceOf(
+                    TeacherProfileListResponse.class, imported.getData());
+            assertEquals(2, profiles.getTeachers().size());
+            Response listed = administrator.send(UserActions.ADMIN_LIST_TEACHERS, null);
+            assertEquals(3, assertInstanceOf(
+                    TeacherProfileListResponse.class, listed.getData()).getTeachers().size());
         }
     }
 

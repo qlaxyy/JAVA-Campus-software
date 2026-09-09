@@ -8,4 +8,8 @@ interface TeacherRepository {
     Optional<TeacherProfile> findByUserId(String userId);
     List<TeacherProfile> findAll();
     void save(TeacherProfile profile);
+
+    default void saveAll(List<TeacherProfile> profiles) {
+        profiles.forEach(this::save);
+    }
 }

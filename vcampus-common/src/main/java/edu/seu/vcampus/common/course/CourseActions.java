@@ -127,7 +127,57 @@ public final class CourseActions {
         ActionNames.of(
             ModuleNames.COURSE,
             "ADMIN_FORCE_DROP_COURSE");
+    /*
+     * =========================
+     * 普通教师 Action
+     * =========================
+     */
 
+    /**
+     * 教师查询本人负责的教学班。
+     */
+    public static final String
+        TEACHER_LIST_OFFERINGS =
+        ActionNames.of(
+            ModuleNames.COURSE,
+            "TEACHER_LIST_OFFERINGS");
+    /**
+     * 教师查询指定教学班的学生名单。
+     */
+    public static final String TEACHER_LIST_STUDENTS =
+        ActionNames.of(
+            ModuleNames.COURSE,
+            "TEACHER_LIST_STUDENTS");
+    /**
+     * 教师查询自己负责教学班的成绩。
+     */
+    public static final String TEACHER_LIST_GRADES =
+        ActionNames.of(
+            ModuleNames.COURSE,
+            "TEACHER_LIST_GRADES");
+
+    /**
+     * 教师录入或修改自己负责教学班的成绩。
+     */
+    public static final String TEACHER_UPDATE_GRADE =
+        ActionNames.of(
+            ModuleNames.COURSE,
+            "TEACHER_UPDATE_GRADE");
     private CourseActions() {
     }
+    /**
+     * 教师查询教学班成绩比例。
+     */
+    public static final String TEACHER_GET_GRADE_POLICY =
+        ActionNames.of(
+            ModuleNames.COURSE,
+            "TEACHER_GET_GRADE_POLICY");
+
+    /**
+     * 教师修改教学班成绩比例。
+     */
+    public static final String TEACHER_UPDATE_GRADE_POLICY =
+        ActionNames.of(
+            ModuleNames.COURSE,
+            "TEACHER_UPDATE_GRADE_POLICY");
 }

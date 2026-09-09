@@ -17,7 +17,8 @@ interface CourseGradeRepository {
     /**
      * 根据选课记录查询成绩。
      */
-    Optional<CourseGradeRecord> findByEnrollmentId(
+    Optional<CourseGradeRecord>
+    findByEnrollmentId(
         long enrollmentId);
 
     /**
@@ -26,12 +27,31 @@ interface CourseGradeRepository {
     List<CourseGradeRecord> findAll();
 
     /**
-     * 新增或更新成绩。
+     * 保存平时成绩和期末成绩。
      */
     CourseGradeRecord save(
         long enrollmentId,
-        double score,
+        double usualScore,
+        double finalExamScore,
         LocalDateTime recordedAt);
+
+    /**
+     * 兼容原有单项成绩保存代码。
+     *
+     * 旧成绩同时保存为平时成绩和期末成绩，
+     * 保证迁移前后的总成绩不变。
+     */
+    default CourseGradeRecord save(
+        long enrollmentId,
+        double score,
+        LocalDateTime recordedAt) {
+
+        return save(
+            enrollmentId,
+            score,
+            score,
+            recordedAt);
+    }
 }
 
 /**
@@ -40,19 +60,47 @@ interface CourseGradeRepository {
 record CourseGradeRecord(
     long gradeId,
     long enrollmentId,
-    double score,
+    double usualScore,
+    double finalExamScore,
     LocalDateTime recordedAt) {
+    /**
+     * 兼容原有单项成绩记录。
+     */
+    CourseGradeRecord(
+        long gradeId,
+        long enrollmentId,
+        double score,
+        LocalDateTime recordedAt) {
+
+        this(
+            gradeId,
+            enrollmentId,
+            score,
+            score,
+            recordedAt);
+    }
+    /**
+     * 兼容原有代码。
+     *
+     * 新业务代码应当使用
+     * CourseGradePolicyService 计算总成绩。
+     */
+    double score() {
+
+        return usualScore * 0.4
+            + finalExamScore * 0.6;
+    }
 }
 
 /**
  * 内存成绩仓库。
- *
- * 每条选课记录最多对应一条成绩。
  */
 final class InMemoryCourseGradeRepository
     implements CourseGradeRepository {
 
-    private final ConcurrentMap<Long, CourseGradeRecord>
+    private final ConcurrentMap<
+        Long,
+        CourseGradeRecord>
         recordsByEnrollmentId =
         new ConcurrentHashMap<>();
 
@@ -87,7 +135,8 @@ final class InMemoryCourseGradeRepository
     @Override
     public synchronized CourseGradeRecord save(
         long enrollmentId,
-        double score,
+        double usualScore,
+        double finalExamScore,
         LocalDateTime recordedAt) {
 
         CourseGradeRecord existing =
@@ -96,14 +145,16 @@ final class InMemoryCourseGradeRepository
 
         long gradeId =
             existing == null
-                ? nextGradeId.getAndIncrement()
+                ? nextGradeId
+                .getAndIncrement()
                 : existing.gradeId();
 
         CourseGradeRecord updated =
             new CourseGradeRecord(
                 gradeId,
                 enrollmentId,
-                score,
+                usualScore,
+                finalExamScore,
                 recordedAt);
 
         recordsByEnrollmentId.put(

@@ -229,7 +229,48 @@ final class AccessCourseEnrollmentRepository
                 exception);
         }
     }
+    @Override
+    public CourseEnrollmentRecord
+    findSelectedEnrollment(
+        long enrollmentId) {
 
+        String sql =
+            "SELECT enrollmentId, userId, studentId, "
+                + "selectedBatchId, offeringId "
+                + "FROM tblEnrollment "
+                + "WHERE enrollmentId = ? "
+                + "AND enrollmentStatus = ?";
+
+        try (Connection connection =
+                 database.openConnection();
+             PreparedStatement statement =
+                 connection.prepareStatement(
+                     sql)) {
+
+            statement.setLong(
+                1,
+                enrollmentId);
+
+            statement.setString(
+                2,
+                SELECTED);
+
+            try (ResultSet result =
+                     statement.executeQuery()) {
+
+                return result.next()
+                    ? readRecord(
+                    result)
+                    : null;
+            }
+
+        } catch (SQLException exception) {
+
+            throw failure(
+                "无法根据选课记录 ID 读取选课信息。",
+                exception);
+        }
+    }
     @Override
     public List<CourseEnrollmentRecord>
     findSelectedEnrollmentsByOffering(

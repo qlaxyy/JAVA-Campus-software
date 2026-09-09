@@ -1,6 +1,7 @@
 package edu.seu.vcampus.server.module.course;
 
 import edu.seu.vcampus.common.course.CourseGradeInfo;
+import edu.seu.vcampus.common.course.CourseGradePolicyInfo;
 import edu.seu.vcampus.common.course.EnrollmentInfo;
 
 import java.time.Clock;
@@ -20,11 +21,18 @@ final class CourseGradeService {
     private final CourseGradeRepository
         gradeRepository;
 
+    private final CourseGradePolicyService
+        gradePolicyService;
+
     private final Clock clock;
 
+    /**
+     * 新版构造器。
+     */
     CourseGradeService(
         CourseEnrollmentService enrollmentService,
         CourseGradeRepository gradeRepository,
+        CourseGradePolicyService gradePolicyService,
         Clock clock) {
 
         this.enrollmentService =
@@ -35,16 +43,34 @@ final class CourseGradeService {
             Objects.requireNonNull(
                 gradeRepository);
 
+        this.gradePolicyService =
+            Objects.requireNonNull(
+                gradePolicyService);
+
         this.clock =
             Objects.requireNonNull(
                 clock);
     }
 
     /**
+     * 兼容原有测试代码的构造器。
+     */
+    CourseGradeService(
+        CourseEnrollmentService enrollmentService,
+        CourseGradeRepository gradeRepository,
+        Clock clock) {
+
+        this(
+            enrollmentService,
+            gradeRepository,
+            new CourseGradePolicyService(
+                new InMemoryCourseGradePolicyRepository(),
+                clock),
+            clock);
+    }
+
+    /**
      * 查询指定学生全部已选课程及成绩。
-     *
-     * 尚未录入成绩的课程也会返回，
-     * 此时 score 和 recordedAt 为 null。
      */
     List<CourseGradeInfo> listGrades(
         String studentId) {
@@ -87,12 +113,13 @@ final class CourseGradeService {
     }
 
     /**
-     * 超级管理员新增或修改成绩。
+     * 保存平时成绩和期末成绩。
      */
     synchronized GradeUpdateResult updateGrade(
         String studentId,
         long enrollmentId,
-        double score) {
+        double usualScore,
+        double finalExamScore) {
 
         String normalizedStudentId =
             normalizeStudentId(
@@ -110,32 +137,24 @@ final class CourseGradeService {
                 "选课记录 ID 不正确。");
         }
 
-        if (Double.isNaN(score)
-            || Double.isInfinite(score)
-            || score < 0.0
-            || score > 100.0) {
+        if (!validScore(
+            usualScore)) {
 
             return GradeUpdateResult.failure(
-                "成绩必须在 0 到 100 之间。");
+                "平时成绩必须在 0 到 100 之间。");
+        }
+
+        if (!validScore(
+            finalExamScore)) {
+
+            return GradeUpdateResult.failure(
+                "期末成绩必须在 0 到 100 之间。");
         }
 
         EnrollmentInfo targetEnrollment =
-            null;
-
-        for (EnrollmentInfo enrollment
-            : enrollmentService
-            .listAdminEnrollments(
-                normalizedStudentId)) {
-
-            if (enrollment.getEnrollmentId()
-                == enrollmentId) {
-
-                targetEnrollment =
-                    enrollment;
-
-                break;
-            }
-        }
+            findEnrollment(
+                normalizedStudentId,
+                enrollmentId);
 
         if (targetEnrollment == null) {
 
@@ -146,7 +165,8 @@ final class CourseGradeService {
         CourseGradeRecord grade =
             gradeRepository.save(
                 enrollmentId,
-                score,
+                usualScore,
+                finalExamScore,
                 LocalDateTime.now(
                     clock));
 
@@ -159,12 +179,74 @@ final class CourseGradeService {
     }
 
     /**
+     * 兼容原有单项成绩修改代码。
+     *
+     * 旧 score 同时作为平时成绩和期末成绩。
+     */
+    synchronized GradeUpdateResult updateGrade(
+        String studentId,
+        long enrollmentId,
+        double score) {
+
+        return updateGrade(
+            studentId,
+            enrollmentId,
+            score,
+            score);
+    }
+
+    /**
+     * 查找指定选课记录。
+     */
+    private EnrollmentInfo findEnrollment(
+        String studentId,
+        long enrollmentId) {
+
+        for (EnrollmentInfo enrollment
+            : enrollmentService
+            .listAdminEnrollments(
+                studentId)) {
+
+            if (enrollment.getEnrollmentId()
+                == enrollmentId) {
+
+                return enrollment;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * 转换为客户端成绩信息。
      */
     private CourseGradeInfo toInfo(
         String studentId,
         EnrollmentInfo enrollment,
         CourseGradeRecord grade) {
+
+        CourseGradePolicyInfo policy =
+            gradePolicyService.getPolicy(
+                enrollment.getOfferingId());
+
+        Double usualScore =
+            grade == null
+                ? null
+                : grade.usualScore();
+
+        Double finalExamScore =
+            grade == null
+                ? null
+                : grade.finalExamScore();
+
+        Double totalScore =
+            grade == null
+                ? null
+                : gradePolicyService
+                .calculateTotalScore(
+                    enrollment.getOfferingId(),
+                    grade.usualScore(),
+                    grade.finalExamScore());
 
         return new CourseGradeInfo(
             grade == null
@@ -176,14 +258,33 @@ final class CourseGradeService {
             enrollment.getCourseCode(),
             enrollment.getCourseName(),
             enrollment.getClassNo(),
-            grade == null
-                ? null
-                : grade.score(),
+            usualScore,
+            finalExamScore,
+            policy.getUsualWeightPercent(),
+            policy.getFinalExamWeightPercent(),
+            totalScore,
             grade == null
                 ? null
                 : grade.recordedAt());
     }
 
+    /**
+     * 判断成绩是否合法。
+     */
+    private boolean validScore(
+        double score) {
+
+        return !Double.isNaN(
+            score)
+            && !Double.isInfinite(
+            score)
+            && score >= 0.0
+            && score <= 100.0;
+    }
+
+    /**
+     * 规范化学生学号。
+     */
     private String normalizeStudentId(
         String studentId) {
 

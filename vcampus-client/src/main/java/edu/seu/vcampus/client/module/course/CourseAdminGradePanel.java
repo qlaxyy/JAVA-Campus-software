@@ -63,7 +63,11 @@ final class CourseAdminGradePanel
                 "课程代码",
                 "课程名称",
                 "教学班",
-                "成绩",
+                "平时成绩",
+                "期末成绩",
+                "平时比例",
+                "期末比例",
+                "总成绩",
                 "结果",
                 "录入时间"
             },
@@ -400,9 +404,19 @@ final class CourseAdminGradePanel
                     grade.getCourseCode(),
                     grade.getCourseName(),
                     grade.getClassNo(),
-                    grade.getScore() == null
+                    grade.getUsualScore() == null
                         ? "未录入"
-                        : grade.getScore(),
+                        : grade.getUsualScore(),
+                    grade.getFinalExamScore() == null
+                        ? "未录入"
+                        : grade.getFinalExamScore(),
+                    grade.getUsualWeightPercent()
+                        + "%",
+                    grade.getFinalExamWeightPercent()
+                        + "%",
+                    grade.getTotalScore() == null
+                        ? "未录入"
+                        : grade.getTotalScore(),
                     resultText(
                         grade),
                     grade.getRecordedAt() == null
@@ -435,10 +449,10 @@ final class CourseAdminGradePanel
             return;
         }
 
-        int selectedRow =
+        int selectedViewRow =
             table.getSelectedRow();
 
-        if (selectedRow < 0) {
+        if (selectedViewRow < 0) {
 
             JOptionPane.showMessageDialog(
                 this,
@@ -449,10 +463,14 @@ final class CourseAdminGradePanel
             return;
         }
 
+        int selectedModelRow =
+            table.convertRowIndexToModel(
+                selectedViewRow);
+
         long enrollmentId =
             ((Number)
                 tableModel.getValueAt(
-                    selectedRow,
+                    selectedModelRow,
                     1))
                 .longValue();
 
@@ -468,15 +486,22 @@ final class CourseAdminGradePanel
             return;
         }
 
-        double initialScore =
-            grade.getScore() == null
-                ? 0.0
-                : grade.getScore();
-
-        JSpinner scoreSpinner =
+        JSpinner usualScoreSpinner =
             new JSpinner(
                 new SpinnerNumberModel(
-                    initialScore,
+                    grade.getUsualScore() == null
+                        ? 0.0
+                        : grade.getUsualScore(),
+                    0.0,
+                    100.0,
+                    0.5));
+
+        JSpinner finalExamScoreSpinner =
+            new JSpinner(
+                new SpinnerNumberModel(
+                    grade.getFinalExamScore() == null
+                        ? 0.0
+                        : grade.getFinalExamScore(),
                     0.0,
                     100.0,
                     0.5));
@@ -529,10 +554,29 @@ final class CourseAdminGradePanel
 
         form.add(
             new JLabel(
-                "成绩："));
+                "当前成绩比例："));
 
         form.add(
-            scoreSpinner);
+            new JLabel(
+                "平时 "
+                    + grade.getUsualWeightPercent()
+                    + "% / 期末 "
+                    + grade.getFinalExamWeightPercent()
+                    + "%"));
+
+        form.add(
+            new JLabel(
+                "平时成绩："));
+
+        form.add(
+            usualScoreSpinner);
+
+        form.add(
+            new JLabel(
+                "期末成绩："));
+
+        form.add(
+            finalExamScoreSpinner);
 
         form.add(
             new JLabel(
@@ -546,9 +590,9 @@ final class CourseAdminGradePanel
             JOptionPane.showConfirmDialog(
                 this,
                 form,
-                grade.getScore() == null
-                    ? "录入成绩"
-                    : "修改成绩",
+                grade.isRecorded()
+                    ? "修改成绩"
+                    : "录入成绩",
                 JOptionPane.OK_CANCEL_OPTION,
                 JOptionPane.PLAIN_MESSAGE);
 
@@ -563,7 +607,12 @@ final class CourseAdminGradePanel
                 grade.getStudentId(),
                 grade.getEnrollmentId(),
                 ((Number)
-                    scoreSpinner.getValue())
+                    usualScoreSpinner
+                        .getValue())
+                    .doubleValue(),
+                ((Number)
+                    finalExamScoreSpinner
+                        .getValue())
                     .doubleValue(),
                 reasonArea.getText()
                     .trim()));

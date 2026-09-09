@@ -23,7 +23,12 @@ interface CourseEnrollmentRepository {
     findSelectedEnrollment(
         String userId,
         long enrollmentId);
-
+    /**
+     * 根据选课记录 ID 查询当前有效的选课记录。
+     */
+    CourseEnrollmentRecord
+    findSelectedEnrollment(
+        long enrollmentId);
     /**
      * 查询一个教学班在当前运行期间
      * 所有新增选课记录。

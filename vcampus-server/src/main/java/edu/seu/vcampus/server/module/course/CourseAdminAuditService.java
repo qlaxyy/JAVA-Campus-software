@@ -124,20 +124,26 @@ final class CourseAdminAuditService {
     }
 
     /**
-     * 记录成绩录入或修改。
+     * 记录平时成绩和期末成绩修改。
      */
     synchronized void recordUpdateGrade(
         String operatorUsername,
         String studentId,
         long enrollmentId,
-        double score,
+        double usualScore,
+        double finalExamScore,
+        double totalScore,
         String reason) {
 
         String details =
             optionalText(
                 reason)
-                + "；修改后成绩="
-                + score;
+                + "；平时成绩="
+                + usualScore
+                + "；期末成绩="
+                + finalExamScore
+                + "；总成绩="
+                + totalScore;
 
         append(
             operatorUsername,
@@ -147,6 +153,26 @@ final class CourseAdminAuditService {
             null,
             enrollmentId,
             details);
+    }
+
+    /**
+     * 兼容原有单项成绩日志代码。
+     */
+    synchronized void recordUpdateGrade(
+        String operatorUsername,
+        String studentId,
+        long enrollmentId,
+        double score,
+        String reason) {
+
+        recordUpdateGrade(
+            operatorUsername,
+            studentId,
+            enrollmentId,
+            score,
+            score,
+            score,
+            reason);
     }
     /**
      * 记录强制退课。
@@ -241,7 +267,36 @@ final class CourseAdminAuditService {
             null,
             details);
     }
+    /**
+     * 记录教学班成绩比例修改。
+     */
+    synchronized void recordUpdateGradePolicy(
+        String operatorUsername,
+        long offeringId,
+        int usualWeightPercent,
+        int finalExamWeightPercent,
+        String reason) {
 
+        String details =
+            optionalText(
+                reason)
+                + "；平时成绩比例="
+                + usualWeightPercent
+                + "%"
+                + "；期末成绩比例="
+                + finalExamWeightPercent
+                + "%";
+
+        append(
+            operatorUsername,
+            "-",
+            CourseAdminOperationType
+                .UPDATE_GRADE_POLICY,
+            null,
+            offeringId,
+            null,
+            details);
+    }
     /**
      * 保存一条日志。
      */
@@ -345,7 +400,8 @@ enum CourseAdminOperationType {
     UPDATE_OFFERING,
     UPDATE_COURSE,
     UPDATE_BATCH,
-    UPDATE_GRADE
+    UPDATE_GRADE,
+    UPDATE_GRADE_POLICY
 }
 
 /**

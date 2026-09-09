@@ -15,6 +15,7 @@ public final class UserAuthenticationBootstrap {
         AccessUserRepository repository = new AccessUserRepository(
                 new AccessDatabase(databasePath));
         DemoUserAccounts.seedIfEmpty(repository);
+        DemoUserAccounts.ensureCourseTeacherAccount(repository);
         return new InMemoryAuthenticationService(repository);
     }
 }

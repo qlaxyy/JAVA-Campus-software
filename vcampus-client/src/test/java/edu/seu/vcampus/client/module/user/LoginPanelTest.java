@@ -55,6 +55,7 @@ class LoginPanelTest {
         assertTrue(labels.contains("图书馆管理员  20260005"));
         assertTrue(labels.contains("商店管理员  20260006"));
         assertTrue(labels.contains("医院管理员  20260007"));
+        assertTrue(labels.contains("教师演示  20260008"));
         assertEquals(List.of(
                 "超级管理员  20260000",
                 "普通账号  20260001",
@@ -63,7 +64,8 @@ class LoginPanelTest {
                 "选课管理员  20260004",
                 "图书馆管理员  20260005",
                 "商店管理员  20260006",
-                "医院管理员  20260007"),
+                "医院管理员  20260007",
+                "教师演示  20260008"),
                 labels.stream().filter(text -> text.matches(".*2026\\d{4}"))
                         .toList());
     }

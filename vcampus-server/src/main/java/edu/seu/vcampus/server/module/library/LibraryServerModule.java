@@ -8,8 +8,11 @@ import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BookSearchResult;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
 import edu.seu.vcampus.common.library.CopyReturnRequest;
+import edu.seu.vcampus.common.library.CreateReservationRequest;
 import edu.seu.vcampus.common.library.LibraryActions;
 import edu.seu.vcampus.common.library.ListBookCopiesRequest;
+import edu.seu.vcampus.common.library.ReservationDTO;
+import edu.seu.vcampus.common.library.ReservationIdRequest;
 import edu.seu.vcampus.common.library.SetBookStatusRequest;
 import edu.seu.vcampus.common.library.UpdateBookCopyRequest;
 import edu.seu.vcampus.common.library.UpdateBookRequest;
@@ -49,6 +52,7 @@ public final class LibraryServerModule implements ServerModule {
         BorrowRecordRepository records = new AccessBorrowRecordRepository(store);
         BookCategoryRepository categories = new AccessBookCategoryRepository(store);
         BookCopyRepository copies = new AccessBookCopyRepository(store);
+        ReservationRepository reservations = new AccessReservationRepository(store);
         LibraryService service = new LibraryService(
                 books,
                 records,
@@ -56,7 +60,9 @@ public final class LibraryServerModule implements ServerModule {
                 () -> UUID.randomUUID().toString(),
                 categories,
                 copies,
-                store);
+                reservations,
+                store,
+                () -> UUID.randomUUID().toString());
         return new LibraryServerModule(service);
     }
 
@@ -79,6 +85,12 @@ public final class LibraryServerModule implements ServerModule {
                 request -> returnCopy(request, context));
         router.register(LibraryActions.GET_BORROW_RECORDS,
                 request -> getBorrowRecords(request, context));
+        router.register(LibraryActions.CREATE_RESERVATION,
+                request -> createReservation(request, context));
+        router.register(LibraryActions.GET_MY_RESERVATIONS,
+                request -> getMyReservations(request, context));
+        router.register(LibraryActions.CANCEL_RESERVATION,
+                request -> cancelReservation(request, context));
         router.register(LibraryActions.LIST_CATEGORIES,
                 request -> listCategories(request, context));
 
@@ -173,6 +185,57 @@ public final class LibraryServerModule implements ServerModule {
                 new ArrayList<>(service.getBorrowRecords(session.orElseThrow().getUserId())));
     }
 
+    private Response createReservation(Request request, ServerContext context) {
+        Optional<SessionInfo> session = session(request, context);
+        if (session.isEmpty()) {
+            return authenticationRequired(request);
+        }
+        if (!(request.getData() instanceof CreateReservationRequest data)) {
+            return invalidRequest(request, "预约请求格式不正确");
+        }
+        try {
+            ReservationDTO reservation = service.createReservation(
+                    session.orElseThrow().getUserId(), data);
+            return Response.success(request, "预约创建成功", reservation);
+        } catch (LibraryBusinessException exception) {
+            return businessFailure(request, exception);
+        } catch (IllegalArgumentException exception) {
+            return invalidArgument(request, exception);
+        }
+    }
+
+    private Response getMyReservations(Request request, ServerContext context) {
+        Optional<SessionInfo> session = session(request, context);
+        if (session.isEmpty()) {
+            return authenticationRequired(request);
+        }
+        if (request.getData() != null) {
+            return invalidRequest(request, "个人预约查询无需参数");
+        }
+        return Response.success(request, "预约记录已加载",
+                new ArrayList<>(service.getMyReservations(
+                        session.orElseThrow().getUserId())));
+    }
+
+    private Response cancelReservation(Request request, ServerContext context) {
+        Optional<SessionInfo> session = session(request, context);
+        if (session.isEmpty()) {
+            return authenticationRequired(request);
+        }
+        if (!(request.getData() instanceof ReservationIdRequest data)) {
+            return invalidRequest(request, "取消预约请求格式不正确");
+        }
+        try {
+            ReservationDTO reservation = service.cancelReservation(
+                    session.orElseThrow().getUserId(), data);
+            return Response.success(request, "预约已取消", reservation);
+        } catch (LibraryBusinessException exception) {
+            return businessFailure(request, exception);
+        } catch (IllegalArgumentException exception) {
+            return invalidArgument(request, exception);
+        }
+    }
+
     private Response listCategories(Request request, ServerContext context) {
         if (session(request, context).isEmpty()) {
             return authenticationRequired(request);
@@ -232,6 +295,12 @@ public final class LibraryServerModule implements ServerModule {
         InMemoryBorrowRecordRepository records = new InMemoryBorrowRecordRepository();
         InMemoryBookCopyRepository copies =
                 InMemoryBookCopyRepository.seededFrom(books.searchAll(""));
-        return new LibraryService(books, records, copies);
+        InMemoryReservationRepository reservations = new InMemoryReservationRepository();
+        return new LibraryService(books, records, Clock.systemDefaultZone(),
+                () -> UUID.randomUUID().toString(),
+                new InMemoryBookCategoryRepository(), copies, reservations,
+                new InMemoryLibraryTransactionManager(
+                        books, copies, records, reservations),
+                () -> UUID.randomUUID().toString());
     }
 }

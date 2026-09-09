@@ -70,4 +70,13 @@ final class InMemoryBorrowRecordRepository implements BorrowRecordRepository {
         }
         records.put(record.recordId(), record);
     }
+
+    synchronized Map<String, BorrowRecord> snapshot() {
+        return new LinkedHashMap<>(records);
+    }
+
+    synchronized void restore(Map<String, BorrowRecord> snapshot) {
+        records.clear();
+        records.putAll(snapshot);
+    }
 }

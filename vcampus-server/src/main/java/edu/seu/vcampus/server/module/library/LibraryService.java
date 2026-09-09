@@ -14,7 +14,10 @@ import edu.seu.vcampus.common.library.BookSearchResult;
 import edu.seu.vcampus.common.library.BorrowRecordDTO;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
 import edu.seu.vcampus.common.library.CopyReturnRequest;
+import edu.seu.vcampus.common.library.CreateReservationRequest;
 import edu.seu.vcampus.common.library.ListBookCopiesRequest;
+import edu.seu.vcampus.common.library.ReservationDTO;
+import edu.seu.vcampus.common.library.ReservationIdRequest;
 import edu.seu.vcampus.common.library.SetBookStatusRequest;
 import edu.seu.vcampus.common.library.UpdateBookCopyRequest;
 import edu.seu.vcampus.common.library.UpdateBookRequest;
@@ -31,6 +34,8 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 /** Library business rules independent from sockets and Swing. */
@@ -39,6 +44,9 @@ final class LibraryService {
     private static final int MAX_KEYWORD_LENGTH = 50;
     private static final int MAX_ACTIVE_BORROWS = 5;
     private static final int BORROW_DAYS = 30;
+    private static final int MAX_ACTIVE_RESERVATIONS = 3;
+    private static final int RESERVATION_HOLD_HOURS = 24;
+    private static final int RESERVATION_COOLDOWN_DAYS = 7;
 
     private final BookRepository bookRepository;
     private final BorrowRecordRepository borrowRecordRepository;
@@ -47,7 +55,9 @@ final class LibraryService {
     private final Object circulationLock = new Object();
     private final BookCategoryRepository categoryRepository;
     private final BookCopyRepository bookCopyRepository;
+    private final ReservationRepository reservationRepository;
     private final LibraryTransactionManager transactionManager;
+    private final Supplier<String> reservationIdSupplier;
 
     LibraryService(
             BookRepository bookRepository,
@@ -77,6 +87,18 @@ final class LibraryService {
     LibraryService(BookRepository bookRepository, BorrowRecordRepository borrowRecordRepository,
             Clock clock, Supplier<String> recordIdSupplier, BookCategoryRepository categoryRepository,
             BookCopyRepository bookCopyRepository, LibraryTransactionManager transactionManager) {
+        this(bookRepository, borrowRecordRepository, clock, recordIdSupplier,
+                categoryRepository, bookCopyRepository,
+                new InMemoryReservationRepository(), transactionManager,
+                () -> UUID.randomUUID().toString());
+    }
+
+    LibraryService(BookRepository bookRepository, BorrowRecordRepository borrowRecordRepository,
+            Clock clock, Supplier<String> recordIdSupplier,
+            BookCategoryRepository categoryRepository, BookCopyRepository bookCopyRepository,
+            ReservationRepository reservationRepository,
+            LibraryTransactionManager transactionManager,
+            Supplier<String> reservationIdSupplier) {
         this.bookRepository = Objects.requireNonNull(
                 bookRepository, "bookRepository must not be null");
         this.borrowRecordRepository = Objects.requireNonNull(
@@ -87,8 +109,12 @@ final class LibraryService {
         this.categoryRepository = Objects.requireNonNull(categoryRepository);
         this.bookCopyRepository = Objects.requireNonNull(
                 bookCopyRepository, "bookCopyRepository must not be null");
+        this.reservationRepository = Objects.requireNonNull(
+                reservationRepository, "reservationRepository must not be null");
         this.transactionManager = Objects.requireNonNull(
                 transactionManager, "transactionManager must not be null");
+        this.reservationIdSupplier = Objects.requireNonNull(
+                reservationIdSupplier, "reservationIdSupplier must not be null");
     }
 
     BookSearchResult searchBooks(BookSearchRequest request) {
@@ -99,6 +125,7 @@ final class LibraryService {
         }
         String categoryId = request.getCategoryId();
         synchronized (circulationLock) {
+            cleanExpiredReservations();
             if (categoryId != null) { categoryId = requireCategory(categoryId).getCategoryId(); }
             String filter = categoryId;
             return new BookSearchResult(bookRepository.search(keyword).stream()
@@ -116,6 +143,7 @@ final class LibraryService {
             throw new IllegalArgumentException("搜索关键词不能超过 50 个字符");
         }
         synchronized (circulationLock) {
+            cleanExpiredReservations();
             String categoryId = request.getCategoryId();
             if (categoryId != null) { categoryId = requireCategory(categoryId).getCategoryId(); }
             String filter = categoryId;
@@ -176,16 +204,23 @@ final class LibraryService {
         requireAdministrator(actor);
         Objects.requireNonNull(request, "request must not be null");
         synchronized (circulationLock) {
-            BookDTO original = requireAnyBook(request.getBookId());
-            String status = boundedText(request.getStatus(), "书目状态", 20)
-                    .toUpperCase(java.util.Locale.ROOT);
-            if (!("ACTIVE".equals(status) || "INACTIVE".equals(status))) {
-                throw failure(ErrorCodes.LIBRARY_INVALID_BOOK_STATUS,
-                        "书目状态只能是 ACTIVE 或 INACTIVE");
-            }
-            BookDTO updated = copyBook(original, status);
-            bookRepository.update(updated);
-            return withInventorySummary(updated);
+            return inTransaction(() -> {
+                LocalDateTime now = now();
+                expireReservations(now);
+                BookDTO original = requireAnyBook(request.getBookId());
+                String status = boundedText(request.getStatus(), "书目状态", 20)
+                        .toUpperCase(java.util.Locale.ROOT);
+                if (!("ACTIVE".equals(status) || "INACTIVE".equals(status))) {
+                    throw failure(ErrorCodes.LIBRARY_INVALID_BOOK_STATUS,
+                            "书目状态只能是 ACTIVE 或 INACTIVE");
+                }
+                if ("INACTIVE".equals(status)) {
+                    cancelActiveReservationsForBook(original.getBookId(), now);
+                }
+                BookDTO updated = copyBook(original, status);
+                bookRepository.update(updated);
+                return withInventorySummary(updated);
+            });
         }
     }
 
@@ -193,21 +228,25 @@ final class LibraryService {
         requireAdministrator(actor);
         Objects.requireNonNull(request, "request must not be null");
         synchronized (circulationLock) {
-            BookDTO book = requireAnyBook(request.getBookId());
-            String barcode = boundedText(request.getBarcode(), "馆藏条码", 50);
-            if (bookCopyRepository.findByBarcode(barcode).isPresent()) {
-                throw failure(ErrorCodes.LIBRARY_DUPLICATE_BARCODE, "馆藏条码已存在");
-            }
-            String copyId;
-            do {
-                copyId = "CP-" + UUID.randomUUID().toString().replace("-", "");
-            } while (bookCopyRepository.findById(copyId).isPresent());
-            BookCopy copy = new BookCopy(copyId, barcode, book.getBookId(),
-                    boundedText(request.getLocation(), "馆藏地", 100),
-                    boundedText(request.getCallNumber(), "索书号", 100),
-                    BookCopyStatus.AVAILABLE);
-            bookCopyRepository.insert(copy);
-            return toBookCopyDTO(copy);
+            return inTransaction(() -> {
+                LocalDateTime now = now();
+                expireReservations(now);
+                BookDTO book = requireAnyBook(request.getBookId());
+                String barcode = boundedText(request.getBarcode(), "馆藏条码", 50);
+                if (bookCopyRepository.findByBarcode(barcode).isPresent()) {
+                    throw failure(ErrorCodes.LIBRARY_DUPLICATE_BARCODE, "馆藏条码已存在");
+                }
+                String copyId;
+                do {
+                    copyId = "CP-" + UUID.randomUUID().toString().replace("-", "");
+                } while (bookCopyRepository.findById(copyId).isPresent());
+                BookCopy copy = new BookCopy(copyId, barcode, book.getBookId(),
+                        boundedText(request.getLocation(), "馆藏地", 100),
+                        boundedText(request.getCallNumber(), "索书号", 100),
+                        BookCopyStatus.AVAILABLE);
+                bookCopyRepository.insert(copy);
+                return toBookCopyDTO(assignAvailableCopy(copy, now));
+            });
         }
     }
 
@@ -215,6 +254,7 @@ final class LibraryService {
         requireAdministrator(actor);
         Objects.requireNonNull(request, "request must not be null");
         synchronized (circulationLock) {
+            cleanExpiredReservations();
             String bookId = requireAnyBook(request.getBookId()).getBookId();
             return bookCopyRepository.findByBookId(bookId).stream()
                     .sorted(Comparator.comparing(BookCopy::barcode))
@@ -227,16 +267,23 @@ final class LibraryService {
         requireAdministrator(actor);
         Objects.requireNonNull(request, "request must not be null");
         synchronized (circulationLock) {
-            BookCopy original = requireCopy(request.getCopyId());
-            if (original.status() == BookCopyStatus.WITHDRAWN) {
-                throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
-                        "已注销单册不能修改");
-            }
-            BookCopy updated = original.withLocation(
-                    boundedText(request.getLocation(), "馆藏地", 100),
-                    boundedText(request.getCallNumber(), "索书号", 100));
-            bookCopyRepository.update(updated);
-            return toBookCopyDTO(updated);
+            return inTransaction(() -> {
+                expireReservations(now());
+                BookCopy original = requireCopy(request.getCopyId());
+                if (original.status() == BookCopyStatus.WITHDRAWN) {
+                    throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
+                            "已注销单册不能修改");
+                }
+                if (original.status() == BookCopyStatus.RESERVED) {
+                    throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
+                            "预约保留中的单册不能修改");
+                }
+                BookCopy updated = original.withLocation(
+                        boundedText(request.getLocation(), "馆藏地", 100),
+                        boundedText(request.getCallNumber(), "索书号", 100));
+                bookCopyRepository.update(updated);
+                return toBookCopyDTO(updated);
+            });
         }
     }
 
@@ -244,18 +291,25 @@ final class LibraryService {
         requireAdministrator(actor);
         Objects.requireNonNull(request, "request must not be null");
         synchronized (circulationLock) {
-            BookCopy copy = requireCopy(request.getCopyId());
-            if (copy.status() == BookCopyStatus.LOANED
-                    || borrowRecordRepository.findBorrowedByCopyId(copy.copyId()).isPresent()) {
-                throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
-                        "借出中的单册不能注销");
-            }
-            if (copy.status() == BookCopyStatus.WITHDRAWN) {
-                throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS, "该单册已经注销");
-            }
-            BookCopy withdrawn = copy.withStatus(BookCopyStatus.WITHDRAWN);
-            bookCopyRepository.update(withdrawn);
-            return toBookCopyDTO(withdrawn);
+            return inTransaction(() -> {
+                expireReservations(now());
+                BookCopy copy = requireCopy(request.getCopyId());
+                if (copy.status() == BookCopyStatus.LOANED
+                        || borrowRecordRepository.findBorrowedByCopyId(copy.copyId()).isPresent()) {
+                    throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
+                            "借出中的单册不能注销");
+                }
+                if (copy.status() == BookCopyStatus.RESERVED) {
+                    throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
+                            "预约保留中的单册不能注销");
+                }
+                if (copy.status() == BookCopyStatus.WITHDRAWN) {
+                    throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS, "该单册已经注销");
+                }
+                BookCopy withdrawn = copy.withStatus(BookCopyStatus.WITHDRAWN);
+                bookCopyRepository.update(withdrawn);
+                return toBookCopyDTO(withdrawn);
+            });
         }
     }
 
@@ -263,18 +317,22 @@ final class LibraryService {
         requireAdministrator(actor);
         Objects.requireNonNull(request, "request must not be null");
         synchronized (circulationLock) {
-            BookCopy copy = requireCopy(request.getCopyId());
-            if (copy.status() != BookCopyStatus.WITHDRAWN) {
-                throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
-                        "只有已注销单册可以恢复");
-            }
-            if (borrowRecordRepository.findBorrowedByCopyId(copy.copyId()).isPresent()) {
-                throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
-                        "存在未结束借阅记录的单册不能恢复");
-            }
-            BookCopy restored = copy.withStatus(BookCopyStatus.AVAILABLE);
-            bookCopyRepository.update(restored);
-            return toBookCopyDTO(restored);
+            return inTransaction(() -> {
+                LocalDateTime now = now();
+                expireReservations(now);
+                BookCopy copy = requireCopy(request.getCopyId());
+                if (copy.status() != BookCopyStatus.WITHDRAWN) {
+                    throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
+                            "只有已注销单册可以恢复");
+                }
+                if (borrowRecordRepository.findBorrowedByCopyId(copy.copyId()).isPresent()) {
+                    throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
+                            "存在未结束借阅记录的单册不能恢复");
+                }
+                BookCopy restored = copy.withStatus(BookCopyStatus.AVAILABLE);
+                bookCopyRepository.update(restored);
+                return toBookCopyDTO(assignAvailableCopy(restored, now));
+            });
         }
     }
 
@@ -346,16 +404,135 @@ final class LibraryService {
         }
     }
 
+    ReservationDTO createReservation(String userId, CreateReservationRequest request) {
+        String validatedUserId = requireText(userId, "userId");
+        Objects.requireNonNull(request, "request must not be null");
+        String bookId = boundedText(request.getBookId(), "图书编号", 20);
+        String pickupLocation = boundedText(
+                request.getPickupLocation(), "取书馆藏地", 100);
+        synchronized (circulationLock) {
+            return inTransaction(() -> createReservationAtomically(
+                    validatedUserId, bookId, pickupLocation, now()));
+        }
+    }
+
+    private ReservationDTO createReservationAtomically(
+            String userId, String bookId, String pickupLocation, LocalDateTime now) {
+        expireReservations(now);
+        BookDTO book = requireAnyBook(bookId);
+        if (!"ACTIVE".equals(book.getStatus())) {
+            throw failure(ErrorCodes.LIBRARY_INVALID_BOOK_STATUS,
+                    "该书目已停止借阅，不能预约");
+        }
+        List<BookCopy> locationCopies = bookCopyRepository.findByBookId(bookId).stream()
+                .filter(copy -> copy.status() != BookCopyStatus.WITHDRAWN)
+                .filter(copy -> copy.location().equals(pickupLocation))
+                .toList();
+        if (locationCopies.isEmpty()) {
+            throw failure(ErrorCodes.LIBRARY_INVALID_PICKUP_LOCATION,
+                    "所选馆藏地没有该书目的有效馆藏");
+        }
+
+        List<Reservation> userReservations = reservationRepository.findByUserId(userId);
+        if (userReservations.stream().filter(Reservation::isActive).count()
+                >= MAX_ACTIVE_RESERVATIONS) {
+            throw failure(ErrorCodes.LIBRARY_RESERVATION_LIMIT_REACHED,
+                    "最多同时存在 3 条有效预约");
+        }
+        if (userReservations.stream().anyMatch(reservation -> reservation.isActive()
+                && reservation.bookId().equals(bookId))) {
+            throw failure(ErrorCodes.LIBRARY_DUPLICATE_RESERVATION,
+                    "同一书目已有有效预约，请勿重复预约");
+        }
+        if (userReservations.stream().anyMatch(reservation ->
+                reservation.status() == ReservationStatus.EXPIRED
+                        && reservation.bookId().equals(bookId)
+                        && reservation.closedAt().plusDays(RESERVATION_COOLDOWN_DAYS)
+                                .isAfter(now))) {
+            throw failure(ErrorCodes.LIBRARY_RESERVATION_COOLDOWN,
+                    "该书目的预约待取已过期，7 天后才能再次预约");
+        }
+
+        List<BorrowRecord> currentBorrows = borrowRecordRepository.findBorrowedByUserId(userId);
+        if (currentBorrows.stream().anyMatch(record -> record.isOverdueAt(now))) {
+            throw failure(ErrorCodes.LIBRARY_OVERDUE_BORROW_EXISTS,
+                    "存在逾期未还图书，请先归还后再预约");
+        }
+        if (currentBorrows.stream().map(this::requireCopyForRecord)
+                .anyMatch(copy -> copy.bookId().equals(bookId))) {
+            throw failure(ErrorCodes.LIBRARY_ALREADY_BORROWED,
+                    "这本书尚未归还，不能预约同一书目");
+        }
+
+        Reservation reservation = Reservation.waiting(
+                nextReservationId(), userId, bookId, pickupLocation, now);
+        reservationRepository.save(reservation);
+        BookCopy available = locationCopies.stream()
+                .filter(copy -> copy.status() == BookCopyStatus.AVAILABLE)
+                .sorted(Comparator.comparing(BookCopy::barcode))
+                .findFirst().orElse(null);
+        if (available != null) {
+            BookCopy reserved = available.withStatus(BookCopyStatus.RESERVED);
+            bookCopyRepository.update(reserved);
+            reservation = reservation.readyForPickup(
+                    reserved.copyId(), now, now.plusHours(RESERVATION_HOLD_HOURS));
+            reservationRepository.update(reservation);
+        }
+        return toReservationDTO(reservation);
+    }
+
+    List<ReservationDTO> getMyReservations(String userId) {
+        String validatedUserId = requireText(userId, "userId");
+        synchronized (circulationLock) {
+            cleanExpiredReservations();
+            return reservationRepository.findByUserId(validatedUserId).stream()
+                    .sorted(Comparator.comparing(Reservation::createdAt).reversed()
+                            .thenComparing(Reservation::reservationId))
+                    .map(this::toReservationDTO)
+                    .toList();
+        }
+    }
+
+    ReservationDTO cancelReservation(String userId, ReservationIdRequest request) {
+        String validatedUserId = requireText(userId, "userId");
+        Objects.requireNonNull(request, "request must not be null");
+        String reservationId = boundedText(
+                request.getReservationId(), "预约编号", 50);
+        synchronized (circulationLock) {
+            return inTransaction(() -> {
+                LocalDateTime now = now();
+                expireReservations(now);
+                Reservation reservation = reservationRepository.findById(reservationId)
+                        .filter(value -> value.userId().equals(validatedUserId))
+                        .orElseThrow(() -> failure(
+                                ErrorCodes.LIBRARY_RESERVATION_NOT_FOUND,
+                                "预约不存在，请刷新列表"));
+                if (!reservation.isActive()) {
+                    throw failure(ErrorCodes.LIBRARY_RESERVATION_NOT_CANCELLABLE,
+                            "只有排队中或待取的预约可以取消");
+                }
+                Reservation canceled = reservation.canceledAt(now);
+                reservationRepository.update(canceled);
+                releaseAssignedCopy(reservation, now, true);
+                return toReservationDTO(canceled);
+            });
+        }
+    }
+
     void borrowCopy(String userId, CopyBorrowRequest request) {
         String validatedUserId = requireText(userId, "userId");
         Objects.requireNonNull(request, "request must not be null");
         String barcode = requireText(request.getBarcode(), "barcode");
         synchronized (circulationLock) {
-            transactionManager.execute(() -> borrowCopyAtomically(validatedUserId, barcode));
+            transactionManager.execute(() -> {
+                LocalDateTime now = now();
+                expireReservations(now);
+                borrowCopyAtomically(validatedUserId, barcode, now);
+            });
         }
     }
 
-    private void borrowCopyAtomically(String userId, String barcode) {
+    private void borrowCopyAtomically(String userId, String barcode, LocalDateTime borrowTime) {
         BookCopy copy = bookCopyRepository.findByBarcode(barcode)
                 .orElseThrow(() -> failure(ErrorCodes.LIBRARY_COPY_NOT_FOUND,
                         "The scanned copy barcode does not exist."));
@@ -366,14 +543,21 @@ final class LibraryService {
             throw failure(ErrorCodes.LIBRARY_COPY_NOT_AVAILABLE,
                     "This title is not open for borrowing.");
         }
-        if (copy.status() != BookCopyStatus.AVAILABLE) {
+        Reservation assignedReservation = reservationForAssignedCopy(copy.copyId()).orElse(null);
+        if (copy.status() == BookCopyStatus.RESERVED
+                && (assignedReservation == null
+                || !assignedReservation.userId().equals(userId))) {
+            throw failure(ErrorCodes.LIBRARY_COPY_RESERVED_FOR_OTHER,
+                    "该单册已为其他读者预约保留");
+        }
+        if (copy.status() != BookCopyStatus.AVAILABLE
+                && copy.status() != BookCopyStatus.RESERVED) {
             throw failure(ErrorCodes.LIBRARY_COPY_NOT_AVAILABLE,
                     "This physical copy is not available for borrowing.");
         }
 
         List<BorrowRecord> currentBorrows =
                 borrowRecordRepository.findBorrowedByUserId(userId);
-        LocalDateTime borrowTime = LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
         if (currentBorrows.stream().anyMatch(record -> record.isOverdueAt(borrowTime))) {
             throw failure(ErrorCodes.LIBRARY_OVERDUE_BORROW_EXISTS,
                     "Return overdue books before borrowing another book.");
@@ -397,6 +581,16 @@ final class LibraryService {
         } catch (RuntimeException exception) {
             bookCopyRepository.update(copy);
             throw exception;
+        }
+        Reservation activeReservation = assignedReservation != null
+                ? assignedReservation
+                : activeReservationForUserAndBook(userId, copy.bookId()).orElse(null);
+        if (activeReservation != null) {
+            reservationRepository.update(activeReservation.fulfilledAt(borrowTime));
+            if (activeReservation.assignedCopyId() != null
+                    && !activeReservation.assignedCopyId().equals(copy.copyId())) {
+                releaseAssignedCopy(activeReservation, borrowTime, true);
+            }
         }
     }
 
@@ -446,11 +640,16 @@ final class LibraryService {
         Objects.requireNonNull(request, "request must not be null");
         String barcode = requireText(request.getBarcode(), "barcode");
         synchronized (circulationLock) {
-            transactionManager.execute(() -> returnCopyAtomically(validatedUserId, barcode));
+            transactionManager.execute(() -> {
+                LocalDateTime now = now();
+                expireReservations(now);
+                returnCopyAtomically(validatedUserId, barcode, now);
+            });
         }
     }
 
-    private void returnCopyAtomically(String userId, String barcode) {
+    private void returnCopyAtomically(
+            String userId, String barcode, LocalDateTime returnTime) {
         BookCopy copy = bookCopyRepository.findByBarcode(barcode)
                 .orElseThrow(() -> failure(ErrorCodes.LIBRARY_COPY_NOT_FOUND,
                         "The scanned copy barcode does not exist."));
@@ -467,8 +666,7 @@ final class LibraryService {
                     "The catalog record for this copy does not exist.");
         }
 
-        BorrowRecord returned = record.returnedAt(
-                LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS));
+        BorrowRecord returned = record.returnedAt(returnTime);
         bookCopyRepository.update(copy.withStatus(BookCopyStatus.WAITING_SHELVING));
         try {
             borrowRecordRepository.update(returned);
@@ -483,21 +681,157 @@ final class LibraryService {
         Objects.requireNonNull(request, "request must not be null");
         String copyId = requireText(request.getCopyId(), "copyId");
         synchronized (circulationLock) {
-            BookCopy copy = bookCopyRepository.findById(copyId)
-                    .orElseThrow(() -> failure(ErrorCodes.LIBRARY_COPY_NOT_FOUND,
-                            "The physical copy does not exist."));
-            if (copy.status() != BookCopyStatus.WAITING_SHELVING) {
-                throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
-                        "Only a returned copy waiting for shelving can be shelved.");
-            }
-            if (borrowRecordRepository.findBorrowedByCopyId(copyId).isPresent()) {
-                throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
-                        "A copy with an active borrow record cannot be shelved.");
-            }
-            BookCopy shelved = copy.withStatus(BookCopyStatus.AVAILABLE);
-            bookCopyRepository.update(shelved);
-            return toBookCopyDTO(shelved);
+            return inTransaction(() -> {
+                LocalDateTime now = now();
+                expireReservations(now);
+                BookCopy copy = bookCopyRepository.findById(copyId)
+                        .orElseThrow(() -> failure(ErrorCodes.LIBRARY_COPY_NOT_FOUND,
+                                "The physical copy does not exist."));
+                if (copy.status() != BookCopyStatus.WAITING_SHELVING) {
+                    throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
+                            "Only a returned copy waiting for shelving can be shelved.");
+                }
+                if (borrowRecordRepository.findBorrowedByCopyId(copyId).isPresent()) {
+                    throw failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
+                            "A copy with an active borrow record cannot be shelved.");
+                }
+                BookCopy shelved = copy.withStatus(BookCopyStatus.AVAILABLE);
+                bookCopyRepository.update(shelved);
+                return toBookCopyDTO(assignAvailableCopy(shelved, now));
+            });
         }
+    }
+
+    private void cleanExpiredReservations() {
+        transactionManager.execute(() -> expireReservations(now()));
+    }
+
+    private void expireReservations(LocalDateTime now) {
+        reservationRepository.findAll().stream()
+                .filter(reservation ->
+                        reservation.status() == ReservationStatus.READY_FOR_PICKUP)
+                .filter(reservation -> !reservation.expiresAt().isAfter(now))
+                .sorted(Comparator.comparing(Reservation::expiresAt)
+                        .thenComparing(Reservation::reservationId))
+                .toList()
+                .forEach(reservation -> {
+                    reservationRepository.update(
+                            reservation.expiredAt(reservation.expiresAt()));
+                    releaseAssignedCopy(reservation, now, true);
+                });
+    }
+
+    private void cancelActiveReservationsForBook(String bookId, LocalDateTime now) {
+        reservationRepository.findAll().stream()
+                .filter(Reservation::isActive)
+                .filter(reservation -> reservation.bookId().equals(bookId))
+                .sorted(Comparator.comparing(Reservation::createdAt)
+                        .thenComparing(Reservation::reservationId))
+                .toList()
+                .forEach(reservation -> {
+                    reservationRepository.update(reservation.canceledAt(now));
+                    releaseAssignedCopy(reservation, now, false);
+                });
+    }
+
+    private void releaseAssignedCopy(
+            Reservation reservation, LocalDateTime now, boolean assignNext) {
+        if (reservation.assignedCopyId() == null) {
+            return;
+        }
+        BookCopy copy = requireCopy(reservation.assignedCopyId());
+        if (copy.status() != BookCopyStatus.RESERVED
+                || !copy.bookId().equals(reservation.bookId())
+                || !copy.location().equals(reservation.pickupLocation())) {
+            throw new IllegalStateException(
+                    "Reservation and reserved physical copy are inconsistent.");
+        }
+        BookCopy available = copy.withStatus(BookCopyStatus.AVAILABLE);
+        bookCopyRepository.update(available);
+        if (assignNext) {
+            assignAvailableCopy(available, now);
+        }
+    }
+
+    private BookCopy assignAvailableCopy(BookCopy copy, LocalDateTime now) {
+        if (copy.status() != BookCopyStatus.AVAILABLE) {
+            throw new IllegalArgumentException("Only an available copy can be assigned.");
+        }
+        BookDTO book = requireAnyBook(copy.bookId());
+        if (!"ACTIVE".equals(book.getStatus())) {
+            return copy;
+        }
+        Reservation next = waitingReservations(copy.bookId(), copy.location()).stream()
+                .findFirst().orElse(null);
+        if (next == null) {
+            return copy;
+        }
+        BookCopy reserved = copy.withStatus(BookCopyStatus.RESERVED);
+        bookCopyRepository.update(reserved);
+        reservationRepository.update(next.readyForPickup(
+                reserved.copyId(), now, now.plusHours(RESERVATION_HOLD_HOURS)));
+        return reserved;
+    }
+
+    private List<Reservation> waitingReservations(String bookId, String location) {
+        return reservationRepository.findAll().stream()
+                .filter(reservation -> reservation.status() == ReservationStatus.WAITING)
+                .filter(reservation -> reservation.bookId().equals(bookId))
+                .filter(reservation -> reservation.pickupLocation().equals(location))
+                .sorted(Comparator.comparing(Reservation::createdAt)
+                        .thenComparing(Reservation::reservationId))
+                .toList();
+    }
+
+    private Optional<Reservation> reservationForAssignedCopy(String copyId) {
+        return reservationRepository.findAll().stream()
+                .filter(reservation ->
+                        reservation.status() == ReservationStatus.READY_FOR_PICKUP)
+                .filter(reservation -> copyId.equals(reservation.assignedCopyId()))
+                .findFirst();
+    }
+
+    private Optional<Reservation> activeReservationForUserAndBook(
+            String userId, String bookId) {
+        return reservationRepository.findByUserId(userId).stream()
+                .filter(Reservation::isActive)
+                .filter(reservation -> reservation.bookId().equals(bookId))
+                .findFirst();
+    }
+
+    private ReservationDTO toReservationDTO(Reservation reservation) {
+        BookDTO book = requireAnyBook(reservation.bookId());
+        String barcode = reservation.assignedCopyId() == null ? null
+                : requireCopy(reservation.assignedCopyId()).barcode();
+        Integer queuePosition = null;
+        if (reservation.status() == ReservationStatus.WAITING) {
+            List<Reservation> queue = waitingReservations(
+                    reservation.bookId(), reservation.pickupLocation());
+            int index = java.util.stream.IntStream.range(0, queue.size())
+                    .filter(value -> queue.get(value).reservationId()
+                            .equals(reservation.reservationId()))
+                    .findFirst().orElse(-1);
+            queuePosition = index < 0 ? null : index + 1;
+        }
+        return new ReservationDTO(reservation.reservationId(), book.getBookId(),
+                book.getIsbn(), book.getTitle(), book.getAuthor(),
+                reservation.pickupLocation(), barcode, reservation.createdAt(),
+                reservation.readyAt(), reservation.expiresAt(), reservation.closedAt(),
+                reservation.status().name(), queuePosition);
+    }
+
+    private String nextReservationId() {
+        return requireText(reservationIdSupplier.get(), "reservationId");
+    }
+
+    private LocalDateTime now() {
+        return LocalDateTime.now(clock).truncatedTo(ChronoUnit.SECONDS);
+    }
+
+    private <T> T inTransaction(Supplier<T> operation) {
+        AtomicReference<T> result = new AtomicReference<>();
+        transactionManager.execute(() -> result.set(operation.get()));
+        return result.get();
     }
 
     private BookDTO withInventorySummary(BookDTO book) {

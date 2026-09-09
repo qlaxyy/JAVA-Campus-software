@@ -26,7 +26,7 @@ class LibraryServerModuleTest {
             Role.USER, Set.of(AdminScope.LIBRARY));
 
     @Test
-    void publicActionContractContainsOnlyTheFinalPhaseThreeActions() throws Exception {
+    void publicActionContractContainsTheReservationCoreActions() throws Exception {
         Set<String> actions = Arrays.stream(LibraryActions.class.getDeclaredFields())
                 .filter(field -> Modifier.isPublic(field.getModifiers()) && Modifier.isStatic(field.getModifiers())
                         && field.getType() == String.class)
@@ -37,7 +37,9 @@ class LibraryServerModuleTest {
                 LibraryActions.SET_BOOK_STATUS, LibraryActions.ADD_BOOK_COPY, LibraryActions.LIST_BOOK_COPIES,
                 LibraryActions.UPDATE_BOOK_COPY, LibraryActions.SHELVE_BOOK_COPY,
                 LibraryActions.WITHDRAW_BOOK_COPY, LibraryActions.RESTORE_BOOK_COPY,
-                LibraryActions.ADMIN_QUERY_BORROWS), actions);
+                LibraryActions.ADMIN_QUERY_BORROWS, LibraryActions.CREATE_RESERVATION,
+                LibraryActions.GET_MY_RESERVATIONS,
+                LibraryActions.CANCEL_RESERVATION), actions);
     }
 
     @Test
@@ -51,6 +53,16 @@ class LibraryServerModuleTest {
                 READER.getToken(), new CopyBorrowRequest("SEU-B001-001")).getCode());
         assertEquals(ErrorCodes.COMMON_INVALID_REQUEST, dispatch(router, LibraryActions.GET_BORROW_RECORDS,
                 READER.getToken(), "forged-user-id").getCode());
+        assertEquals(ErrorCodes.AUTH_REQUIRED, dispatch(router,
+                LibraryActions.CREATE_RESERVATION, null,
+                new CreateReservationRequest("B001", "九龙湖校区—中文图书阅览室3"))
+                .getCode());
+        assertEquals(ErrorCodes.COMMON_INVALID_REQUEST, dispatch(router,
+                LibraryActions.CREATE_RESERVATION, READER.getToken(),
+                new BookSearchRequest("", null)).getCode());
+        assertEquals(ErrorCodes.COMMON_INVALID_REQUEST, dispatch(router,
+                LibraryActions.GET_MY_RESERVATIONS, READER.getToken(),
+                "forged-user-id").getCode());
         assertTrue(dispatch(router, LibraryActions.LIST_CATEGORIES, READER.getToken(), null).isSuccess());
 
         AddBookRequest add = new AddBookRequest("9787111000000", "测试", "作者", "C001", "", null, "");
@@ -86,6 +98,20 @@ class LibraryServerModuleTest {
         BorrowRecordDTO record = assertInstanceOf(BorrowRecordDTO.class,
                 assertInstanceOf(java.util.List.class, records.getData()).getFirst());
         assertEquals("SEU-B001-001", record.getBarcode());
+
+        Response created = dispatch(router, LibraryActions.CREATE_RESERVATION,
+                READER.getToken(), new CreateReservationRequest(
+                        "B002", "九龙湖校区—中文图书阅览室3"));
+        assertTrue(created.isSuccess());
+        ReservationDTO reservation = assertInstanceOf(ReservationDTO.class, created.getData());
+        Response mine = dispatch(router, LibraryActions.GET_MY_RESERVATIONS,
+                READER.getToken(), null);
+        ReservationDTO loaded = assertInstanceOf(ReservationDTO.class,
+                assertInstanceOf(java.util.List.class, mine.getData()).getFirst());
+        assertEquals(reservation.getReservationId(), loaded.getReservationId());
+        assertTrue(dispatch(router, LibraryActions.CANCEL_RESERVATION,
+                READER.getToken(), new ReservationIdRequest(
+                        reservation.getReservationId())).isSuccess());
     }
 
     private static ActionRouter router() {

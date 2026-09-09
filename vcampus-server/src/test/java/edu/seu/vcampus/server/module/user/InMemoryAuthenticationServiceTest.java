@@ -4,6 +4,7 @@ import edu.seu.vcampus.common.user.LoginRequest;
 import edu.seu.vcampus.common.user.PasswordProof;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.security.UserIdentity;
+import edu.seu.vcampus.common.user.SaveTeacherProfileRequest;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -99,6 +100,36 @@ class InMemoryAuthenticationServiceTest {
         clock.advance(Duration.ofMinutes(10));
         assertFalse(loginWithPassword(authentication, "wrong-password").isPresent());
         assertTrue(loginWithPassword(authentication, "123456").isPresent());
+    }
+
+    @Test
+    void superAdministratorMaintainsTeacherQualificationWithoutChangingRole() {
+        InMemoryAuthenticationService authentication = new InMemoryAuthenticationService();
+
+        assertTrue(authentication.teacherDirectory()
+                .findByUserId("U-COURSE-TEACHER-001").isPresent());
+        assertTrue(authentication.teacherDirectory()
+                .findByUserId("U-TEACHER-001").isEmpty());
+
+        authentication.teachers().saveProfile(
+                new SaveTeacherProfileRequest(
+                        "U-STUDENT-001", "电子科学与工程学院", "实验师", true),
+                "U-ADMIN-001");
+
+        assertEquals("实验师", authentication.teacherDirectory()
+                .findByUserId("U-STUDENT-001").orElseThrow().title());
+        assertEquals(edu.seu.vcampus.common.user.Role.USER,
+                authentication.users().findById("U-STUDENT-001").orElseThrow().role());
+
+        authentication.teachers().saveProfile(
+                new SaveTeacherProfileRequest(
+                        "U-STUDENT-001", "电子科学与工程学院", "实验师", false),
+                "U-ADMIN-001");
+        assertTrue(authentication.teacherDirectory()
+                .findByUserId("U-STUDENT-001").isEmpty());
+        assertFalse(authentication.teachers().listProfiles().getTeachers().stream()
+                .filter(profile -> profile.getUserId().equals("U-STUDENT-001"))
+                .findFirst().orElseThrow().isActive());
     }
 
     private static SessionInfo login(InMemoryAuthenticationService authentication) {

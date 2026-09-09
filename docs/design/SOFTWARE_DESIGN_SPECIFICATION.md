@@ -207,7 +207,7 @@ flowchart LR
 
 ### 5.1 模块背景
 
-用户登录模块是所有业务模块的统一入口。它只确认“当前账号是谁、具有哪些账号级权限和模块管理范围”，不在全局判断教师、医生、读者等业务资格。各业务模块得到 `userId` 后，再查询本模块的数据完成专业身份判断。开发期的 `20260008` 是无管理范围的普通账号；它只有在选课子系统的教师名单中绑定对应 `userId` 后，才具备教师业务资格。
+用户登录模块是所有业务模块的统一入口。它确认“当前账号是谁、具有哪些账号级权限和模块管理范围”。学校统一维护的教师基础资格保存在 `tblTeacherProfile`，由超级管理员设置；选课和学籍服务器通过 `ServerContext.teachers()` 按 `userId` 查询。医生等专业资料仍由所属业务模块维护。开发期的 `20260008` 已绑定一条有效公共教师档案。
 
 ### 5.2 用例设计
 
@@ -415,6 +415,30 @@ classDiagram
         +findSession(String token) Optional~SessionInfo~
     }
 
+    class TeacherRegistryService {
+        -UserRepository users
+        -TeacherRepository teachers
+        +findByUserId(String userId) Optional~TeacherIdentity~
+        +findActiveTeachers() List~TeacherIdentity~
+        ~saveProfile(SaveTeacherProfileRequest request, String actorUserId) TeacherProfileView
+    }
+
+    class TeacherRepository {
+        <<interface>>
+        ~findByUserId(String userId) Optional~TeacherProfile~
+        ~findAll() List~TeacherProfile~
+        ~save(TeacherProfile profile) void
+    }
+
+    class AccessTeacherRepository
+    class InMemoryTeacherRepository
+    class TeacherProfile {
+        -String userId
+        -String department
+        -String title
+        -boolean active
+    }
+
     class LoginAttemptLimiter {
         -int maximumFailures
         -Duration failureWindow
@@ -465,7 +489,13 @@ classDiagram
     UserServerModule ..> ActionRouter : 注册处理器
     UserServerModule --> InMemoryAuthenticationService : 持有
     InMemoryAuthenticationService *-- LoginAttemptLimiter : 创建并管理
+    InMemoryAuthenticationService *-- TeacherRegistryService : 创建并管理
     InMemoryAuthenticationService --> UserRepository : 通过接口查询
+    TeacherRegistryService --> UserRepository : 合并账号基础信息
+    TeacherRegistryService --> TeacherRepository : 维护教师资格
+    TeacherRepository <|.. AccessTeacherRepository : 生产实现
+    TeacherRepository <|.. InMemoryTeacherRepository : 测试实现
+    TeacherRepository --> TeacherProfile : 保存
     UserRepository <|.. InMemoryUserRepository : 实现
     UserRepository <|.. AccessUserRepository : 生产实现
     InMemoryUserRepository "1" o-- "0..*" UserAccount : 保存账号
@@ -531,10 +561,39 @@ classDiagram
         HOSPITAL
     }
 
+    class SaveTeacherProfileRequest {
+        -String userId
+        -String department
+        -String title
+        -boolean active
+    }
+
+    class BatchSaveTeacherProfilesRequest {
+        -List~SaveTeacherProfileRequest~ teachers
+    }
+
+    class TeacherProfileView {
+        -String userId
+        -String campusCardNumber
+        -String displayName
+        -String department
+        -String title
+        -boolean active
+    }
+
+    class TeacherProfileListResponse {
+        -List~TeacherProfileView~ teachers
+    }
+
     Request --> LoginRequest : data 为登录 DTO
     Response --> SessionInfo : 登录成功时作为 data
     SessionInfo --> Role : 使用
     SessionInfo "1" o-- "0..*" AdminScope : 包含管理范围
+    Request --> SaveTeacherProfileRequest : 管理教师档案时作为 data
+    Request --> BatchSaveTeacherProfilesRequest : 批量导入时作为 data
+    BatchSaveTeacherProfilesRequest "1" o-- "1..*" SaveTeacherProfileRequest : 包含教师资料
+    Response --> TeacherProfileView : 教师查询或保存成功时作为 data
+    TeacherProfileListResponse "1" o-- "0..*" TeacherProfileView : 包含教师档案
 ```
 
 本节使用的关系符号如下：
@@ -629,6 +688,10 @@ classDiagram
 | `USER.ADMIN_UPDATE_STATUS` | 必填 | `UpdateUserStatusRequest` | `UserAccountView` | 启用或停用账号。 |
 | `USER.ADMIN_RESET_PASSWORD` | 必填 | `ResetUserPasswordRequest` | `UserAccountView` | 重置密码并清除该账号会话。 |
 | `USER.ADMIN_LIST_AUDIT_LOGS` | 必填 | `null` | `UserAuditLogResponse` | 超级管理员读取全部账号管理操作记录。 |
+| `USER.CURRENT_TEACHER_PROFILE` | 必填 | `null` | `TeacherProfileView` | 查询当前登录账号的有效教师档案；无教师资格时返回禁止访问。 |
+| `USER.ADMIN_LIST_TEACHERS` | 必填 | `null` | `TeacherProfileListResponse` | 超级管理员查看全部教师档案。 |
+| `USER.ADMIN_SAVE_TEACHER_PROFILE` | 必填 | `SaveTeacherProfileRequest` | `TeacherProfileView` | 超级管理员为已有账号创建或更新教师档案。 |
+| `USER.ADMIN_BATCH_SAVE_TEACHERS` | 必填 | `BatchSaveTeacherProfilesRequest` | `TeacherProfileListResponse` | 超级管理员批量新增或更新已有账号的教师档案。 |
 
 ### 11.2 Request
 
@@ -744,7 +807,7 @@ Swing 组件必须在事件分派线程中创建和更新。登录网络请求�
 
 - `AccessUserRepository` 首次连接时创建用户表；
 - `AccessUserAuditRepository` 首次连接时创建只追加的账号管理审计表；
-- `DemoUserAccounts` 在空库中初始化完整公开测试账号，并可在未占用 `20260008` 时为旧开发数据库补入普通教师演示账号；
+- `DemoUserAccounts` 在空库中初始化完整公开测试账号，并可在未占用 `20260008` 时为旧开发数据库补入教师演示账号；`TeacherRegistryService` 同步补入其公共教师档案；
 - 账号资料和 `AdminScope` 修改会跨服务器重启保留；
 - `InMemoryAuthenticationService` 在内存中保存会话；
 - `AccessHospitalRepository` 保存医生新增申请和已审核医生档案；
@@ -816,9 +879,23 @@ flowchart LR
 | `successful` | Yes/No | 是 | 是否成功。 |
 | `detailText` | Short Text(255) | 是 | 响应码和简短说明，不含凭据。 |
 
+#### 14.3.4 `tblTeacherProfile`
+
+该表由用户模块维护全校共用的教师基础资格。它不重复保存姓名和一卡通号；其他服务器模块以 `teacherUserId` 通过 `TeacherDirectory` 取得合并后的只读信息。教师与教学班的任课关系仍由选课模块保存。
+
+| 字段 | Access 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `teacherUserId` | Short Text(36) | 是 | 主键，关联 `tblUser.userId`。 |
+| `department` | Short Text(100) | 是 | 所属院系。 |
+| `teacherTitle` | Short Text(50) | 是 | 教师职称。 |
+| `active` | Yes/No | 是 | 教师资格是否有效，不影响普通账号登录。 |
+| `createdByUserId` | Short Text(36) | 是 | 首次建立档案的超级管理员。 |
+| `createdAt` | Date/Time | 是 | 首次建立时间。 |
+| `updatedAt` | Date/Time | 是 | 最近修改时间。 |
+
 ### 14.4 会话存储
 
-会话不写入 Access，而由用户服务器进程中的 `ConcurrentHashMap` 保存。每条记录包含创建时间和最后访问时间，空闲超时为 30 分钟，绝对有效期为 8 小时；每次成功查询会话会更新最后访问时间，但不会延长绝对有效期。其他服务器模块通过 `ServerContext.sessions()` 提供的只读 `SessionLookup` 查询 token；需要确认任意已有账号时，通过 `ServerContext.users()` 提供的 `UserDirectory` 按 `userId` 或一卡通号查询，只能得到 `userId`、一卡通号、姓名和启用状态。客户端不能调用 `ServerContext`，也不能直接读取服务器会话表或用户 DAO。
+会话不写入 Access，而由用户服务器进程中的 `ConcurrentHashMap` 保存。每条记录包含创建时间和最后访问时间，空闲超时为 30 分钟，绝对有效期为 8 小时；每次成功查询会话会更新最后访问时间，但不会延长绝对有效期。其他服务器模块通过 `ServerContext.sessions()` 提供的只读 `SessionLookup` 查询 token；需要确认任意已有账号时，通过 `ServerContext.users()` 提供的 `UserDirectory` 按 `userId` 或一卡通号查询，只能得到 `userId`、一卡通号、姓名和启用状态；需要确认教师资格时，通过 `ServerContext.teachers()` 提供的 `TeacherDirectory` 查询。客户端不能调用 `ServerContext`，也不能直接读取服务器会话表或用户 DAO。
 
 如需跨进程共享或服务器重启后保持登录，应单独设计持久化方案，不能直接把完整 token 写入普通日志、数据库明文字段或审计表。
 

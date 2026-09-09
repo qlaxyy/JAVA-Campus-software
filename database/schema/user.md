@@ -4,7 +4,7 @@
 
 - 模块：用户管理、登录、会话与管理员授权
 - 对应 Epic：[#1](https://github.com/qlaxyy/JAVA-Campus-software/issues/1)
-- 状态：账号、管理范围和账号管理审计已接入 Access DAO；慢哈希和完整状态模型待实现
+- 状态：账号、管理范围、公共教师档案和账号管理审计已接入 Access DAO；慢哈希和完整状态模型待实现
 
 ## 2. 表清单
 
@@ -13,6 +13,7 @@
 | `tblUser` | 一卡通登录账号和账号级权限 | `userId` | `username` 保存唯一一卡通号；密码只存校验值；状态控制登录 |
 | `tblUserAdminScope` | 账号附加的业务管理范围 | `userAdminScopeId` | `(userId, moduleCode)` 唯一 |
 | `tblUserAuditLog` | 超级管理员账号操作记录 | `auditId` | 只追加；不记录密码、密码 proof 或完整 token |
+| `tblTeacherProfile` | 全校公共教师资格与教师基础档案 | `teacherUserId` | 每个账号最多一条；以 `userId` 关联账号；停用资格不删除账号 |
 
 会话保存在服务器内存，暂不落库。服务器记录创建时间和最后访问时间：连续 30 分钟无操作或创建满 8 小时后 token 失效。将来需要跨进程或重启保持会话时再单独评审会话表。
 
@@ -61,16 +62,30 @@
 | `successful` | Yes/No | 是 | 无 | 操作是否成功 |
 | `detailText` | Short Text(255) | 是 | 无 | 响应码和简短结果，不含敏感凭据 |
 
+### `tblTeacherProfile`
+
+| 字段 | Access 类型 | 必填 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `teacherUserId` | Short Text(36) | 是 | 无 | 主键，关联 `tblUser.userId` |
+| `department` | Short Text(100) | 是 | 无 | 教师所属院系 |
+| `teacherTitle` | Short Text(50) | 是 | 无 | 教师职称 |
+| `active` | Yes/No | 是 | `TRUE` | 教师资格是否有效；不控制账号能否登录 |
+| `createdByUserId` | Short Text(36) | 是 | 无 | 首次建立档案的超级管理员 |
+| `createdAt` | Date/Time | 是 | 当前时间 | 首次建立时间 |
+| `updatedAt` | Date/Time | 是 | 当前时间 | 最近修改时间 |
+
 ## 4. 关系、索引与业务约束
 
 - `tblUser.username` 建唯一索引。
 - `tblUserAdminScope.userId + moduleCode` 建联合唯一索引。
+- `tblTeacherProfile.teacherUserId` 与 `tblUser.userId` 一一对应；姓名和一卡通号始终从 `tblUser` 读取，不重复保存。
 - `USER` 只能存在零或一条范围记录，即一个普通账号最多管理一个子系统；`SUPER_ADMIN` 不依赖范围记录，由角色隐式覆盖所有业务模块。
 - 只有 `SUPER_ADMIN` 可以新增管理员、分配/撤销范围、修改角色、启停账号和重置他人密码。
 - 至少保留一个 `ACTIVE` 的 `SUPER_ADMIN`；禁止停用自己、删除自己或撤销最后一个启用超级管理员。
 - 管理员只能发起密码重置，不能查看或恢复原密码。
 - 修改角色、范围、账号状态或密码后，服务器必须清除该账号已有会话，使新权限立即生效。
-- 业务模块只读取身份和范围，不跨模块更新上述表。
+- 只有超级管理员能维护公共教师档案。选课和学籍服务器通过只读 `TeacherDirectory` 查询有效教师，不直接读写用户模块 DAO。
+- 任课教师与教学班的绑定属于选课模块，不写入 `tblTeacherProfile`。
 
 ## 5. 开发期演示数据
 
@@ -84,7 +99,7 @@
 | `20260005` | `USER` | `LIBRARY` | 图书馆管理授权 |
 | `20260006` | `USER` | `SHOP` | 商店管理授权 |
 | `20260007` | `USER` | `HOSPITAL` | 医院管理授权；可提交医生申请但不能审核 |
-| `20260008` | `USER` | 无 | 普通教师演示账号；教师资格由选课子系统根据 `userId` 绑定和判断 |
+| `20260008` | `USER` | 无 | 教师演示账号；公共教师档案绑定 `U-COURSE-TEACHER-001`，任课关系由选课模块维护 |
 
 空的 `vCampus.accdb` 首次启动时会写入这些虚构账号；旧开发数据库若未占用 `20260008`，服务器启动时也会补入教师演示账号，但不会覆盖同号账号或其他修改。不能提交真实个人信息或密码。
 
@@ -102,6 +117,10 @@
 | `USER.ADMIN_UPDATE_STATUS` | `SUPER_ADMIN` | 启用或停用账号，不物理删除 |
 | `USER.ADMIN_RESET_PASSWORD` | `SUPER_ADMIN` | 重置账号密码并清除该账号已有会话 |
 | `USER.ADMIN_LIST_AUDIT_LOGS` | `SUPER_ADMIN` | 查看全部账号管理操作记录 |
+| `USER.CURRENT_TEACHER_PROFILE` | 任意已登录账号 | 查询本人是否具有有效教师资格及院系、职称 |
+| `USER.ADMIN_LIST_TEACHERS` | `SUPER_ADMIN` | 查看全部教师档案，包括已停用资格 |
+| `USER.ADMIN_SAVE_TEACHER_PROFILE` | `SUPER_ADMIN` | 为已有账号新增或更新教师档案，并启用或停用教师资格 |
+| `USER.ADMIN_BATCH_SAVE_TEACHERS` | `SUPER_ADMIN` | 批量新增或更新已有账号的教师档案 |
 
 上述账号 Action 已通过 `UserRepository` 使用 Access。新增、批量导入、编辑、启停和重置密码的成功结果及业务失败会追加到 `tblUserAuditLog`；查询审计记录只允许 `SUPER_ADMIN`，且没有修改或删除审计记录的 Action。创建和编辑普通账号时，客户端提示“选择 0–1 个权限”，服务器也会拒绝同时提交多个管理范围。第一版不提供创建其他超级管理员或修改全局角色。
 
@@ -111,8 +130,12 @@
 `123456`，文件中不保存密码和管理范围。服务器会再次检查已有账号和文件内重复账号；
 任意一行失败时 Access 事务整体回滚。
 
+教师管理页面使用独立的 UTF-8 CSV，首行固定为
+`campusCardNumber,department,title`。一卡通号必须已经存在于账号名单；导入只新增或更新
+`tblTeacherProfile` 并启用教师资格，不创建、禁用或删除登录账号，任意一行失败时整批回滚。
+
 旧开发数据库启动时会把 `student001`、`teacher001`、`admin` 等 8 个演示登录名迁移为
-`20260000` 至 `20260007`，保留原 `userId`、显示名称、角色、管理范围和启停状态；新增的普通教师演示账号固定使用 `20260008`。由于开发期
+`20260000` 至 `20260007`，保留原 `userId`、显示名称、角色、管理范围和启停状态；新增的教师演示账号固定使用 `20260008`，并在 `tblTeacherProfile` 中建立资格记录。由于开发期
 `passwordProof` 包含登录名，发生迁移的账号密码统一重置为公开测试密码 `123456`。
 已有开发数据库中的演示账号也会按其稳定的 `userId` 自动整理为上述连续编号；迁移过程不会改变人员身份和权限，但密码会因一卡通号变化重置为 `123456`。
 

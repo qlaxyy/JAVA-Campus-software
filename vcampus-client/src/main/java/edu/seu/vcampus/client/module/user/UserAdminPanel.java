@@ -59,9 +59,9 @@ public final class UserAdminPanel extends JPanel {
     private final JButton editButton = new JButton("编辑账号");
     private final JButton statusButton = new JButton("启用/禁用");
     private final JButton resetButton = new JButton("重置密码");
-    private final JButton refreshButton = new JButton("刷新");
     private final JButton doctorReviewButton = new JButton("医生申请审核");
     private final JButton auditButton = new JButton("操作记录");
+    private final JButton teacherManagementButton = new JButton("教师管理");
     private boolean loaded;
 
     public UserAdminPanel(ClientContext context) {
@@ -79,9 +79,9 @@ public final class UserAdminPanel extends JPanel {
         actions.add(editButton);
         actions.add(statusButton);
         actions.add(resetButton);
+        actions.add(teacherManagementButton);
         actions.add(doctorReviewButton);
         actions.add(auditButton);
-        actions.add(refreshButton);
 
         add(actions, BorderLayout.NORTH);
         add(new JScrollPane(table), BorderLayout.CENTER);
@@ -94,9 +94,9 @@ public final class UserAdminPanel extends JPanel {
         editButton.addActionListener(event -> editAccount());
         statusButton.addActionListener(event -> changeStatus());
         resetButton.addActionListener(event -> resetPassword());
+        teacherManagementButton.addActionListener(event -> openTeacherManagement());
         doctorReviewButton.addActionListener(event -> loadDoctorApplications());
         auditButton.addActionListener(event -> loadAuditLogs());
-        refreshButton.addActionListener(event -> refreshAccounts());
         updateButtons();
 
         addHierarchyListener(event -> {
@@ -285,6 +285,26 @@ public final class UserAdminPanel extends JPanel {
                 });
     }
 
+    private void openTeacherManagement() {
+        runRequest(
+                "正在准备教师管理……",
+                () -> context.send(UserActions.ADMIN_LIST_ACCOUNTS, null),
+                response -> {
+                    if (response.isSuccess()
+                            && response.getData() instanceof UserAccountListResponse data) {
+                        tableModel.setAccounts(data.getAccounts());
+                        TeacherManagementDialog dialog = new TeacherManagementDialog(
+                                SwingUtilities.getWindowAncestor(this),
+                                context,
+                                data.getAccounts());
+                        dialog.setVisible(true);
+                        statusLabel.setText("教师管理已关闭");
+                    } else {
+                        showFailure(response);
+                    }
+                });
+    }
+
     private void loadAuditLogs() {
         runRequest(
                 "正在加载操作记录……",
@@ -350,6 +370,12 @@ public final class UserAdminPanel extends JPanel {
         }
         if (UserActions.ADMIN_RESET_PASSWORD.equals(actionCode)) {
             return "重置密码";
+        }
+        if (UserActions.ADMIN_SAVE_TEACHER_PROFILE.equals(actionCode)) {
+            return "维护教师档案";
+        }
+        if (UserActions.ADMIN_BATCH_SAVE_TEACHERS.equals(actionCode)) {
+            return "批量导入教师";
         }
         return actionCode;
     }
@@ -480,10 +506,10 @@ public final class UserAdminPanel extends JPanel {
     private void setActionsEnabled(boolean enabled) {
         addButton.setEnabled(enabled);
         importButton.setEnabled(enabled);
-        refreshButton.setEnabled(enabled);
         editButton.setEnabled(enabled);
         statusButton.setEnabled(enabled);
         resetButton.setEnabled(enabled);
+        teacherManagementButton.setEnabled(enabled);
         doctorReviewButton.setEnabled(enabled);
         auditButton.setEnabled(enabled);
     }

@@ -2,12 +2,22 @@ package edu.seu.vcampus.client.module.course;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.module.ClientModule;
-import edu.seu.vcampus.common.course.TemporaryCourseTeacherDirectory;
 import edu.seu.vcampus.common.protocol.ModuleNames;
+import edu.seu.vcampus.common.protocol.ErrorCodes;
+import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.user.Role;
 import edu.seu.vcampus.common.user.SessionInfo;
+import edu.seu.vcampus.common.user.TeacherProfileView;
+import edu.seu.vcampus.common.user.UserActions;
 
 import javax.swing.JComponent;
+import javax.swing.JButton;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.SwingWorker;
+import java.awt.BorderLayout;
+import java.io.IOException;
+import java.util.concurrent.ExecutionException;
 
 /**
  * 选课系统客户端入口。
@@ -63,28 +73,67 @@ public final class CourseClientModule
                 canEditGrades);
         }
 
-        /*
-         * =========================
-         * 2. 临时普通教师
-         * =========================
-         *
-         * 当前通过课程模块临时名单判断。
-         * 正式教师角色完成后替换此处。
-         */
-        if (TemporaryCourseTeacherDirectory
-            .isTeacher(
-                session.getUsername())) {
+        return new TeacherRoleResolvingView(context);
+    }
 
-            return new CourseTeacherView(
-                context);
+    /** Resolves teacher qualification from the server without blocking the Swing UI. */
+    private static final class TeacherRoleResolvingView extends JPanel {
+
+        private final ClientContext context;
+
+        private TeacherRoleResolvingView(ClientContext context) {
+            super(new BorderLayout());
+            this.context = context;
+            resolve();
         }
 
-        /*
-         * =========================
-         * 3. 普通学生
-         * =========================
-         */
-        return new CourseSelectionView(
-            context);
+        private void resolve() {
+            removeAll();
+            add(new JLabel("正在确认课程身份……", JLabel.CENTER), BorderLayout.CENTER);
+            revalidate();
+            repaint();
+            new SwingWorker<Response, Void>() {
+                @Override
+                protected Response doInBackground() throws IOException {
+                    return context.send(UserActions.CURRENT_TEACHER_PROFILE, null);
+                }
+
+                @Override
+                protected void done() {
+                    try {
+                        Response response = get();
+                        if (response.isSuccess()
+                                && response.getData() instanceof TeacherProfileView teacher) {
+                            show(new CourseTeacherView(context, teacher));
+                        } else if (ErrorCodes.AUTH_FORBIDDEN.equals(response.getCode())) {
+                            show(new CourseSelectionView(context));
+                        } else {
+                            showFailure(response.getMessage());
+                        }
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                        showFailure("身份查询已中断");
+                    } catch (ExecutionException exception) {
+                        showFailure("无法连接服务器");
+                    }
+                }
+            }.execute();
+        }
+
+        private void show(JComponent view) {
+            removeAll();
+            add(view, BorderLayout.CENTER);
+            revalidate();
+            repaint();
+        }
+
+        private void showFailure(String message) {
+            JPanel panel = new JPanel(new BorderLayout(8, 8));
+            panel.add(new JLabel(message, JLabel.CENTER), BorderLayout.CENTER);
+            JButton retry = new JButton("重试");
+            retry.addActionListener(event -> resolve());
+            panel.add(retry, BorderLayout.SOUTH);
+            show(panel);
+        }
     }
 }

@@ -149,8 +149,12 @@ public final class StudentServerModule implements ServerModule {
             return Response.success(request, "获取异动列表成功", (Serializable) list);
         }
 
-        // 非学籍管理员且非学生本人（例如教师或商店管理员）直接拦截
-        if (session.getUserId().toLowerCase().contains("teacher") || !session.canAdminister("student")) {
+        // 非学籍管理员且非学生本人（例如教师或商店管理员）直接拦截。
+        // 教师资格必须查公共教师表，不能根据 userId 文本猜测。
+        boolean isTeacher = context.teachers()
+                .findByUserId(session.getUserId())
+                .isPresent();
+        if (isTeacher || !session.canAdminister("student")) {
             if (queryStudentId != null && !queryStudentId.equalsIgnoreCase(currentUserId)) {
                 return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：无权调阅他人学籍异动");
             }

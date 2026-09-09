@@ -35,7 +35,6 @@ import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingWorker;
 import javax.swing.SwingUtilities;
-import javax.swing.JCheckBox;
 import javax.swing.JTextField;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
@@ -67,7 +66,8 @@ public final class UserAdminPanel extends JPanel {
     private final JButton refreshButton = new JButton("刷新");
     private final JButton doctorReviewButton = new JButton("医生申请审核");
     private final JButton auditButton = new JButton("操作记录");
-    private final JButton teacherProfileButton = new JButton("教师档案");
+    private final JButton teacherProfileButton = new JButton("新增/编辑教师");
+    private final JButton teacherStatusButton = new JButton("启用/停用教师");
     private final JButton teacherListButton = new JButton("教师名单");
     private boolean loaded;
 
@@ -87,6 +87,7 @@ public final class UserAdminPanel extends JPanel {
         actions.add(statusButton);
         actions.add(resetButton);
         actions.add(teacherProfileButton);
+        actions.add(teacherStatusButton);
         actions.add(teacherListButton);
         actions.add(doctorReviewButton);
         actions.add(auditButton);
@@ -104,6 +105,7 @@ public final class UserAdminPanel extends JPanel {
         statusButton.addActionListener(event -> changeStatus());
         resetButton.addActionListener(event -> resetPassword());
         teacherProfileButton.addActionListener(event -> editTeacherProfile());
+        teacherStatusButton.addActionListener(event -> changeTeacherStatus());
         teacherListButton.addActionListener(event -> loadTeacherProfiles());
         doctorReviewButton.addActionListener(event -> loadDoctorApplications());
         auditButton.addActionListener(event -> loadAuditLogs());
@@ -131,6 +133,7 @@ public final class UserAdminPanel extends JPanel {
         statusButton.setEnabled(selected);
         resetButton.setEnabled(selected);
         teacherProfileButton.setEnabled(selected);
+        teacherStatusButton.setEnabled(selected);
     }
 
     private void refreshAccounts() {
@@ -326,8 +329,6 @@ public final class UserAdminPanel extends JPanel {
                 existing == null ? "" : existing.getDepartment(), 24);
         JTextField title = new JTextField(
                 existing == null ? "" : existing.getTitle(), 24);
-        JCheckBox active = new JCheckBox(
-                "教师资格有效", existing == null || existing.isActive());
         JPanel form = new JPanel(new java.awt.GridLayout(0, 1, 4, 4));
         form.add(new JLabel("一卡通号：" + account.getUsername()));
         form.add(new JLabel("姓名：" + account.getDisplayName()));
@@ -335,11 +336,10 @@ public final class UserAdminPanel extends JPanel {
         form.add(department);
         form.add(new JLabel("职称"));
         form.add(title);
-        form.add(active);
         int result = JOptionPane.showConfirmDialog(
                 this,
                 form,
-                existing == null ? "新增教师档案" : "编辑教师档案",
+                existing == null ? "新增教师" : "编辑教师信息",
                 JOptionPane.OK_CANCEL_OPTION,
                 JOptionPane.PLAIN_MESSAGE);
         if (result != JOptionPane.OK_OPTION) {
@@ -347,7 +347,10 @@ public final class UserAdminPanel extends JPanel {
         }
         try {
             SaveTeacherProfileRequest request = new SaveTeacherProfileRequest(
-                    account.getUserId(), department.getText(), title.getText(), active.isSelected());
+                    account.getUserId(),
+                    department.getText(),
+                    title.getText(),
+                    existing == null || existing.isActive());
             runRequest(
                     "正在保存教师档案……",
                     () -> context.send(UserActions.ADMIN_SAVE_TEACHER_PROFILE, request),
@@ -361,6 +364,64 @@ public final class UserAdminPanel extends JPanel {
         } catch (IllegalArgumentException exception) {
             showValidationError("院系和职称不能为空。 ");
         }
+    }
+
+    private void changeTeacherStatus() {
+        UserAccountView selected = selectedAccount();
+        if (selected == null) {
+            return;
+        }
+        runRequest(
+                "正在加载教师档案……",
+                () -> context.send(UserActions.ADMIN_LIST_TEACHERS, null),
+                response -> {
+                    if (!response.isSuccess()
+                            || !(response.getData() instanceof TeacherProfileListResponse data)) {
+                        showFailure(response);
+                        return;
+                    }
+                    TeacherProfileView existing = data.getTeachers().stream()
+                            .filter(profile -> profile.getUserId().equals(selected.getUserId()))
+                            .findFirst()
+                            .orElse(null);
+                    if (existing == null) {
+                        JOptionPane.showMessageDialog(
+                                this,
+                                "该账号还没有教师档案，请先点击“新增/编辑教师”。",
+                                "教师资格",
+                                JOptionPane.INFORMATION_MESSAGE);
+                        statusLabel.setText("该账号尚未添加为教师");
+                        return;
+                    }
+                    boolean enable = !existing.isActive();
+                    String operation = enable ? "启用" : "停用";
+                    int result = JOptionPane.showConfirmDialog(
+                            this,
+                            "确定要" + operation + "教师“" + existing.getDisplayName()
+                                    + "”（" + existing.getCampusCardNumber() + "）吗？\n"
+                                    + "此操作不会停用或删除其登录账号。",
+                            operation + "教师资格",
+                            JOptionPane.YES_NO_OPTION);
+                    if (result == JOptionPane.YES_OPTION) {
+                        saveTeacherStatus(existing, enable);
+                    }
+                });
+    }
+
+    private void saveTeacherStatus(TeacherProfileView teacher, boolean active) {
+        SaveTeacherProfileRequest request = new SaveTeacherProfileRequest(
+                teacher.getUserId(), teacher.getDepartment(), teacher.getTitle(), active);
+        runRequest(
+                active ? "正在启用教师资格……" : "正在停用教师资格……",
+                () -> context.send(UserActions.ADMIN_SAVE_TEACHER_PROFILE, request),
+                response -> {
+                    if (response.isSuccess()) {
+                        statusLabel.setText(response.getMessage());
+                        JOptionPane.showMessageDialog(this, response.getMessage());
+                    } else {
+                        showFailure(response);
+                    }
+                });
     }
 
     private void loadTeacherProfiles() {
@@ -608,6 +669,7 @@ public final class UserAdminPanel extends JPanel {
         statusButton.setEnabled(enabled);
         resetButton.setEnabled(enabled);
         teacherProfileButton.setEnabled(enabled);
+        teacherStatusButton.setEnabled(enabled);
         teacherListButton.setEnabled(enabled);
         doctorReviewButton.setEnabled(enabled);
         auditButton.setEnabled(enabled);

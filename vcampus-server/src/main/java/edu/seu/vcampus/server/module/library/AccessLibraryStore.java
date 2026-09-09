@@ -20,6 +20,7 @@ final class AccessLibraryStore implements LibraryTransactionManager {
     private static final String COPY_TABLE = "tblBookCopy";
     private static final String CATEGORY_TABLE = "tblBookCategory";
     private static final String BORROW_TABLE = "tblBorrowRecord";
+    private static final String RESERVATION_TABLE = "tblReservation";
 
     private final AccessDatabase database;
     private final ThreadLocal<Connection> transactionConnection = new ThreadLocal<>();
@@ -143,6 +144,30 @@ final class AccessLibraryStore implements LibraryTransactionManager {
                         + "ON tblBorrowRecord (userId, [status])");
                 executeSql(connection, "CREATE INDEX ix_tblBorrowRecord_copy_status "
                         + "ON tblBorrowRecord (copyId, [status])");
+            }
+            if (!tableExists(connection, RESERVATION_TABLE)) {
+                executeSql(connection, "CREATE TABLE tblReservation ("
+                        + "reservationId TEXT(36) PRIMARY KEY, "
+                        + "userId TEXT(36) NOT NULL, "
+                        + "bookId TEXT(20) NOT NULL, "
+                        + "pickupLocation TEXT(100) NOT NULL, "
+                        + "assignedCopyId TEXT(36), "
+                        + "createdAt DATETIME NOT NULL, "
+                        + "readyAt DATETIME, "
+                        + "expiresAt DATETIME, "
+                        + "closedAt DATETIME, "
+                        + "[status] TEXT(30) NOT NULL, "
+                        + "CONSTRAINT fk_tblReservation_book FOREIGN KEY (bookId) "
+                        + "REFERENCES tblBook (bookId), "
+                        + "CONSTRAINT fk_tblReservation_copy FOREIGN KEY (assignedCopyId) "
+                        + "REFERENCES tblBookCopy (copyId))");
+                executeSql(connection, "CREATE INDEX ix_tblReservation_user_status "
+                        + "ON tblReservation (userId, [status])");
+                executeSql(connection, "CREATE INDEX ix_tblReservation_queue "
+                        + "ON tblReservation (bookId, pickupLocation, [status], "
+                        + "createdAt, reservationId)");
+                executeSql(connection, "CREATE INDEX ix_tblReservation_copy_status "
+                        + "ON tblReservation (assignedCopyId, [status])");
             }
         } catch (SQLException exception) {
             throw failure("Cannot initialize Access library schema.", exception);

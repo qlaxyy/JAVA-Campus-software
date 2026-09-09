@@ -44,6 +44,20 @@ public final class ErrorCodes {
     public static final String LIBRARY_INVALID_COPY_STATUS = "LIBRARY_INVALID_COPY_STATUS";
     public static final String LIBRARY_DUPLICATE_BARCODE = "LIBRARY_DUPLICATE_BARCODE";
     public static final String LIBRARY_INVALID_BOOK_STATUS = "LIBRARY_INVALID_BOOK_STATUS";
+    public static final String LIBRARY_RESERVATION_NOT_FOUND =
+            "LIBRARY_RESERVATION_NOT_FOUND";
+    public static final String LIBRARY_DUPLICATE_RESERVATION =
+            "LIBRARY_DUPLICATE_RESERVATION";
+    public static final String LIBRARY_RESERVATION_LIMIT_REACHED =
+            "LIBRARY_RESERVATION_LIMIT_REACHED";
+    public static final String LIBRARY_RESERVATION_COOLDOWN =
+            "LIBRARY_RESERVATION_COOLDOWN";
+    public static final String LIBRARY_RESERVATION_NOT_CANCELLABLE =
+            "LIBRARY_RESERVATION_NOT_CANCELLABLE";
+    public static final String LIBRARY_INVALID_PICKUP_LOCATION =
+            "LIBRARY_INVALID_PICKUP_LOCATION";
+    public static final String LIBRARY_COPY_RESERVED_FOR_OTHER =
+            "LIBRARY_COPY_RESERVED_FOR_OTHER";
 
     private ErrorCodes() {
     }

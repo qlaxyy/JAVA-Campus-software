@@ -25,6 +25,18 @@ public final class LibraryActions {
     public static final String GET_BORROW_RECORDS =
             ActionNames.of(ModuleNames.LIBRARY, "GET_BORROW_RECORDS");
 
+    /** Creates a reservation for the authenticated user. */
+    public static final String CREATE_RESERVATION =
+            ActionNames.of(ModuleNames.LIBRARY, "CREATE_RESERVATION");
+
+    /** Gets all reservations for the authenticated user; request data is null. */
+    public static final String GET_MY_RESERVATIONS =
+            ActionNames.of(ModuleNames.LIBRARY, "GET_MY_RESERVATIONS");
+
+    /** Cancels one active reservation owned by the authenticated user. */
+    public static final String CANCEL_RESERVATION =
+            ActionNames.of(ModuleNames.LIBRARY, "CANCEL_RESERVATION");
+
     /** Lists server-owned categories; null request, ArrayList of BookCategoryDTO response. */
     public static final String LIST_CATEGORIES = ActionNames.of(ModuleNames.LIBRARY, "LIST_CATEGORIES");
     /** Adds a book for a library administrator; AddBookRequest -> BookDTO. */

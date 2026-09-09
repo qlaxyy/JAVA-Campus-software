@@ -70,6 +70,15 @@ final class InMemoryBookRepository implements BookRepository {
         books.put(book.getBookId(), book);
     }
 
+    synchronized Map<String, BookDTO> snapshot() {
+        return new LinkedHashMap<>(books);
+    }
+
+    synchronized void restore(Map<String, BookDTO> snapshot) {
+        books.clear();
+        books.putAll(snapshot);
+    }
+
     private void validate(BookDTO book) {
         if (book.getBookId() == null || book.getBookId().isBlank()
                 || book.getIsbn() == null || book.getIsbn().isBlank()

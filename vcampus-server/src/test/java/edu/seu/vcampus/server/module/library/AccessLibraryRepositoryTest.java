@@ -3,6 +3,8 @@ package edu.seu.vcampus.server.module.library;
 import edu.seu.vcampus.common.library.BookDTO;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
 import edu.seu.vcampus.common.library.CopyReturnRequest;
+import edu.seu.vcampus.common.library.CreateReservationRequest;
+import edu.seu.vcampus.common.library.ReservationDTO;
 import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -151,15 +153,81 @@ class AccessLibraryRepositoryTest {
         assertFalse(repositories.copies().findById("CP-UNIQUE").isPresent());
     }
 
+    @Test
+    void reservationAndReservedCopySurviveRepositoryRestart() {
+        Path databasePath = temporaryDirectory.resolve("reservation.accdb");
+        Repositories first = repositories(databasePath);
+        ReservationDTO created = service(first, "BR-UNUSED").createReservation(
+                "U-RESERVE", new CreateReservationRequest(
+                        "B001", "九龙湖校区—中文图书阅览室3"));
+
+        Repositories restarted = repositories(databasePath);
+        Reservation reservation = restarted.reservations()
+                .findById(created.getReservationId()).orElseThrow();
+        assertEquals(ReservationStatus.READY_FOR_PICKUP, reservation.status());
+        assertEquals(created.getAssignedBarcode(), restarted.copies()
+                .findById(reservation.assignedCopyId()).orElseThrow().barcode());
+        assertEquals(BookCopyStatus.RESERVED, restarted.copies()
+                .findById(reservation.assignedCopyId()).orElseThrow().status());
+    }
+
+    @Test
+    void reservationAssignmentRollsBackWhenFinalWriteFails() {
+        Path databasePath = temporaryDirectory.resolve("reservation-rollback.accdb");
+        Repositories repositories = repositories(databasePath);
+        ReservationRepository failing = failAfterUpdate(repositories.reservations());
+        LibraryService service = service(repositories, repositories.records(), failing,
+                "BR-UNUSED", "RS-ROLLBACK");
+
+        assertThrows(IllegalStateException.class, () -> service.createReservation(
+                "U-ROLLBACK", new CreateReservationRequest(
+                        "B001", "九龙湖校区—中文图书阅览室3")));
+
+        Repositories restarted = repositories(databasePath);
+        assertTrue(restarted.reservations().findAll().isEmpty());
+        assertEquals(BookCopyStatus.AVAILABLE, restarted.copies()
+                .findByBarcode("SEU-B001-001").orElseThrow().status());
+    }
+
+    @Test
+    void reservedBorrowRollsBackCopyRecordAndReservationTogether() {
+        Path databasePath = temporaryDirectory.resolve("reserved-borrow-rollback.accdb");
+        Repositories repositories = repositories(databasePath);
+        ReservationDTO ready = service(repositories, "BR-SETUP").createReservation(
+                "U-ROLLBACK", new CreateReservationRequest(
+                        "B001", "九龙湖校区—中文图书阅览室3"));
+        ReservationRepository failing = failAfterUpdate(repositories.reservations());
+        LibraryService service = service(repositories, repositories.records(), failing,
+                "BR-ROLLBACK", "RS-UNUSED");
+
+        assertThrows(IllegalStateException.class, () -> service.borrowCopy(
+                "U-ROLLBACK", new CopyBorrowRequest(ready.getAssignedBarcode())));
+
+        Repositories restarted = repositories(databasePath);
+        assertEquals(BookCopyStatus.RESERVED, restarted.copies()
+                .findByBarcode(ready.getAssignedBarcode()).orElseThrow().status());
+        assertEquals(ReservationStatus.READY_FOR_PICKUP, restarted.reservations()
+                .findById(ready.getReservationId()).orElseThrow().status());
+        assertTrue(restarted.records().findById("BR-ROLLBACK").isEmpty());
+    }
+
     private LibraryService service(Repositories repositories, String recordId) {
         return service(repositories, repositories.records(), recordId);
     }
 
     private LibraryService service(Repositories repositories,
             BorrowRecordRepository records, String recordId) {
+        return service(repositories, records, repositories.reservations(),
+                recordId, "RS-ACCESS");
+    }
+
+    private LibraryService service(Repositories repositories,
+            BorrowRecordRepository records, ReservationRepository reservations,
+            String recordId, String reservationId) {
         return new LibraryService(
                 repositories.books(), records, CLOCK, () -> recordId,
-                repositories.categories(), repositories.copies(), repositories.store());
+                repositories.categories(), repositories.copies(), reservations,
+                repositories.store(), () -> reservationId);
     }
 
     private Repositories repositories(Path path) {
@@ -169,7 +237,8 @@ class AccessLibraryRepositoryTest {
                 new AccessBookRepository(store),
                 new AccessBookCopyRepository(store),
                 new AccessBorrowRecordRepository(store),
-                new AccessBookCategoryRepository(store));
+                new AccessBookCategoryRepository(store),
+                new AccessReservationRepository(store));
     }
 
     private BorrowRecordRepository failAfterSave(BorrowRecordRepository delegate) {
@@ -192,12 +261,23 @@ class AccessLibraryRepositoryTest {
         };
     }
 
+    private ReservationRepository failAfterUpdate(ReservationRepository delegate) {
+        return new DelegatingReservationRepository(delegate) {
+            @Override
+            public void update(Reservation reservation) {
+                delegate.update(reservation);
+                throw new IllegalStateException("simulated failure after reservation update");
+            }
+        };
+    }
+
     private record Repositories(
             AccessLibraryStore store,
             AccessBookRepository books,
             AccessBookCopyRepository copies,
             AccessBorrowRecordRepository records,
-            AccessBookCategoryRepository categories) {
+            AccessBookCategoryRepository categories,
+            AccessReservationRepository reservations) {
     }
 
     private static class DelegatingBorrowRecordRepository implements BorrowRecordRepository {
@@ -241,5 +321,32 @@ class AccessLibraryRepositoryTest {
         public void update(BorrowRecord record) {
             delegate.update(record);
         }
+    }
+
+    private static class DelegatingReservationRepository implements ReservationRepository {
+        private final ReservationRepository delegate;
+
+        DelegatingReservationRepository(ReservationRepository delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public List<Reservation> findAll() { return delegate.findAll(); }
+
+        @Override
+        public List<Reservation> findByUserId(String userId) {
+            return delegate.findByUserId(userId);
+        }
+
+        @Override
+        public Optional<Reservation> findById(String reservationId) {
+            return delegate.findById(reservationId);
+        }
+
+        @Override
+        public void save(Reservation reservation) { delegate.save(reservation); }
+
+        @Override
+        public void update(Reservation reservation) { delegate.update(reservation); }
     }
 }

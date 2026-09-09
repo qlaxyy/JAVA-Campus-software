@@ -76,6 +76,15 @@ final class InMemoryBookCopyRepository implements BookCopyRepository {
         copies.putAll(candidate);
     }
 
+    synchronized Map<String, BookCopy> snapshot() {
+        return new LinkedHashMap<>(copies);
+    }
+
+    synchronized void restore(Map<String, BookCopy> snapshot) {
+        copies.clear();
+        copies.putAll(snapshot);
+    }
+
     private void validateUnique(BookCopy copy, String currentId) {
         if (copies.containsKey(copy.copyId()) && !copy.copyId().equals(currentId)) {
             throw new IllegalStateException("Book-copy identifier already exists.");

@@ -13,4 +13,12 @@
   <artifactId>vcampus-common</artifactId>
   <name>Virtual Campus - Common</name>
   <description>Shared protocol, DTO, enum and error-code contracts.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
 </project>

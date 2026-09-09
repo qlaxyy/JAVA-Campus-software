@@ -1,7 +1,8 @@
 package edu.seu.vcampus.common.hospital;
 
-/** Distinguishes an unrestricted first visit from a follow-up visit. */
+/** Business relationship of one appointment to a clinical episode. */
 public enum VisitType {
     FIRST_VISIT,
-    FOLLOW_UP
+    FOLLOW_UP,
+    RESULT_REVIEW
 }

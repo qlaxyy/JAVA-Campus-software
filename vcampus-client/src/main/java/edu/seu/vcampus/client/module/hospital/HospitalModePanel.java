@@ -24,6 +24,7 @@ final class HospitalModePanel extends JPanel {
     private final JButton patientButton = HospitalTheme.primaryButton("检查权限中");
     private final JButton doctorButton = HospitalTheme.quietButton("检查权限中");
     private final JButton adminButton = HospitalTheme.quietButton("检查权限中");
+    private final JButton retryButton = HospitalTheme.quietButton("重试权限检查");
 
     HospitalModePanel(
             Runnable openPatient,
@@ -34,11 +35,14 @@ final class HospitalModePanel extends JPanel {
         setBackground(HospitalTheme.BACKGROUND);
         setBorder(BorderFactory.createEmptyBorder(24, 28, 24, 28));
 
-        add(createHeader(refreshAccess), BorderLayout.NORTH);
-        add(createModes(openPatient, openDoctor, openAdmin), BorderLayout.CENTER);
+        add(HospitalResponsiveLayout.constrainWidth(createHeader(refreshAccess)),
+                BorderLayout.NORTH);
+        add(HospitalResponsiveLayout.verticalScroll(
+                createModes(openPatient, openDoctor, openAdmin)), BorderLayout.CENTER);
 
         statusLabel.setForeground(HospitalTheme.MUTED);
         add(statusLabel, BorderLayout.SOUTH);
+        retryButton.setVisible(false);
         disableAllButtons("检查权限中");
     }
 
@@ -46,6 +50,7 @@ final class HospitalModePanel extends JPanel {
         accountLabel.setText(accountText(session));
         statusLabel.setForeground(HospitalTheme.MUTED);
         statusLabel.setText("正在由服务器检查当前账号可进入的医院模式……");
+        retryButton.setVisible(false);
         disableAllButtons("检查权限中");
     }
 
@@ -56,6 +61,7 @@ final class HospitalModePanel extends JPanel {
         configure(adminButton, access.canAccess(HospitalMode.ADMIN), "进入管理模式");
         statusLabel.setForeground(HospitalTheme.MUTED);
         statusLabel.setText("模式只切换当前工作台；实际权限由服务器根据账号和医院绑定判断。");
+        retryButton.setVisible(false);
     }
 
     void showLoginRequired() {
@@ -63,12 +69,14 @@ final class HospitalModePanel extends JPanel {
         disableAllButtons("登录后检查");
         statusLabel.setForeground(HospitalTheme.WARNING);
         statusLabel.setText("请先到“用户管理”登录，再返回校医院选择模式。");
+        retryButton.setVisible(false);
     }
 
     void showError(String message) {
         disableAllButtons("暂不可用");
         statusLabel.setForeground(HospitalTheme.WARNING);
         statusLabel.setText(message);
+        retryButton.setVisible(true);
     }
 
     private JPanel createHeader(Runnable refreshAccess) {
@@ -90,10 +98,9 @@ final class HospitalModePanel extends JPanel {
         copy.add(Box.createVerticalStrut(8));
         copy.add(accountLabel);
 
-        JButton refresh = HospitalTheme.quietButton("重新检查权限");
-        refresh.addActionListener(event -> refreshAccess.run());
+        retryButton.addActionListener(event -> refreshAccess.run());
         header.add(copy, BorderLayout.CENTER);
-        header.add(refresh, BorderLayout.EAST);
+        header.add(retryButton, BorderLayout.EAST);
         return header;
     }
 
@@ -101,7 +108,7 @@ final class HospitalModePanel extends JPanel {
             Runnable openPatient,
             Runnable openDoctor,
             Runnable openAdmin) {
-        JPanel modes = new JPanel(new GridLayout(1, 3, 16, 0));
+        JPanel modes = HospitalResponsiveLayout.grid(3, 245, 16, 16);
         modes.setOpaque(false);
         patientButton.addActionListener(event -> openPatient.run());
         doctorButton.addActionListener(event -> openDoctor.run());
@@ -162,11 +169,17 @@ final class HospitalModePanel extends JPanel {
     }
 
     private static void configure(JButton button, boolean enabled, String enabledText) {
+        if (enabled) {
+            HospitalTheme.applyPrimaryStyle(button);
+        } else {
+            HospitalTheme.applyDisabledStyle(button);
+        }
         button.setEnabled(enabled);
         button.setText(enabled ? enabledText : "无权限");
     }
 
     private static void disable(JButton button, String text) {
+        HospitalTheme.applyDisabledStyle(button);
         button.setEnabled(false);
         button.setText(text);
     }

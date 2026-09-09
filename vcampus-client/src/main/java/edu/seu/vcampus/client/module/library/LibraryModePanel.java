@@ -29,11 +29,20 @@ public final class LibraryModePanel extends JPanel {
 
     /** @param context shared authenticated client context */
     public LibraryModePanel(ClientContext context) {
+        LibraryPanel catalog = new LibraryPanel(context);
+        MyLibraryPanel myLibrary = new MyLibraryPanel(
+                context, catalog::reservationStateChanged);
+        LibraryAdminPanel admin = context.currentSession()
+                .filter(session -> session.canAdminister(ModuleNames.LIBRARY))
+                .map(session -> new LibraryAdminPanel(context)).orElse(null);
         setName("library.modeRoot");
         setLayout(cards);
         add(createModeSelection(), MODE_SELECTION);
-        add(createOnlineLibrary(context), ONLINE_LIBRARY);
-        add(createTerminal(context), SELF_SERVICE_TERMINAL);
+        add(createOnlineLibrary(catalog, myLibrary, admin), ONLINE_LIBRARY);
+        add(createTerminal(context, () -> {
+            catalog.reservationStateChanged();
+            myLibrary.refresh();
+        }), SELF_SERVICE_TERMINAL);
         showModeSelection();
     }
 
@@ -56,7 +65,7 @@ public final class LibraryModePanel extends JPanel {
 
         JPanel choices = new JPanel(new GridLayout(1, 2, 32, 0));
         choices.add(createModeChoice("线上图书馆", "library.mode.online",
-                "查询馆藏、查看个人借阅，模块管理员可维护图书。",
+                "查询与预约馆藏、查看个人借阅和预约，模块管理员可维护图书。",
                 () -> cards.show(this, ONLINE_LIBRARY)));
         choices.add(createModeChoice("模拟自助终端", "library.mode.terminal",
                 "模拟扫描实体单册条码，完成借书或归还登记。",
@@ -83,20 +92,16 @@ public final class LibraryModePanel extends JPanel {
         return choice;
     }
 
-    private JPanel createOnlineLibrary(ClientContext context) {
+    private JPanel createOnlineLibrary(LibraryPanel catalog,
+            MyLibraryPanel myLibrary, LibraryAdminPanel admin) {
         JPanel online = createModeContainer("线上图书馆", "library.mode.back.online");
         online.setName("library.online");
 
         JTabbedPane tabs = new JTabbedPane();
         tabs.setName("library.navigation");
-        LibraryPanel catalog = new LibraryPanel(context);
-        MyLibraryPanel myLibrary = new MyLibraryPanel(context);
         tabs.addTab("馆藏查询", catalog);
         tabs.addTab("我的图书馆", myLibrary);
 
-        LibraryAdminPanel admin = context.currentSession()
-                .filter(session -> session.canAdminister(ModuleNames.LIBRARY))
-                .map(session -> new LibraryAdminPanel(context)).orElse(null);
         if (admin != null) {
             tabs.addTab("图书管理", admin);
         }
@@ -113,11 +118,11 @@ public final class LibraryModePanel extends JPanel {
         return online;
     }
 
-    private JPanel createTerminal(ClientContext context) {
+    private JPanel createTerminal(ClientContext context, Runnable circulationChanged) {
         JPanel terminal = createModeContainer(
                 "模拟自助借还终端", "library.mode.back.terminal");
         terminal.setName("library.terminal");
-        terminal.add(new SelfServicePanel(context), BorderLayout.CENTER);
+        terminal.add(new SelfServicePanel(context, circulationChanged), BorderLayout.CENTER);
         return terminal;
     }
 

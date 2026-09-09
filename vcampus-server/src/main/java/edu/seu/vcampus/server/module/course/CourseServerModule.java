@@ -159,10 +159,17 @@ public final class CourseServerModule
                 ? new InMemoryCourseBatchSettingsRepository()
                 : new AccessCourseBatchSettingsRepository(
                 database);
+        CourseBatchRepository batchRepository =
+            database == null
+                ? new InMemoryCourseBatchRepository(
+                clock)
+                : new AccessCourseBatchRepository(
+                database,
+                clock);
+
         CourseBatchService batchService =
             new CourseBatchService(
-                new InMemoryCourseBatchRepository(
-                    clock),
+                batchRepository,
                 clock,
                 batchSettingsRepository);
 
@@ -171,32 +178,65 @@ public final class CourseServerModule
              * 3. 方案内课程 Repository
              * =========================
              */
-            CoursePlanRepository planRepository =
-                new InMemoryCoursePlanRepository();
+        /*
+         * 内存仓库同时作为数据库首次启动时的
+         * 演示数据来源。
+         */
+        CoursePlanRepository
+            seedPlanRepository =
+            new InMemoryCoursePlanRepository();
 
+        CoursePlanRepository planRepository =
+            database == null
+                ? seedPlanRepository
+                : new AccessCoursePlanRepository(
+                database,
+                seedPlanRepository);
             /*
              * =========================
              * 4. 方案外课程 Repository
              * =========================
              */
-            CourseSubstitutionRepository
-                substitutionRepository =
-                new InMemoryCourseSubstitutionRepository();
+        CourseSubstitutionRepository
+            seedSubstitutionRepository =
+            new InMemoryCourseSubstitutionRepository();
+
+        CourseSubstitutionRepository
+            substitutionRepository =
+            database == null
+                ? seedSubstitutionRepository
+                : new AccessCourseSubstitutionRepository(
+                database,
+                seedSubstitutionRepository);
 
             /*
              * =========================
              * 5. 体育课程 Repository
              * =========================
              */
-            PeCourseRepository peCourseRepository =
-                new InMemoryPeCourseRepository();
+        PeCourseRepository seedPeCourseRepository =
+            new InMemoryPeCourseRepository();
+
+        PeCourseRepository peCourseRepository =
+            database == null
+                ? seedPeCourseRepository
+                : new AccessPeCourseRepository(
+                database,
+                seedPeCourseRepository);
             /*
              * =========================
              * 通选课程 Repository
              * =========================
              */
-            GeneralCourseRepository generalCourseRepository =
-                new InMemoryGeneralCourseRepository();
+        GeneralCourseRepository seedGeneralCourseRepository =
+            new InMemoryGeneralCourseRepository();
+
+        GeneralCourseRepository generalCourseRepository =
+            database == null
+                ? seedGeneralCourseRepository
+                : new AccessGeneralCourseRepository(
+                database,
+                seedGeneralCourseRepository);
             /*
              * =========================
              * 6. 当前选课记录 Repository
@@ -216,8 +256,15 @@ public final class CourseServerModule
              * 全校课程目录 Repository
              * =========================
              */
-            CourseCatalogRepository catalogRepository =
-                new InMemoryCourseCatalogRepository();
+        CourseCatalogRepository seedCatalogRepository =
+            new InMemoryCourseCatalogRepository();
+
+        CourseCatalogRepository catalogRepository =
+            database == null
+                ? seedCatalogRepository
+                : new AccessCourseCatalogRepository(
+                database,
+                seedCatalogRepository);
         /*
          * =========================
          * 当前选课记录 Repository
@@ -265,8 +312,11 @@ public final class CourseServerModule
              * 7. 历史修读 Repository
              * =========================
              */
-            CourseHistoryRepository historyRepository =
-                new InMemoryCourseHistoryRepository();
+        CourseHistoryRepository historyRepository =
+            database == null
+                ? new InMemoryCourseHistoryRepository()
+                : new AccessCourseHistoryRepository(
+                database);
 
             /*
              * =========================

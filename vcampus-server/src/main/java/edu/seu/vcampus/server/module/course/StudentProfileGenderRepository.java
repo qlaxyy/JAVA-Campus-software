@@ -4,12 +4,25 @@ import edu.seu.vcampus.common.student.StudentProfileDto;
 import edu.seu.vcampus.server.module.student.StudentMemoryRepository;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 从已有学籍模块读取学生性别。
  */
 final class StudentProfileGenderRepository
     implements StudentGenderRepository {
+
+    /**
+     * 账号模块中的演示学生学号。
+     */
+    private static final String DEMO_ACCOUNT_STUDENT_ID =
+        "20260001";
+
+    /**
+     * 学籍模块中的演示学生学号。
+     */
+    private static final String DEMO_PROFILE_STUDENT_ID =
+        "student001";
 
     private final StudentMemoryRepository
         studentRepository;
@@ -27,27 +40,59 @@ final class StudentProfileGenderRepository
         String studentId) {
 
         StudentProfileDto profile =
-            studentRepository
-                .findById(
-                    studentId)
-                .orElseThrow(() ->
-                    new IllegalStateException(
-                        "未找到学生学籍信息。"));
+            findProfile(
+                studentId);
 
         String gender =
             profile.getGender();
 
-        if ("男".equals(gender)) {
+        if ("男".equals(
+            gender)) {
 
             return StudentGender.MALE;
         }
 
-        if ("女".equals(gender)) {
+        if ("女".equals(
+            gender)) {
 
             return StudentGender.FEMALE;
         }
 
         throw new IllegalStateException(
             "学生性别数据无效。");
+    }
+
+    /**
+     * 查询学生档案。
+     *
+     * 优先直接使用登录学号查询。
+     * 当前演示账号和学籍模块编号不一致时，
+     * 再进行一次兼容查询。
+     */
+    private StudentProfileDto findProfile(
+        String studentId) {
+
+        Optional<StudentProfileDto> profile =
+            studentRepository.findById(
+                studentId);
+
+        if (profile.isPresent()) {
+
+            return profile.get();
+        }
+
+        if (DEMO_ACCOUNT_STUDENT_ID.equals(
+            studentId)) {
+
+            return studentRepository
+                .findById(
+                    DEMO_PROFILE_STUDENT_ID)
+                .orElseThrow(() ->
+                    new IllegalStateException(
+                        "未找到演示学生学籍信息。"));
+        }
+
+        throw new IllegalStateException(
+            "未找到学生学籍信息。");
     }
 }

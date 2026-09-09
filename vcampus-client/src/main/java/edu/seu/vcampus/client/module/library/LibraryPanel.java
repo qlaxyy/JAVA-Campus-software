@@ -173,7 +173,7 @@ public final class LibraryPanel extends JPanel {
             });
         }
         statusLabel.setText("找到 " + result.getBooks().size()
-                + " 本书目；借还请使用“自助借还”页扫描实体书条码");
+                + " 本书目；借还请返回模式选择，使用“模拟自助终端”扫描实体书条码");
     }
 
     private static String publication(BookDTO book) {

@@ -133,7 +133,7 @@ public final class SelfServicePanel extends JPanel {
 
     private void showUncertain(boolean borrowing) {
         outcome.setText((borrowing ? "借书" : "归还")
-                + "结果未确认，请先刷新“我的借阅”核对，勿重复提交");
+                + "结果未确认，请到线上图书馆刷新“我的图书馆”核对，勿重复提交");
     }
 
     private void setWorking(boolean value) {

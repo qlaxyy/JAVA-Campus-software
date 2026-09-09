@@ -2,6 +2,7 @@ package edu.seu.vcampus.client.module.user;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.common.user.CampusCardNumber;
 import edu.seu.vcampus.common.user.SessionInfo;
 
 import javax.swing.JButton;
@@ -26,7 +27,7 @@ public final class LoginPanel extends JPanel {
     private final JTextField usernameField = new JTextField();
     private final JPasswordField passwordField = new JPasswordField();
     private final JButton loginButton = new JButton("登录");
-    private final JLabel statusLabel = new JLabel("请输入账号和密码", SwingConstants.CENTER);
+    private final JLabel statusLabel = new JLabel(" ", SwingConstants.CENTER);
 
     /**
      * Creates the shared login page.
@@ -114,7 +115,10 @@ public final class LoginPanel extends JPanel {
 
     static String validationMessage(String username, char[] password) {
         if (username == null || username.isBlank()) {
-            return "请输入账户名";
+            return "请输入一卡通号";
+        }
+        if (!CampusCardNumber.isValid(username)) {
+            return "一卡通号必须是 8 位数字（年份 + 4 位流水号）";
         }
         if (password == null || password.length == 0) {
             return "请输入密码";

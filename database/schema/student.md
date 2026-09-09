@@ -1,90 +1,110 @@
-# 学生学籍模块数据字典
+# 学生学籍管理系统数据字典
 
-### 1. 模块与负责人
-- **模块**：学生学籍管理 (student)
+## 1. 模块与负责人
+- **模块**：学生学籍管理系统
 - **对应 Epic**：#1
-- **状态**：已评审
+- **状态**：已对齐现有实现（代码基准）
 
-### 2. 表清单
+## 2. 表清单
 
 | 表名 | 业务含义 | 主键 | 重要约束 |
 | :--- | :--- | :--- | :--- |
-| `tblStudentProfile` | 学生学籍基本档案表 | `studentId` | `userId` 唯一约束（1:1对应用户账号）、`status` 状态枚举 |
-| `tblDepartment` | 院系信息字典表 | `deptId` | `deptName` 唯一 |
-| `tblMajor` | 专业信息字典表 | `majorId` | 关联 `deptId` |
-| `tblClass` | 行政班级信息表 | `classId` | 关联 `majorId` |
+| tblStudent | 学生核心学籍与身份档案 | studentId | 唯一业务学号，全系统学生基础标识 |
+| tblStudentProfile | 学生自维扩展与联络档案 | profileId | 一个学生仅一条自维记录，支持本人/管理员维护 |
+| tblStatusChange | 学籍异动履历记录 | changeId | 记录休学、复学、转专业、退学等历史 |
 
-### 3. 字段字典
+## 3. 字段字典
 
-#### (1) tblStudentProfile（学生基本档案表）
+### tblStudent（核心学籍与身份信息，服务端受控只读）
+
+| 字段 | Access 类型 | 必填 | 默认值 | 对应代码/DTO字段 | 说明 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| studentId | Long Integer | 是 | 自动编号 | id | 物理主键，对应选课模块 `tblEnrollment.studentId` |
+| studentNo | Short Text(30) | 是 | 无 | studentId | 业务学号（如 `student001`），全校唯一 |
+| studentName | Short Text(50) | 是 | 无 | name | 学生真实姓名 |
+| gender | Short Text(10) | 是 | 无 | gender | 性别（`男` / `女` 或 `MALE` / `FEMALE`），供体育课校验 |
+| ethnicity | Short Text(30) | 否 | 汉族 | ethnicity | 民族 |
+| nativePlace | Short Text(100) | 否 | 无 | nativePlace | 籍贯 |
+| idCardNumber | Short Text(30) | 是 | 无 | idCardNumber | 居民身份证号，唯一 |
+| birthDate | Short Text(20) | 否 | 无 | birthDate | 出生日期（格式：`YYYY-MM-DD`） |
+| enrollmentDate | Short Text(20) | 是 | 无 | enrollmentDate | 入学日期（格式：`YYYY-MM-DD`） |
+| enrollmentYear | Integer | 是 | 2024 | enrollmentYear | 入学年份（如 `2024`） |
+| departmentName | Short Text(100) | 是 | 无 | department | 所属院系（与选课模块开课院系对齐） |
+| majorName | Short Text(100) | 是 | 无 | major | 专业名称（如“软件工程”） |
+| className | Short Text(50) | 是 | 无 | className | 行政班级（如“软件工程2401班”） |
+| schoolingYears | Integer | 是 | 4 | schoolingLength | 基本学制年限（默认 4 年） |
+| planId | Long Integer | 是 | 1 | planId | 培养方案标识，对应选课模块 `tblTrainingPlanCourse.planId` |
+| currentTerm | Integer | 是 | 1 | currentTerm | 当前修读建议学期（1-8），用于方案内选课筛选 |
+| campusId | Long Integer | 是 | 1 | campusId | 就读校区标识，对应选课模块 `tblCampus.campusId` |
+| academicStatus | Short Text(20) | 是 | 在读 | academicStatus | 学籍状态：`在读`、`休学`、`退学`、`毕业` |
+
+### tblStudentProfile（联络与补充档案，支持自主维护）
+
+| 字段 | Access 类型 | 必填 | 默认值 | 对应代码/DTO字段 | 说明 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| profileId | Long Integer | 是 | 自动编号 | profileId | 主键，自增标识 |
+| studentId | Long Integer | 是 | 无 | studentId | 外键，关联 `tblStudent.studentId`，唯一 |
+| politicalStatus | Short Text(30) | 否 | 共青团员 | politicalStatus | 政治面貌（支持自维：群众、共青团员、中共党员等） |
+| phone | Short Text(30) | 否 | 无 | phone | 移动联系电话（支持学生自主维护） |
+| email | Short Text(100) | 否 | 无 | email | 电子邮箱（支持学生自主维护） |
+| address | Short Text(255) | 否 | 无 | homeAddress | 家庭现居住通讯地址（支持学生自主维护） |
+| emergencyContact | Short Text(50) | 否 | 无 | emergencyContact | 紧急联系人姓名（支持学生自主维护） |
+| emergencyPhone | Short Text(30) | 否 | 无 | emergencyPhone | 紧急联系人电话（支持学生自主维护） |
+| updatedAt | Date/Time | 是 | 当前时间 | updatedAt | 档案最近维护更新时间 |
+
+### tblStatusChange（学籍异动履历记录）
 
 | 字段 | Access 类型 | 必填 | 默认值 | 说明 |
 | :--- | :--- | :--- | :--- | :--- |
-| `studentId` | Short Text(20) | 是 | 无 | 主键，一卡通号/学号（如 student001） |
-| `userId` | Short Text(20) | 是 | 无 | 逻辑外键，关联用户管理模块的主账号标识（唯一索引） |
-| `studentName` | Short Text(50) | 是 | 无 | 学生真实姓名 |
-| `gender` | Short Text(4) | 是 | '男' | 性别：男 / 女 |
-| `idCard` | Short Text(18) | 是 | 无 | 身份证号（脱敏展示） |
-| `birthDate` | Short Text(20) | 否 | 无 | 出生日期（格式：YYYY-MM-DD） |
-| `ethnicity` | Short Text(20) | 否 | '汉族' | 民族 |
-| `nativePlace` | Short Text(50) | 否 | 无 | 生源地 / 籍贯 |
-| `politicalStatus`| Short Text(20) | 否 | '共青团员' | 政治面貌（中共党员/中共预备党员/共青团员/群众） |
-| `deptId` | Short Text(20) | 是 | 无 | 逻辑外键，关联 tblDepartment.deptId |
-| `majorId` | Short Text(20) | 是 | 无 | 逻辑外键，关联 tblMajor.majorId |
-| `classId` | Short Text(20) | 是 | 无 | 逻辑外键，关联 tblClass.classId |
-| `enrollmentYear` | Short Text(4) | 是 | '2023' | 入学年份（如：2023） |
-| `educationLevel` | Short Text(20) | 是 | '本科生' | 培养层次（本科生 / 硕士研究生 / 博士研究生） |
-| `status` | Short Text(20) | 是 | 'ACTIVE' | 学籍状态：ACTIVE(在读)、SUSPENDED(休学)、DROPPED(退学)、GRADUATED(毕业) |
+| changeId | Long Integer | 是 | 自动编号 | 主键，自增标识 |
+| studentId | Long Integer | 是 | 无 | 外键，关联 `tblStudent.studentId` |
+| changeType | Short Text(30) | 是 | 无 | 异动类别：`休学`、`复学`、`转专业`、`退学` |
+| changeDate | Date/Time | 是 | 当前时间 | 异动生效时间 |
+| reason | Short Text(255) | 否 | 无 | 异动原因说明 |
+| operator | Short Text(50) | 是 | 无 | 审核操作人员的稳定 `userId`，不保存登录一卡通号 |
 
-#### (2) tblDepartment（院系表）
+## 4. 关联与索引
 
-| 字段 | Access 类型 | 必填 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- | :--- |
-| `deptId` | Short Text(20) | 是 | 无 | 主键，院系编号（如 D01） |
-| `deptName` | Short Text(50) | 是 | 无 | 院系名称（如 计算机科学与工程学院） |
+### 4.1 表关联
+- `tblStudentProfile.studentId` → `tblStudent.studentId`
+- `tblStatusChange.studentId` → `tblStudent.studentId`
+- **跨模块关联支持**：
+    - `tblEnrollment.studentId` → `tblStudent.studentId`（选课模块核心外键）
+    - `tblStudent.campusId` → `tblCampus.campusId`（校区归属）
+    - `tblStudent.planId` → `tblTrainingPlanCourse.planId`（选课培养方案课程筛选）
 
-#### (3) tblMajor（专业表）
+### 4.2 唯一索引
+- `tblStudent.studentNo`
+- `tblStudent.idCardNumber`
+- `tblStudentProfile.studentId`
 
-| 字段 | Access 类型 | 必填 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- | :--- |
-| `majorId` | Short Text(20) | 是 | 无 | 主键，专业编号（如 M0101） |
-| `deptId` | Short Text(20) | 是 | 无 | 所属院系编号，关联 tblDepartment.deptId |
-| `majorName` | Short Text(50) | 是 | 无 | 专业名称（如 软件工程） |
+### 4.3 普通索引
+- `tblStudent.planId`
+- `tblStudent.academicStatus`
+- `tblStudent.majorName`
+- `tblStatusChange.studentId`
 
-#### (4) tblClass（行政班级表）
+## 5. 跨模块选课联调确认项
+1. **学生主键与标识对齐**：
+    - 数据表物理主键为 `tblStudent.studentId`（Long Integer），对应选课表 `tblEnrollment.studentId`。
+    - 学籍业务编号使用 `studentNo`（如 `student001`）；登录使用用户模块的一卡通号，跨模块关联和审核记录使用稳定 `userId`（如 `U-STUDENT-001`）。
+2. **体育课限额判定**：
+    - `tblStudent.gender` 提供性别标识，完全匹配选课教学班的容量与性别限制。
+3. **培养方案建议学期**：
+    - `tblStudent` 统一提供 `planId` 与 `currentTerm`（1-8），选课端可直接过滤方案内本学期开班的建议课程。
+4. **统一学期命名**：
+    - 全系统各模块统一使用 `2026-2027-1` 格式标识当前学期。
 
-| 字段 | Access 类型 | 必填 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- | :--- |
-| `classId` | Short Text(20) | 是 | 无 | 主键，班级编号（如 C2301） |
-| `majorId` | Short Text(20) | 是 | 无 | 所属专业编号，关联 tblMajor.majorId |
-| `className` | Short Text(50) | 是 | 无 | 班级全称（如 软工01班） |
+## 6. 演示数据（与内存库当前初始数据一致）
 
-### 4. 关联与索引
-- **主键索引**：`tblStudentProfile(studentId)`, `tblDepartment(deptId)`, `tblMajor(majorId)`, `tblClass(classId)`。
-- **唯一索引**：`tblStudentProfile(userId)`（一账号一档案）, `tblDepartment(deptName)`。
-- **检索索引**：`tblStudentProfile(deptId, majorId, classId)` 联合检索。
-- **约束策略**：`userId` 逻辑关联用户模块，禁止跨模块物理级联删除；状态变更修改 `status` 字段，禁止随意物理删除。
+### tblStudent
+| studentId | studentNo | studentName | gender | departmentName | majorName | className | schoolingYears | planId | currentTerm | campusId | academicStatus |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | student001 | 张三 | 男 | 计算机科学与工程学院 | 软件工程 | 软件工程2401班 | 4 | 1 | 1 | 1 | 在读 |
+| 2 | student002 | 李四 | 女 | 计算机科学与工程学院 | 软件工程 | 软件工程2401班 | 4 | 1 | 1 | 1 | 在读 |
 
-### 5. 演示数据
-
-**tblDepartment**
-- `D01` -> `计算机科学与工程学院`
-- `D02` -> `电子科学与工程学院`
-
-**tblMajor**
-- `M0101` -> `D01` -> `软件工程`
-- `M0201` -> `D02` -> `微电子科学与工程`
-
-**tblClass**
-- `C2301` -> `M0101` -> `软工01班`
-- `C2202` -> `M0201` -> `微电子02班`
-
-**tblStudentProfile**
-- 记录 1（在读本科生）：
-    - `studentId`: `student001`, `userId`: `student001`, `studentName`: `张三`, `gender`: `男`, `idCard`: `32010220040101001X`, `birthDate`: `2004-01-01`, `ethnicity`: `汉族`, `nativePlace`: `江苏省南京市`, `politicalStatus`: `共青团员`, `deptId`: `D01`, `majorId`: `M0101`, `classId`: `C2301`, `enrollmentYear`: `2023`, `educationLevel`: `本科生`, `status`: `ACTIVE`
-- 记录 2（休学研究生）：
-    - `studentId`: `213000001`, `userId`: `213000001`, `studentName`: `李四`, `gender`: `女`, `idCard`: `320102200105120023`, `birthDate`: `2001-05-12`, `ethnicity`: `汉族`, `nativePlace`: `江苏省无锡市`, `politicalStatus`: `中共预备党员`, `deptId`: `D02`, `majorId`: `M0201`, `classId`: `C2202`, `enrollmentYear`: `2022`, `educationLevel`: `硕士研究生`, `status`: `SUSPENDED`
-
-### 6. 待评审问题
-1. 第一轮查询响应中院系、专业和班级由服务端直接扁平化为名称输出，待后续评估是否提供独立的字典维护接口。
-2. 日期字段暂用 `Short Text(20)` 格式化存储，后续根据 Access/JDBC 方案确定是否调整为原生 Date 类型。
+### tblStudentProfile
+| profileId | studentId | politicalStatus | phone | email | address | emergencyContact | emergencyPhone |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | 1 | 共青团员 | 13800138000 | student001@seu.edu.cn | 江苏省南京市江宁区东南大学九龙湖校区 | 张父 | 13900139000 |
+| 2 | 2 | 群众 | 13800138001 | student002@seu.edu.cn | 江苏省南京市江宁区东南大学九龙湖校区 | 李母 | 13900139001 |

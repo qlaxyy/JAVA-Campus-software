@@ -27,7 +27,7 @@ class HospitalModePanelTest {
                     new SessionInfo(
                             "token-doctor",
                             "U-TEACHER-001",
-                            "teacher001",
+                            "20260002",
                             "陈医生",
                             Role.USER),
                     new HospitalModeAccessView(true, true, false));

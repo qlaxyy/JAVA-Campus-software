@@ -2,60 +2,83 @@ package edu.seu.vcampus.client.module.library;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.infrastructure.CampusClient;
-import edu.seu.vcampus.common.library.BookBorrowRequest;
-import edu.seu.vcampus.common.library.BookDTO;
-import edu.seu.vcampus.common.library.BookSearchRequest;
-import edu.seu.vcampus.common.library.BookSearchResult;
-import edu.seu.vcampus.common.library.LibraryActions;
+import edu.seu.vcampus.common.library.*;
+import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.*;
+
+/** Verifies the reader's phase-three workflow across real Socket serialization. */
 class LibrarySearchIntegrationTest {
 
     @Test
-    void loggedInClientReceivesSearchResultsThroughSocket() throws Exception {
-        try (CampusServer server = new CampusServer(0, 2)) {
+    void searchBarcodeCirculationAndPersonalHistoryRoundTripThroughSocket() throws Exception {
+        try (CampusServer server = new CampusServer(0, 3)) {
             server.start();
-            ClientContext context = new ClientContext(
-                    new CampusClient("127.0.0.1", server.getPort()));
-            Response login = context.login("student001", "123456".toCharArray());
-            assertTrue(login.isSuccess());
+            ClientContext reader = login(server, "20260001");
+            ClientContext other = login(server, "20260002");
+            ClientContext librarian = login(server, "20260005");
 
-            Response search = context.send(
-                    LibraryActions.SEARCH_BOOKS,
-                    new BookSearchRequest("Java"));
+            BookDTO before = search(reader, "9787111213826").getFirst();
+            int availableBefore = before.getAvailableCount();
+            String barcode = "SEU-B001-001";
 
-            assertTrue(search.isSuccess());
-            BookSearchResult result = assertInstanceOf(BookSearchResult.class, search.getData());
-            assertEquals(3, result.getBooks().size());
+            Response borrowed = reader.send(LibraryActions.BORROW_COPY, new CopyBorrowRequest(barcode));
+            assertTrue(borrowed.isSuccess(), borrowed.getMessage());
+            BorrowRecordDTO current = list(reader.send(LibraryActions.GET_BORROW_RECORDS, null),
+                    BorrowRecordDTO.class).getFirst();
+            assertEquals(barcode, current.getBarcode());
+            assertEquals(current.getBorrowTime().plusDays(30), current.getDueTime());
+            assertEquals(availableBefore - 1, search(reader, "9787111213826").getFirst().getAvailableCount());
+
+            List<BorrowRecordDTO> records = list(reader.send(LibraryActions.GET_BORROW_RECORDS, null),
+                    BorrowRecordDTO.class);
+            assertEquals(1, records.size());
+            assertEquals("BORROWED", records.getFirst().getStatus());
+            assertTrue(list(other.send(LibraryActions.GET_BORROW_RECORDS, null), BorrowRecordDTO.class).isEmpty());
+            assertEquals(ErrorCodes.LIBRARY_BORROW_RECORD_NOT_FOUND,
+                    other.send(LibraryActions.RETURN_COPY, new CopyReturnRequest(barcode)).getCode());
+
+            assertTrue(reader.send(LibraryActions.RETURN_COPY, new CopyReturnRequest(barcode)).isSuccess());
+            BorrowRecordDTO returned = list(reader.send(LibraryActions.GET_BORROW_RECORDS, null),
+                    BorrowRecordDTO.class).getFirst();
+            assertEquals("RETURNED", returned.getStatus());
+            assertNotNull(returned.getReturnTime());
+            assertEquals(availableBefore - 1, search(reader, "9787111213826").getFirst().getAvailableCount(),
+                    "returned copies remain unavailable until shelving");
+            assertEquals(ErrorCodes.LIBRARY_COPY_NOT_AVAILABLE,
+                    reader.send(LibraryActions.BORROW_COPY, new CopyBorrowRequest(barcode)).getCode());
+
+            BookCopyDTO copy = list(librarian.send(LibraryActions.LIST_BOOK_COPIES,
+                    new ListBookCopiesRequest("B001")), BookCopyDTO.class).stream()
+                    .filter(value -> barcode.equals(value.getBarcode())).findFirst().orElseThrow();
+            assertEquals("WAITING_SHELVING", copy.getStatus());
+            assertTrue(librarian.send(LibraryActions.SHELVE_BOOK_COPY,
+                    new BookCopyIdRequest(copy.getCopyId())).isSuccess());
+            assertEquals(availableBefore, search(reader, "9787111213826").getFirst().getAvailableCount());
         }
     }
 
-    @Test
-    void loggedInClientBorrowsBookAndSeesUpdatedStockThroughSocket() throws Exception {
-        try (CampusServer server = new CampusServer(0, 2)) {
-            server.start();
-            ClientContext context = new ClientContext(
-                    new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(context.login("student001", "123456".toCharArray()).isSuccess());
+    private static List<BookDTO> search(ClientContext context, String keyword) throws Exception {
+        Response response = context.send(LibraryActions.SEARCH_BOOKS, new BookSearchRequest(keyword, null));
+        assertTrue(response.isSuccess(), response.getMessage());
+        return assertInstanceOf(BookSearchResult.class, response.getData()).getBooks();
+    }
 
-            Response borrow = context.send(
-                    LibraryActions.BORROW_BOOK,
-                    new BookBorrowRequest("B001"));
-            Response search = context.send(
-                    LibraryActions.SEARCH_BOOKS,
-                    new BookSearchRequest("9787111213826"));
+    private static <T> List<T> list(Response response, Class<T> type) {
+        assertTrue(response.isSuccess(), response.getMessage());
+        List<?> values = assertInstanceOf(List.class, response.getData());
+        assertTrue(values.stream().allMatch(type::isInstance));
+        return values.stream().map(type::cast).toList();
+    }
 
-            assertTrue(borrow.isSuccess());
-            BookSearchResult result = assertInstanceOf(BookSearchResult.class, search.getData());
-            BookDTO book = result.getBooks().getFirst();
-            assertEquals("B001", book.getBookId());
-            assertEquals(1, book.getAvailableCount());
-        }
+    private static ClientContext login(CampusServer server, String username) throws Exception {
+        ClientContext context = new ClientContext(new CampusClient("127.0.0.1", server.getPort(), 2000));
+        assertTrue(context.login(username, "123456".toCharArray()).isSuccess());
+        return context;
     }
 }

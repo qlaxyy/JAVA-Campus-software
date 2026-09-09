@@ -37,7 +37,7 @@ class AdminSchedulePanelTest {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(context.login("hospitaladmin", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260007", "123456".toCharArray()).isSuccess());
             AdminScheduleWorkspaceView before = workspace(context);
             Set<String> existingIds = new HashSet<>();
             before.getSchedules().forEach(slot -> existingIds.add(slot.getScheduleId()));
@@ -88,7 +88,7 @@ class AdminSchedulePanelTest {
             }));
 
             assertTrue(context.logout().isSuccess());
-            assertTrue(context.login("student001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
             SlotListResponse slots = assertInstanceOf(
                     SlotListResponse.class,
                     context.send(

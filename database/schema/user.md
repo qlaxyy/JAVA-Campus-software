@@ -4,21 +4,21 @@
 
 - 模块：用户管理、登录、会话与管理员授权
 - 对应 Epic：[#1](https://github.com/qlaxyy/JAVA-Campus-software/issues/1)
-- 状态：账号与管理范围已接入 Access DAO；慢哈希、审计和完整状态模型待实现
+- 状态：账号、管理范围和账号管理审计已接入 Access DAO；慢哈希和完整状态模型待实现
 
 ## 2. 表清单
 
 | 表名 | 业务含义 | 主键 | 重要约束 |
 |---|---|---|---|
-| `tblUser` | 登录账号和账号级权限 | `userId` | `username` 唯一；密码只存带盐慢哈希；状态控制登录 |
+| `tblUser` | 一卡通登录账号和账号级权限 | `userId` | `username` 保存唯一一卡通号；密码只存校验值；状态控制登录 |
 | `tblUserAdminScope` | 账号附加的业务管理范围 | `userAdminScopeId` | `(userId, moduleCode)` 唯一 |
-| `tblUserAuditLog`（规划） | 用户与授权管理审计 | `auditLogId` | 尚未建表；只追加且不记录密码、盐或完整 token |
+| `tblUserAuditLog` | 超级管理员账号操作记录 | `auditId` | 只追加；不记录密码、密码 proof 或完整 token |
 
-会话第一阶段仍保存在服务器内存，暂不落库。将来需要跨进程或重启保持会话时再单独评审会话表。
+会话保存在服务器内存，暂不落库。服务器记录创建时间和最后访问时间：连续 30 分钟无操作或创建满 8 小时后 token 失效。将来需要跨进程或重启保持会话时再单独评审会话表。
 
 当前可运行版本为了与既有登录协议兼容，`tblUser` 实际保存 `passwordProof`
 和 `enabled`；`tblUserAdminScope` 实际使用 `scopeId`、`userId`、`moduleCode`。
-下面的慢哈希、时间字段和审计表是交付前的目标结构，不应误认为已经实现。
+下面 `tblUser` 和 `tblUserAdminScope` 中的慢哈希、时间及完整状态字段是交付前的目标结构；审计表字段为当前实现。
 
 ## 3. 字段字典
 
@@ -27,7 +27,7 @@
 | 字段 | Access 类型 | 必填 | 默认值 | 说明 |
 |---|---|---|---|---|
 | `userId` | Short Text(36) | 是 | 无 | 主键，使用稳定随机标识，不使用用户名作外键 |
-| `username` | Short Text(50) | 是 | 无 | 登录名，建立唯一索引；保存前统一去除首尾空白并按确定规则规范化 |
+| `username` | Short Text(50) | 是 | 无 | 技术字段名；实际保存 8 位一卡通号。普通账号使用 4 位年份 + `0001`—`9999`，`20260000` 保留给演示超级管理员；建立唯一索引 |
 | `passwordHash` | Short Text(255) | 是 | 无 | 慢哈希结果；算法和参数随记录保存或统一版本化 |
 | `passwordSalt` | Short Text(255) | 是 | 无 | 每个账号独立的密码盐 |
 | `displayName` | Short Text(100) | 是 | 无 | 界面显示名，不用于鉴权 |
@@ -51,19 +51,21 @@
 
 | 字段 | Access 类型 | 必填 | 默认值 | 说明 |
 |---|---|---|---|---|
-| `auditLogId` | AutoNumber | 是 | 自动编号 | 主键 |
-| `actorUserId` | Short Text(36) | 是 | 无 | 操作者 |
-| `actionCode` | Short Text(80) | 是 | 无 | 如 `USER.ADMIN_UPDATE_STATUS`、`USER.ADMIN_GRANT_SCOPE` |
-| `targetUserId` | Short Text(36) | 否 | 空 | 被操作账号 |
-| `resultCode` | Short Text(50) | 是 | 无 | 成功或安全错误码 |
-| `requestId` | Short Text(36) | 是 | 无 | 对应网络请求，便于排查 |
+| `auditId` | Short Text(36) | 是 | UUID | 主键 |
 | `occurredAt` | Date/Time | 是 | 当前时间 | 操作时间 |
+| `actorUserId` | Short Text(36) | 是 | 无 | 操作者 |
+| `actorUsername` | Short Text(50) | 是 | 无 | 操作者当时的一卡通号 |
+| `actorDisplayName` | Short Text(100) | 是 | 无 | 操作者当时的显示名称 |
+| `actionCode` | Short Text(80) | 是 | 无 | 如 `USER.ADMIN_UPDATE_STATUS` |
+| `targetText` | Short Text(120) | 是 | 无 | 目标一卡通号、用户 ID 或批量操作摘要 |
+| `successful` | Yes/No | 是 | 无 | 操作是否成功 |
+| `detailText` | Short Text(255) | 是 | 无 | 响应码和简短结果，不含敏感凭据 |
 
 ## 4. 关系、索引与业务约束
 
 - `tblUser.username` 建唯一索引。
 - `tblUserAdminScope.userId + moduleCode` 建联合唯一索引。
-- `USER` 可以存在零到多条范围记录；`SUPER_ADMIN` 不写范围记录时也由角色隐式覆盖所有业务模块。
+- `USER` 只能存在零或一条范围记录，即一个普通账号最多管理一个子系统；`SUPER_ADMIN` 不依赖范围记录，由角色隐式覆盖所有业务模块。
 - 只有 `SUPER_ADMIN` 可以新增管理员、分配/撤销范围、修改角色、启停账号和重置他人密码。
 - 至少保留一个 `ACTIVE` 的 `SUPER_ADMIN`；禁止停用自己、删除自己或撤销最后一个启用超级管理员。
 - 管理员只能发起密码重置，不能查看或恢复原密码。
@@ -72,37 +74,47 @@
 
 ## 5. 开发期演示数据
 
-| 用户名 | 角色 | 管理范围 | 用途 |
+| 一卡通号 | 角色 | 管理范围 | 用途 |
 |---|---|---|---|
-| `student001` | `USER` | 无 | 普通账号；学籍资格由学籍子系统数据决定 |
-| `teacher001` | `USER` | 无 | 普通账号；当前医院有效医生档案绑定其 `userId` |
-| `admin` | `SUPER_ADMIN` | 隐式全部 | 用户管理与全局管理流程 |
-| `studentadmin` | `USER` | `STUDENT` | 学籍管理授权 |
-| `courseadmin` | `USER` | `COURSE` | 选课管理授权 |
-| `libraryadmin` | `USER` | `LIBRARY` | 图书馆管理授权 |
-| `shopadmin` | `USER` | `SHOP` | 商店管理授权 |
-| `hospitaladmin` | `USER` | `HOSPITAL` | 医院管理授权；可提交医生申请但不能审核 |
+| `20260000` | `SUPER_ADMIN` | 隐式全部 | 保留的演示超级管理员号；用户管理与全局管理流程 |
+| `20260001` | `USER` | 无 | 普通账号；学籍资格由学籍子系统数据决定 |
+| `20260002` | `USER` | 无 | 普通账号；当前医院有效医生档案绑定其 `userId` |
+| `20260003` | `USER` | `STUDENT` | 学籍管理授权 |
+| `20260004` | `USER` | `COURSE` | 选课管理授权 |
+| `20260005` | `USER` | `LIBRARY` | 图书馆管理授权 |
+| `20260006` | `USER` | `SHOP` | 商店管理授权 |
+| `20260007` | `USER` | `HOSPITAL` | 医院管理授权；可提交医生申请但不能审核 |
+| `20260008` | `USER` | 无 | 普通教师演示账号；教师资格由选课子系统根据 `userId` 绑定和判断 |
 
-空的 `vCampus.accdb` 首次启动时会写入这些虚构账号；已有数据时不会重复初始化或覆盖修改。不能提交真实个人信息或密码。
+空的 `vCampus.accdb` 首次启动时会写入这些虚构账号；旧开发数据库若未占用 `20260008`，服务器启动时也会补入教师演示账号，但不会覆盖同号账号或其他修改。不能提交真实个人信息或密码。
 
 ## 6. 第一批用户管理 Action
 
 | Action | 调用者 | 作用 |
 |---|---|---|
+| `USER.CHANGE_PASSWORD` | 任意已登录账号 | 校验当前密码后修改自己的密码，并清除该账号全部已有会话 |
 | `USER.ADMIN_LIST_ACCOUNTS` | `SUPER_ADMIN` | 按用户名、角色、状态查询账号 |
-| `USER.ADMIN_CREATE_ACCOUNT` | `SUPER_ADMIN` | 创建普通账号并设置初始管理范围 |
+| `USER.ADMIN_PREVIEW_NEXT_ACCOUNT` | `SUPER_ADMIN` | 预览按当年最大流水号加一得到的下一张一卡通号 |
+| `USER.ADMIN_CREATE_GENERATED_ACCOUNT` | `SUPER_ADMIN` | 由服务器重新计算并生成一卡通号，创建普通账号并设置 0–1 个管理范围 |
+| `USER.ADMIN_CREATE_ACCOUNT` | `SUPER_ADMIN` | 兼容旧客户端的指定一卡通号创建接口；新版界面不再调用 |
 | `USER.ADMIN_BATCH_CREATE_ACCOUNTS` | `SUPER_ADMIN` | 原子批量创建不含管理权限的普通账号，最多 1000 个 |
 | `USER.ADMIN_UPDATE_ACCOUNT` | `SUPER_ADMIN` | 修改显示名称和子系统管理范围 |
 | `USER.ADMIN_UPDATE_STATUS` | `SUPER_ADMIN` | 启用或停用账号，不物理删除 |
 | `USER.ADMIN_RESET_PASSWORD` | `SUPER_ADMIN` | 重置账号密码并清除该账号已有会话 |
+| `USER.ADMIN_LIST_AUDIT_LOGS` | `SUPER_ADMIN` | 查看全部账号管理操作记录 |
 
-上述 Action 已通过 `UserRepository` 使用 Access。第一版不提供创建其他超级管理员或修改全局角色；Action 和 DTO 保持不变。
+上述账号 Action 已通过 `UserRepository` 使用 Access。新增、批量导入、编辑、启停和重置密码的成功结果及业务失败会追加到 `tblUserAuditLog`；查询审计记录只允许 `SUPER_ADMIN`，且没有修改或删除审计记录的 Action。创建和编辑普通账号时，客户端提示“选择 0–1 个权限”，服务器也会拒绝同时提交多个管理范围。第一版不提供创建其他超级管理员或修改全局角色。
 
-医院申请分为两类。关联已有校园账号时，医院在提交阶段通过内部 `AccountProvisioning` 精确查询账号并锁定其 `userId`；找不到或已禁用时拒绝提交。新建外来医生时不接收医院填写的账号名，超级管理员批准后由用户模块生成唯一登录账号，以初始密码 `123456` 创建 `Role.USER` 账号并返回新 `userId`。禁止根据“填写的账号名碰巧存在”自动复用账户。
+医院申请分为两类。关联已有校园账号时，医院在提交阶段通过内部 `AccountProvisioning` 精确查询一卡通号并锁定其 `userId`；找不到或已禁用时拒绝提交。新建外来医生时不接收医院填写的一卡通号，超级管理员批准后由用户模块以“当前年份 + 当年最大流水号加一”生成唯一一卡通号，以初始密码 `123456` 创建 `Role.USER` 账号并返回新 `userId`。禁止根据姓名或碰巧重复的输入自动复用账户。
 
-批量导入 CSV 使用 UTF-8 编码，第一行为 `username,displayName`。初始密码统一为
+批量导入 CSV 使用 UTF-8 编码，第一行为 `campusCardNumber,displayName`。初始密码统一为
 `123456`，文件中不保存密码和管理范围。服务器会再次检查已有账号和文件内重复账号；
 任意一行失败时 Access 事务整体回滚。
+
+旧开发数据库启动时会把 `student001`、`teacher001`、`admin` 等 8 个演示登录名迁移为
+`20260000` 至 `20260007`，保留原 `userId`、显示名称、角色、管理范围和启停状态；新增的普通教师演示账号固定使用 `20260008`。由于开发期
+`passwordProof` 包含登录名，发生迁移的账号密码统一重置为公开测试密码 `123456`。
+已有开发数据库中的演示账号也会按其稳定的 `userId` 自动整理为上述连续编号；迁移过程不会改变人员身份和权限，但密码会因一卡通号变化重置为 `123456`。
 
 ## 7. 待评审问题
 

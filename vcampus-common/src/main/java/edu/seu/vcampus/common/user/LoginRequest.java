@@ -2,7 +2,6 @@ package edu.seu.vcampus.common.user;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.util.Locale;
 import java.util.Objects;
 
 /**
@@ -19,7 +18,7 @@ public final class LoginRequest implements Serializable {
     /**
      * Creates a login request.
      *
-     * @param username demo account name
+     * @param username eight-digit campus-card number used for login
      * @param passwordProof lowercase SHA-256 proof created by {@link PasswordProof}
      */
     public LoginRequest(String username, String passwordProof) {
@@ -42,11 +41,6 @@ public final class LoginRequest implements Serializable {
     }
 
     private static String normalizeUsername(String value) {
-        Objects.requireNonNull(value, "username must not be null");
-        String normalized = value.trim().toLowerCase(Locale.ROOT);
-        if (!normalized.matches("[a-z0-9_]{3,32}")) {
-            throw new IllegalArgumentException("username format is invalid");
-        }
-        return normalized;
+        return CampusCardNumber.normalize(value);
     }
 }

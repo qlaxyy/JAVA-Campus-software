@@ -33,7 +33,7 @@ class AdminAdministrationPanelTest {
         try (HospitalServerProcess server = HospitalServerProcess.start(database, log)) {
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.port()));
-            assertTrue(context.login("hospitaladmin", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260007", "123456".toCharArray()).isSuccess());
 
             AdminDepartmentPanel[] departments = new AdminDepartmentPanel[1];
             SwingUtilities.invokeAndWait(() -> {

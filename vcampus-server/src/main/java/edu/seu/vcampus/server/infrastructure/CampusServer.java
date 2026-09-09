@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
+import java.net.InetAddress;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
@@ -111,6 +112,21 @@ public final class CampusServer implements AutoCloseable {
             throw new IllegalStateException("server has not been started");
         }
         return socket.getLocalPort();
+    }
+
+    /**
+     * Returns the address on which the server socket is listening.
+     * An any-local address means clients may connect through any available
+     * network interface, subject to the host firewall and network policy.
+     *
+     * @return bound local address
+     */
+    public InetAddress getBindAddress() {
+        ServerSocket socket = serverSocket;
+        if (socket == null) {
+            throw new IllegalStateException("server has not been started");
+        }
+        return socket.getInetAddress();
     }
 
     /**

@@ -21,6 +21,6 @@ public final class LibraryClientModule implements ClientModule {
 
     @Override
     public JComponent createView(ClientContext context) {
-        return new LibraryPanel(context);
+        return new LibraryModePanel(context);
     }
 }

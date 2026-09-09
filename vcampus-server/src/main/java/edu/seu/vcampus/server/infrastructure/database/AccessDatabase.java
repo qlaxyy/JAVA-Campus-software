@@ -7,6 +7,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Objects;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /** Opens JDBC connections to the server-owned Microsoft Access database. */
 public final class AccessDatabase {
@@ -27,7 +29,9 @@ public final class AccessDatabase {
     /** Opens a new connection. Callers must close it. */
     public Connection openConnection() throws SQLException {
         String url = "jdbc:ucanaccess://" + path + ";newDatabaseVersion=V2010";
-        return DriverManager.getConnection(url);
+        Connection connection = DriverManager.getConnection(url);
+        suppressMisleadingCursorWarnings();
+        return connection;
     }
 
     /** Returns the normalized database file path. */
@@ -55,5 +59,14 @@ public final class AccessDatabase {
             throw new IllegalStateException(
                     "UCanAccess JDBC driver is not available.", exception);
         }
+    }
+
+    private void suppressMisleadingCursorWarnings() {
+        // Opening the first connection can reset this UCanAccess logger. Configure it
+        // afterwards: rejected WHERE candidates are normal, while real SQL failures
+        // still surface as exceptions and SEVERE records.
+        Logger logger = Logger.getLogger("net.ucanaccess.commands.AbstractCursorCommand");
+        logger.setLevel(Level.SEVERE);
+        logger.setFilter(record -> record.getLevel().intValue() >= Level.SEVERE.intValue());
     }
 }

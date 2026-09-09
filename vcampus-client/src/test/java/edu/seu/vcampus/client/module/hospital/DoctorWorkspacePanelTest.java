@@ -302,7 +302,7 @@ class DoctorWorkspacePanelTest {
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(context.login(
-                    "student001", "123456".toCharArray()).isSuccess());
+                    "20260001", "123456".toCharArray()).isSuccess());
             AppointmentBookingView booking = assertInstanceOf(
                     AppointmentBookingView.class,
                     context.send(
@@ -310,7 +310,7 @@ class DoctorWorkspacePanelTest {
                             BookAppointmentRequest.firstVisit("slot-general-1")).getData());
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
-                    "teacher001", "123456".toCharArray()).isSuccess());
+                    "20260002", "123456".toCharArray()).isSuccess());
 
             DoctorWorkspacePanel[] panel = new DoctorWorkspacePanel[1];
             SwingUtilities.invokeAndWait(() -> {
@@ -378,7 +378,7 @@ class DoctorWorkspacePanelTest {
             ClientContext patientUpdater = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(patientUpdater.login(
-                    "student001", "123456".toCharArray()).isSuccess());
+                    "20260001", "123456".toCharArray()).isSuccess());
             assertTrue(patientUpdater.send(
                     HospitalActions.UPDATE_MY_HEALTH_PROFILE,
                     new UpdatePatientHealthProfileRequest(

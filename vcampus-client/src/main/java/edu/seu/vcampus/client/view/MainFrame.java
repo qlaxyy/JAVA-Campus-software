@@ -14,8 +14,11 @@ import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JOptionPane;
+import javax.swing.JPasswordField;
 import javax.swing.SwingConstants;
 import javax.swing.SwingWorker;
+import javax.swing.SwingUtilities;
 import javax.swing.border.MatteBorder;
 import javax.swing.plaf.basic.BasicButtonUI;
 import java.awt.BorderLayout;
@@ -35,6 +38,7 @@ import java.awt.Insets;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
@@ -61,6 +65,7 @@ public final class MainFrame extends JFrame {
     private final JLabel sessionLabel = new JLabel();
     private final JButton pingButton = new JButton("测试服务器连接");
     private final JButton logoutButton = new JButton("退出登录");
+    private final JButton changePasswordButton = new JButton("修改密码");
     private LoginPanel loginPanel;
     private JPanel workspacePanel;
 
@@ -83,7 +88,9 @@ public final class MainFrame extends JFrame {
         setLocationByPlatform(true);
 
         loginPanel = new LoginPanel(context, this::showWorkspace);
+        context.setAuthenticationLostHandler(this::showExpiredSessionLogin);
         logoutButton.addActionListener(event -> logout());
+        changePasswordButton.addActionListener(event -> changePassword());
         pingButton.addActionListener(event -> pingServer());
         applicationPanel.add(loginPanel, LOGIN_CARD);
         setContentPane(applicationPanel);
@@ -174,9 +181,14 @@ public final class MainFrame extends JFrame {
         account.setOpaque(false);
         sessionLabel.setForeground(Color.WHITE);
         sessionLabel.setFont(sessionLabel.getFont().deriveFont(Font.BOLD, 14F));
+        JPanel accountActions = new JPanel(new GridLayout(1, 0, 8, 0));
+        accountActions.setOpaque(false);
+        styleHeaderButton(changePasswordButton);
         styleHeaderButton(logoutButton);
+        accountActions.add(changePasswordButton);
+        accountActions.add(logoutButton);
         account.add(sessionLabel, BorderLayout.CENTER);
-        account.add(logoutButton, BorderLayout.EAST);
+        account.add(accountActions, BorderLayout.EAST);
 
         header.add(brand, BorderLayout.WEST);
         header.add(account, BorderLayout.EAST);
@@ -335,8 +347,7 @@ public final class MainFrame extends JFrame {
 
     private void showWorkspace(SessionInfo session) {
         rebuildWorkspace(session);
-        sessionLabel.setText(session.getDisplayName() + "（"
-                + accountTypeText(session) + "）");
+        sessionLabel.setText(session.getDisplayName());
         statusLabel.setText("登录成功");
         applicationLayout.show(applicationPanel, WORKSPACE_CARD);
     }
@@ -349,10 +360,6 @@ public final class MainFrame extends JFrame {
         applicationPanel.add(workspacePanel, WORKSPACE_CARD);
         applicationPanel.revalidate();
         applicationPanel.repaint();
-    }
-
-    private static String accountTypeText(SessionInfo session) {
-        return session.canManageUsers() ? "超级管理员" : "普通账号";
     }
 
     private void logout() {
@@ -386,6 +393,105 @@ public final class MainFrame extends JFrame {
                 }
             }
         }.execute();
+    }
+
+    private void showExpiredSessionLogin() {
+        SwingUtilities.invokeLater(() -> {
+            loginPanel.prepareForLogin("登录状态已过期，请重新登录");
+            applicationLayout.show(applicationPanel, LOGIN_CARD);
+        });
+    }
+
+    private void changePassword() {
+        JPasswordField currentField = new JPasswordField();
+        JPasswordField newField = new JPasswordField();
+        JPasswordField confirmationField = new JPasswordField();
+        currentField.enableInputMethods(false);
+        newField.enableInputMethods(false);
+        confirmationField.enableInputMethods(false);
+        JPanel form = new JPanel(new GridLayout(0, 1, 4, 4));
+        form.add(new JLabel("当前密码："));
+        form.add(currentField);
+        form.add(new JLabel("新密码："));
+        form.add(newField);
+        form.add(new JLabel("再次输入新密码："));
+        form.add(confirmationField);
+
+        int result = JOptionPane.showConfirmDialog(
+                this, form, "修改密码",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (result != JOptionPane.OK_OPTION) {
+            clearPasswordFields(currentField, newField, confirmationField);
+            return;
+        }
+
+        char[] currentPassword = currentField.getPassword();
+        char[] newPassword = newField.getPassword();
+        char[] confirmation = confirmationField.getPassword();
+        currentField.setText("");
+        newField.setText("");
+        confirmationField.setText("");
+        if (currentPassword.length == 0 || newPassword.length == 0) {
+            clearPasswords(currentPassword, newPassword, confirmation);
+            JOptionPane.showMessageDialog(this, "密码不能为空。", "修改密码",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (!Arrays.equals(newPassword, confirmation)) {
+            clearPasswords(currentPassword, newPassword, confirmation);
+            JOptionPane.showMessageDialog(this, "两次输入的新密码不一致。", "修改密码",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        Arrays.fill(confirmation, '\0');
+        changePasswordButton.setEnabled(false);
+        logoutButton.setEnabled(false);
+        statusLabel.setText("正在修改密码……");
+
+        new SwingWorker<Response, Void>() {
+            @Override
+            protected Response doInBackground() throws Exception {
+                return context.changePassword(currentPassword, newPassword);
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    Response response = get();
+                    if (response.isSuccess()) {
+                        loginPanel.prepareForLogin(response.getMessage());
+                        applicationLayout.show(applicationPanel, LOGIN_CARD);
+                    } else {
+                        statusLabel.setText("密码修改失败：" + response.getMessage());
+                        JOptionPane.showMessageDialog(MainFrame.this,
+                                response.getMessage(), "修改密码",
+                                JOptionPane.WARNING_MESSAGE);
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    statusLabel.setText("密码修改已中断");
+                } catch (ExecutionException exception) {
+                    statusLabel.setText("密码修改失败，请确认服务器已经启动");
+                } finally {
+                    changePasswordButton.setEnabled(true);
+                    logoutButton.setEnabled(true);
+                }
+            }
+        }.execute();
+    }
+
+    private static void clearPasswordFields(JPasswordField... fields) {
+        for (JPasswordField field : fields) {
+            char[] password = field.getPassword();
+            Arrays.fill(password, '\0');
+            field.setText("");
+        }
+    }
+
+    private static void clearPasswords(char[]... passwords) {
+        for (char[] password : passwords) {
+            Arrays.fill(password, '\0');
+        }
     }
 
     private static final class GradientHeader extends JPanel {

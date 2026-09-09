@@ -1,63 +1,45 @@
 package edu.seu.vcampus.common.student;
 
-import java.io.Serial;
 import java.io.Serializable;
 
-public class StudentProfileDto implements Serializable {
-    @Serial
+public final class StudentProfileDto implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    // 核心只读学籍字段
-    private String studentId;
-    private String name;
-    private String gender;
-    private String idCard;
-    private String birthDate;
-    private String ethnicity;
-    private String nativePlace;
-    private String department;
-    private String major;
-    private String className;
-    private String enrollmentYear;
-    private String educationLevel;
-    private String status;
+    // 核心身份与学籍字段（只读）
+    private Long id;                  // 物理主键，对应选课模块 tblEnrollment.studentId
+    private String studentId;         // 业务学号，如 student001
+    private String name;              // 姓名
+    private String gender;            // 性别 (男/女 或 MALE/FEMALE)
+    private String ethnicity;         // 民族
+    private String nativePlace;       // 籍贯
+    private String idCardNumber;      // 身份证号
+    private String birthDate;         // 出生日期
+    private String enrollmentDate;    // 入学日期
+    private Integer enrollmentYear;   // 入学年份
+    private String department;        // 院系
+    private String major;             // 专业
+    private String className;         // 班级
+    private Integer schoolingLength;  // 学制年限
+    private String academicStatus;    // 学籍状态
 
-    // 可自主维护的补充信息字段
-    private String politicalStatus;
-    private String phone;
-    private String email;
-    private String homeAddress;
-    private String emergencyContact;
-    private String emergencyPhone;
+    // 选课模块联调新字段
+    private Long planId;              // 培养方案标识
+    private Integer currentTerm;      // 当前修读建议学期 (1-8)
+    private Long campusId;            // 校区标识 (1: 九龙湖, 2: 四牌楼, 3: 丁家桥)
+
+    // 学生自维联络与补充档案（支持编辑）
+    private String politicalStatus;   // 政治面貌
+    private String phone;             // 联系电话
+    private String email;             // 电子邮箱
+    private String homeAddress;       // 家庭住址
+    private String emergencyContact;  // 紧急联系人
+    private String emergencyPhone;    // 紧急联系人电话
 
     public StudentProfileDto() {}
 
-    public StudentProfileDto(String studentId, String name, String gender, String idCard,
-                             String birthDate, String ethnicity, String nativePlace,
-                             String politicalStatus, String department, String major,
-                             String className, String enrollmentYear, String educationLevel,
-                             String status, String phone, String email, String homeAddress,
-                             String emergencyContact, String emergencyPhone) {
-        this.studentId = studentId;
-        this.name = name;
-        this.gender = gender;
-        this.idCard = idCard;
-        this.birthDate = birthDate;
-        this.ethnicity = ethnicity;
-        this.nativePlace = nativePlace;
-        this.politicalStatus = politicalStatus;
-        this.department = department;
-        this.major = major;
-        this.className = className;
-        this.enrollmentYear = enrollmentYear;
-        this.educationLevel = educationLevel;
-        this.status = status;
-        this.phone = phone;
-        this.email = email;
-        this.homeAddress = homeAddress;
-        this.emergencyContact = emergencyContact;
-        this.emergencyPhone = emergencyPhone;
-    }
+    // Getters and Setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
     public String getStudentId() { return studentId; }
     public void setStudentId(String studentId) { this.studentId = studentId; }
@@ -68,20 +50,23 @@ public class StudentProfileDto implements Serializable {
     public String getGender() { return gender; }
     public void setGender(String gender) { this.gender = gender; }
 
-    public String getIdCard() { return idCard; }
-    public void setIdCard(String idCard) { this.idCard = idCard; }
-
-    public String getBirthDate() { return birthDate; }
-    public void setBirthDate(String birthDate) { this.birthDate = birthDate; }
-
     public String getEthnicity() { return ethnicity; }
     public void setEthnicity(String ethnicity) { this.ethnicity = ethnicity; }
 
     public String getNativePlace() { return nativePlace; }
     public void setNativePlace(String nativePlace) { this.nativePlace = nativePlace; }
 
-    public String getPoliticalStatus() { return politicalStatus; }
-    public void setPoliticalStatus(String politicalStatus) { this.politicalStatus = politicalStatus; }
+    public String getIdCardNumber() { return idCardNumber; }
+    public void setIdCardNumber(String idCardNumber) { this.idCardNumber = idCardNumber; }
+
+    public String getBirthDate() { return birthDate; }
+    public void setBirthDate(String birthDate) { this.birthDate = birthDate; }
+
+    public String getEnrollmentDate() { return enrollmentDate; }
+    public void setEnrollmentDate(String enrollmentDate) { this.enrollmentDate = enrollmentDate; }
+
+    public Integer getEnrollmentYear() { return enrollmentYear; }
+    public void setEnrollmentYear(Integer enrollmentYear) { this.enrollmentYear = enrollmentYear; }
 
     public String getDepartment() { return department; }
     public void setDepartment(String department) { this.department = department; }
@@ -92,14 +77,23 @@ public class StudentProfileDto implements Serializable {
     public String getClassName() { return className; }
     public void setClassName(String className) { this.className = className; }
 
-    public String getEnrollmentYear() { return enrollmentYear; }
-    public void setEnrollmentYear(String enrollmentYear) { this.enrollmentYear = enrollmentYear; }
+    public Integer getSchoolingLength() { return schoolingLength; }
+    public void setSchoolingLength(Integer schoolingLength) { this.schoolingLength = schoolingLength; }
 
-    public String getEducationLevel() { return educationLevel; }
-    public void setEducationLevel(String educationLevel) { this.educationLevel = educationLevel; }
+    public String getAcademicStatus() { return academicStatus; }
+    public void setAcademicStatus(String academicStatus) { this.academicStatus = academicStatus; }
 
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
+    public Long getPlanId() { return planId; }
+    public void setPlanId(Long planId) { this.planId = planId; }
+
+    public Integer getCurrentTerm() { return currentTerm; }
+    public void setCurrentTerm(Integer currentTerm) { this.currentTerm = currentTerm; }
+
+    public Long getCampusId() { return campusId; }
+    public void setCampusId(Long campusId) { this.campusId = campusId; }
+
+    public String getPoliticalStatus() { return politicalStatus; }
+    public void setPoliticalStatus(String politicalStatus) { this.politicalStatus = politicalStatus; }
 
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }

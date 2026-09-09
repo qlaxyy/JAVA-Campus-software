@@ -52,7 +52,7 @@ class SlotSearchPanelTest {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(context.login("student001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
             AppointmentBookingView booking = assertInstanceOf(
                     AppointmentBookingView.class,
                     context.send(
@@ -60,7 +60,7 @@ class SlotSearchPanelTest {
                             BookAppointmentRequest.firstVisit("slot-general-1"))
                             .getData());
             assertTrue(context.logout().isSuccess());
-            assertTrue(context.login("teacher001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260002", "123456".toCharArray()).isSuccess());
             ConsultationRecordView consultation = assertInstanceOf(
                     ConsultationRecordView.class,
                     context.send(
@@ -74,7 +74,7 @@ class SlotSearchPanelTest {
                                     "症状反复时普通复诊。"))
                             .getData());
             assertTrue(context.logout().isSuccess());
-            assertTrue(context.login("student001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
 
             SlotSearchPanel[] panel = new SlotSearchPanel[1];
             SwingUtilities.invokeAndWait(() -> {
@@ -100,7 +100,7 @@ class SlotSearchPanelTest {
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(context.login(
-                    "student001", "123456".toCharArray()).isSuccess());
+                    "20260001", "123456".toCharArray()).isSuccess());
 
             SlotSearchPanel[] panel = new SlotSearchPanel[1];
             SwingUtilities.invokeAndWait(() -> {
@@ -166,7 +166,7 @@ class SlotSearchPanelTest {
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(context.login(
-                    "student001", "123456".toCharArray()).isSuccess());
+                    "20260001", "123456".toCharArray()).isSuccess());
 
             SlotSearchPanel[] panel = new SlotSearchPanel[1];
             SwingUtilities.invokeAndWait(() -> {

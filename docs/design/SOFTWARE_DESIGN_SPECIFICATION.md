@@ -108,22 +108,25 @@
 
 | 编号 | 功能 | 说明 |
 |---|---|---|
-| LOGIN-01 | 输入校验 | 账号或密码为空时，客户端直接提示，不发送请求。 |
-| LOGIN-02 | 身份验证 | 服务器根据规范化用户名查找启用账号并校验密码 proof。 |
+| LOGIN-01 | 输入校验 | 登录号必须为 8 位数字；普通一卡通号使用“4 位年份 + `0001`—`9999`”，`20260000` 保留给演示超级管理员。账号或密码为空/格式错误时客户端直接提示，不发送请求。 |
+| LOGIN-02 | 身份验证 | 服务器根据一卡通号查找启用账号并校验密码 proof。 |
 | LOGIN-03 | 创建会话 | 验证成功后生成随机 token，在服务器保存 `token → SessionInfo`。 |
 | LOGIN-04 | 返回身份 | 登录成功时通过 `Response.data` 返回 `SessionInfo`。 |
 | LOGIN-05 | 保存会话 | 客户端把 `SessionInfo` 保存到 `ClientSession`。 |
 | LOGIN-06 | 携带凭证 | 登录后的请求由 `ClientContext` 自动携带 token。 |
 | LOGIN-07 | 查询会话 | 服务器可通过 token 查询当前 `SessionInfo`。 |
 | LOGIN-08 | 退出登录 | 服务器删除 token，客户端无论服务器结果如何都清除本地会话。 |
-| LOGIN-09 | 统一失败提示 | 账号不存在、被停用或密码错误均返回同一种凭据错误，避免泄露账号状态。 |
+| LOGIN-09 | 会话过期 | 连续空闲 30 分钟或创建满 8 小时后删除 token；客户端收到 `AUTH_REQUIRED` 后返回登录页。 |
+| LOGIN-10 | 统一失败提示 | 账号不存在、被停用或密码错误均返回同一种凭据错误，避免泄露账号状态。 |
 
 #### 2.2.3 账号管理功能需求
 
 - 只有 `SUPER_ADMIN` 可以查看、新增、编辑、启停和重置账号密码。
-- 超级管理员可选择 UTF-8 CSV 批量创建普通账号，格式为 `username,displayName`。
+- 超级管理员可选择 UTF-8 CSV 批量创建普通账号，格式为 `campusCardNumber,displayName`。
 - 批量导入每次最多 1000 个账号，不从文件授予管理权限，初始密码统一为 `123456`。
-- 服务器必须检查数据库已有用户名和文件内重复用户名；任意一行失败时整批回滚。
+- 服务器必须检查数据库已有一卡通号和文件内重复一卡通号；任意一行失败时整批回滚。
+- 新增、批量导入、编辑、启停和重置密码必须记录操作者、操作、目标、结果和时间；审计记录不得包含密码、密码 proof 或 token。
+- 只有 `SUPER_ADMIN` 可以读取全部账号管理操作记录，客户端不提供修改或删除记录的入口。
 
 #### 2.2.4 非功能需求
 
@@ -204,7 +207,7 @@ flowchart LR
 
 ### 5.1 模块背景
 
-用户登录模块是所有业务模块的统一入口。它只确认“当前账号是谁、具有哪些账号级权限和模块管理范围”，不在全局判断教师、医生、读者等业务资格。各业务模块得到 `userId` 后，再查询本模块的数据完成专业身份判断。
+用户登录模块是所有业务模块的统一入口。它只确认“当前账号是谁、具有哪些账号级权限和模块管理范围”，不在全局判断教师、医生、读者等业务资格。各业务模块得到 `userId` 后，再查询本模块的数据完成专业身份判断。开发期的 `20260008` 是无管理范围的普通账号；它只有在选课子系统的教师名单中绑定对应 `userId` 后，才具备教师业务资格。
 
 ### 5.2 用例设计
 
@@ -227,9 +230,9 @@ flowchart LR
 
 | 场景 | 处理结果 |
 |---|---|
-| 账号为空 | 客户端提示“请输入账户名”，不发送网络请求。 |
+| 一卡通号为空 | 客户端提示“请输入一卡通号”，不发送网络请求。 |
 | 密码为空 | 客户端提示“请输入密码”，不发送网络请求。 |
-| 用户名格式无效 | 请求构造失败，界面给出通用输入或连接提示。 |
+| 一卡通号格式无效 | 客户端提示“一卡通号必须是 8 位数字（年份 + 4 位流水号）”，不发送网络请求。 |
 | 请求数据不是 `LoginRequest` | 返回 `COMMON_INVALID_REQUEST`。 |
 | 账号不存在、已停用或密码错误 | 返回 `AUTH_INVALID_CREDENTIALS`，不创建会话。 |
 | 服务器无法连接或响应无效 | 客户端提示检查服务器状态。 |
@@ -249,7 +252,7 @@ flowchart LR
 
 | 控件 | 组件类型 | 名称 | 作用 |
 |---|---|---|---|
-| 账户名输入框 | `JTextField` | `login.username` | 输入登录账号。 |
+| 一卡通号输入框 | `JTextField` | `login.username` | 输入 8 位一卡通号；组件名暂为兼容字段名。 |
 | 密码输入框 | `JPasswordField` | `login.password` | 输入密码，避免以普通字符串读取。 |
 | 登录按钮 | `JButton` | `login.submit` | 发起登录，也可在密码框按回车触发。 |
 | 状态文本 | `JLabel` | `login.status` | 显示校验、登录中、成功或失败信息。 |
@@ -277,10 +280,12 @@ flowchart TD
     E --> F[Socket 发送到服务器]
     F --> G{data 是否为 LoginRequest}
     G -- 否 --> H[返回 COMMON_INVALID_REQUEST]
-    G -- 是 --> I[查询启用账号并校验 proof]
-    I --> J{验证是否成功}
-    J -- 否 --> K[返回 AUTH_INVALID_CREDENTIALS]
-    J -- 是 --> L[生成随机 token]
+    G -- 是 --> I{该一卡通号是否暂时受限}
+    I -- 是 --> K[返回 AUTH_INVALID_CREDENTIALS]
+    I -- 否 --> J[查询启用账号并校验 proof]
+    J --> Q{验证是否成功}
+    Q -- 否 --> R[累计失败次数] --> K
+    Q -- 是 --> S[清除失败记录] --> L[生成随机 token]
     L --> M[保存 token 到 SessionInfo 映射]
     M --> N[Response.data 返回 SessionInfo]
     N --> O[客户端保存 ClientSession]
@@ -298,6 +303,7 @@ sequenceDiagram
     participant CS as CampusServer
     participant UM as UserServerModule
     participant AS as AuthenticationService
+    participant AL as LoginAttemptLimiter
     participant UR as UserRepository
 
     User->>UI: 输入账号和密码
@@ -307,11 +313,23 @@ sequenceDiagram
     NC->>CS: Socket/ObjectOutputStream
     CS->>UM: ActionRouter.dispatch(request)
     UM->>AS: login(loginRequest)
-    AS->>UR: findByUsername(username)
-    UR-->>AS: UserAccount / empty
-    AS->>AS: 检查 enabled 和 passwordProof
-    AS->>AS: 生成 token，保存 SessionInfo
-    AS-->>UM: Optional<SessionInfo>
+    AS->>AL: isBlocked(username)
+    AL-->>AS: 是否暂停登录
+    alt 已暂停登录
+        AS-->>UM: Optional.empty
+    else 允许尝试
+        AS->>UR: findByUsername(username)
+        UR-->>AS: UserAccount / empty
+        AS->>AS: 检查 enabled 和 passwordProof
+        alt 验证失败
+            AS->>AL: recordFailure(username)
+            AS-->>UM: Optional.empty
+        else 验证成功
+            AS->>AL: recordSuccess(username)
+            AS->>AS: 生成 token，保存 SessionInfo
+            AS-->>UM: Optional<SessionInfo>
+        end
+    end
     UM-->>CS: Response
     CS-->>NC: ObjectInputStream
     NC-->>CC: Response
@@ -390,10 +408,21 @@ classDiagram
     class InMemoryAuthenticationService {
         -SecureRandom secureRandom
         -UserRepository users
+        -LoginAttemptLimiter loginAttempts
         -Map~String, SessionInfo~ sessions
         +login(LoginRequest request) Optional~SessionInfo~
         +logout(String token) boolean
         +findSession(String token) Optional~SessionInfo~
+    }
+
+    class LoginAttemptLimiter {
+        -int maximumFailures
+        -Duration failureWindow
+        -Duration lockDuration
+        -Map~String, FailureState~ failures
+        ~isBlocked(String username, Instant now) boolean
+        ~recordFailure(String username, Instant now) void
+        ~recordSuccess(String username) void
     }
 
     class UserRepository {
@@ -435,6 +464,7 @@ classDiagram
     CampusServer --> ActionRouter : 持有并分派
     UserServerModule ..> ActionRouter : 注册处理器
     UserServerModule --> InMemoryAuthenticationService : 持有
+    InMemoryAuthenticationService *-- LoginAttemptLimiter : 创建并管理
     InMemoryAuthenticationService --> UserRepository : 通过接口查询
     UserRepository <|.. InMemoryUserRepository : 实现
     UserRepository <|.. AccessUserRepository : 生产实现
@@ -523,7 +553,7 @@ classDiagram
 | 类 | 主要职责 | 登录相关方法 |
 |---|---|---|
 | `LoginPanel` | 登录表单、输入校验、异步调用和结果提示 | `login()`、`validationMessage()`、`prepareForLogin()` |
-| `ClientContext` | 封装登录、带 token 请求和退出操作 | `login()`、`send()`、`logout()`、`currentSession()` |
+| `ClientContext` | 封装登录、带 token 请求、退出和失效通知 | `login()`、`send()`、`logout()`、`currentSession()`、`setAuthenticationLostHandler()` |
 | `ClientSession` | 保存当前客户端会话 | `set()`、`clear()`、`current()`、`tokenOrNull()` |
 | `CampusClient` | 建立 Socket 并完成一次请求/响应 | `send(Request)` |
 
@@ -534,7 +564,7 @@ classDiagram
 | `CampusServer` | 监听连接、读取 Request、分派并写回 Response | `start()`、`handleClient()`、`dispatch()`、`close()` |
 | `ActionRouter` | 将 `USER.LOGIN` 映射到唯一处理器 | `register()`、`dispatch()` |
 | `UserServerModule` | 校验登录 DTO，组织成功或失败响应 | `registerHandlers()`、`login()`、`logout()`、`currentSession()` |
-| `InMemoryAuthenticationService` | 验证账号、创建/删除/查询会话 | `login()`、`logout()`、`findSession()` |
+| `InMemoryAuthenticationService` | 验证账号、创建/删除/查询会话并执行过期判断 | `login()`、`logout()`、`findSession()` |
 | `UserRepository` | 定义账号存取边界 | `findById()`、`findByUsername()`、`findAll()`、`save()` |
 | `AccessUserRepository` | 正式启动时使用的 Access 账号实现 | 实现 `UserRepository` |
 | `InMemoryUserRepository` | 自动化测试使用的隔离账号实现 | 实现 `UserRepository` |
@@ -548,17 +578,25 @@ classDiagram
 
 负责人：杨凯涵。后续按 4.3 节结构补充选课批次、课程查询、选课退课、冲突与容量规则、接口、数据库、图表和测试。
 
-## 8. 图书馆子系统设计说明（待负责人材料汇总）
+## 8. 图书馆子系统设计说明（V2 阶段 4 已实现）
 
-负责人：吴昊哲。后续按 4.3 节结构补充图书检索、馆藏、借阅归还、接口、数据库、图表和测试。
+负责人：吴昊哲。当前已完成书目与实体单册分离、按馆藏地汇总、条码借还、个人记录、
+书目与单册维护、全馆借阅查询、Access Repository 和借还事务。
 
-## 9. 商店子系统设计说明（待负责人材料汇总）
+当前实现及评审入口：[借阅归还交付说明](../modules/library-borrow-return.md)、
+[图书管理员维护设计与测试](../modules/library-admin-maintenance.md)。
+图书管理员是具有 `AdminScope.LIBRARY` 的 `Role.USER`，超级管理员也具备此能力；
+服务器从 token 取得会话，通过 `SessionInfo.canAdminister(ModuleNames.LIBRARY)` 判断。
+分类接口使用 `categoryId/categoryName`。正式启动时，书目、实体单册、分类和借阅记录均保存在
+`vCampus.accdb`；借书与归还的多个 Repository 通过 `AccessLibraryStore` 复用同一个 JDBC Connection。
 
-负责人：葛丰玮。后续按 4.3 节结构补充商品、购物车、订单、库存并发、接口、数据库、图表和测试。
+## 9. 商店子系统设计说明（已实现首条完整业务链路，其余待负责人材料汇总）
+
+负责人：葛丰玮。当前已有商品查询与发布、购物车、校园卡充值与支付、个人订单取消退款以及商家成交查询。服务器始终使用会话 `userId` 归属余额和订单；登录一卡通号同时作为界面展示的卡号，不再生成第二套编号。校园卡余额、商品和订单目前仍为内存实现，后续补充 Access DAO、库存并发验证以及完整图表。
 
 ## 10. 医院子系统设计说明（已补充医生申请链路，其余待负责人材料汇总）
 
-负责人：廖俊杰。当前已有患者、医生和管理员模式，以及医生新增申请审批链路。全局 `Role` 不包含医生。申请明确分为关联已有账号和新建外来医生：已有账号在提交时精确校验，外来医生不填写账号名，批准后由用户模块生成唯一 `Role.USER` 账号，再以 `userId` 激活医院医生档案。医院管理员不能直接创建账号或激活医生身份。号源预约等其余内容后续按 4.3 节补充。
+负责人：廖俊杰。当前已有患者、医生和管理员模式，以及医生新增申请审批链路。全局 `Role` 不包含医生。申请明确分为关联已有账号和新建外来医生：已有账号在提交时精确校验一卡通号，外来医生不填写一卡通号，批准后由用户模块按“当前年份 + 当年最大流水号加一”生成唯一 `Role.USER` 账号，再以 `userId` 激活医院医生档案。医院管理员不能直接创建账号或激活医生身份。号源预约等其余内容后续按 4.3 节补充。
 
 医生申请相关网络接口：
 
@@ -568,7 +606,7 @@ classDiagram
 | `HOSPITAL.LIST_DOCTOR_APPLICATIONS` | 医院管理员或超级管理员 | `null` | `DoctorApplicationListResponse` |
 | `HOSPITAL.REVIEW_DOCTOR_APPLICATION` | 超级管理员 | `ReviewDoctorApplicationRequest` | `DoctorApplicationView` |
 
-申请状态为 `PENDING`、`APPROVED` 或 `REJECTED`。已审核申请不能重复处理；医生编号在有效档案以及待审核/已通过申请中不得重复。关联已有账号必须在提交时找到并锁定准确账号；外来医生批准后生成唯一登录账号，初始密码为 `123456`。禁止把碰巧同名的登录账号自动认定为同一个人。申请和专业档案在正式启动时写入 Access，测试使用内存 Repository。
+申请状态为 `PENDING`、`APPROVED` 或 `REJECTED`。已审核申请不能重复处理；同一 `userId` 不能重复绑定有效医生档案。关联已有账号必须在提交时找到并锁定准确账号；外来医生批准后生成唯一一卡通号，初始密码为 `123456`。禁止把同名人员自动认定为同一个人。申请和专业档案在正式启动时写入 Access，测试使用内存 Repository。
 
 ## 11. 公共模块设计说明
 
@@ -581,12 +619,16 @@ classDiagram
 | `USER.LOGIN` | `null` | `LoginRequest` | `SessionInfo` | 验证账号并创建新会话。 |
 | `USER.CURRENT_SESSION` | 必填 | `null` | `SessionInfo` | 检查 token 是否仍有效。 |
 | `USER.LOGOUT` | 必填 | `null` | `null` | 删除服务器会话。 |
+| `USER.CHANGE_PASSWORD` | 必填 | `ChangePasswordRequest` | `null` | 修改当前账号密码，成功后清除该账号全部会话。 |
 | `USER.ADMIN_LIST_ACCOUNTS` | 必填 | `null` | `UserAccountListResponse` | 超级管理员查询账号。 |
+| `USER.ADMIN_PREVIEW_NEXT_ACCOUNT` | 必填 | `null` | `String` | 预览下一张自动生成的一卡通号。 |
+| `USER.ADMIN_CREATE_GENERATED_ACCOUNT` | 必填 | `CreateGeneratedUserAccountRequest` | `UserAccountView` | 由服务器生成一卡通号并创建普通账号。 |
 | `USER.ADMIN_CREATE_ACCOUNT` | 必填 | `CreateUserAccountRequest` | `UserAccountView` | 创建一个普通账号。 |
 | `USER.ADMIN_BATCH_CREATE_ACCOUNTS` | 必填 | `BatchCreateUserAccountsRequest` | `UserAccountListResponse` | 原子批量创建普通账号。 |
 | `USER.ADMIN_UPDATE_ACCOUNT` | 必填 | `UpdateUserAccountRequest` | `UserAccountView` | 修改显示名和管理范围。 |
 | `USER.ADMIN_UPDATE_STATUS` | 必填 | `UpdateUserStatusRequest` | `UserAccountView` | 启用或停用账号。 |
 | `USER.ADMIN_RESET_PASSWORD` | 必填 | `ResetUserPasswordRequest` | `UserAccountView` | 重置密码并清除该账号会话。 |
+| `USER.ADMIN_LIST_AUDIT_LOGS` | 必填 | `null` | `UserAuditLogResponse` | 超级管理员读取全部账号管理操作记录。 |
 
 ### 11.2 Request
 
@@ -601,10 +643,14 @@ classDiagram
 
 | 字段 | 类型 | 约束 | 说明 |
 |---|---|---|---|
-| `username` | `String` | 去首尾空格并转小写；匹配 `[a-z0-9_]{3,32}` | 规范化登录名。 |
+| `username` | `String` | 去首尾空格后必须匹配 `2\d{7}` | 技术字段名；实际内容是“4 位年份 + 4 位流水号”的一卡通号。 |
 | `passwordProof` | `String` | 64 位小写十六进制 SHA-256 值 | 开发期密码证明，不是原始密码。 |
 
 `PasswordProof.create()` 当前计算内容为领域标记、规范化用户名和密码的 SHA-256 摘要。它降低了原始密码进入请求对象的风险，但在没有 TLS 时仍可能被截获并重放，因此不能视为最终安全协议。
+
+`ChangePasswordRequest` 包含 `currentPasswordProof` 和 `newPasswordProof`。它不包含 `userId`：服务器必须通过请求 token 查询 `SessionInfo.userId`，从而保证普通用户只能修改自己的密码。两项证明均为 64 位小写十六进制 SHA-256 值；修改成功后客户端清除本地会话并返回登录页。
+
+单个新增账号时，客户端先调用 `USER.ADMIN_PREVIEW_NEXT_ACCOUNT`，把建议一卡通号显示在只读框中；确认创建时发送只包含姓名和管理范围的 `CreateGeneratedUserAccountRequest`。服务器再次读取当前年份已有一卡通号的最大四位流水号并加一，因而不按账号总数推算，也不依赖客户端预览值。批量导入仍使用文件中明确给出的一卡通号。
 
 ### 11.4 Response
 
@@ -622,10 +668,10 @@ classDiagram
 |---|---|---|
 | `token` | `String` | 32 个安全随机字节经 Base64 URL 无填充编码形成的会话凭证。 |
 | `userId` | `String` | 全系统稳定用户标识，业务模块用它查询自己的业务资料。 |
-| `username` | `String` | 登录账号。 |
+| `username` | `String` | 一卡通号；字段名为兼容现有接口保留。 |
 | `displayName` | `String` | 界面显示名称，不作为权限依据。 |
 | `role` | `Role` | `USER` 或 `SUPER_ADMIN`。 |
-| `adminScopes` | `Set<AdminScope>` | 允许管理的业务模块集合。 |
+| `adminScopes` | `Set<AdminScope>` | 普通账号只能为 0–1 项；超级管理员由 `Role` 隐式拥有全部管理能力。 |
 
 token 已经是 `SessionInfo` 的字段。登录响应不是分别返回两份“SessionInfo 和 token”，而是 `Response.data` 返回一个包含 token 的 `SessionInfo`。
 
@@ -656,7 +702,11 @@ token 已经是 `SessionInfo` 的字段。登录响应不是分别返回两份�
 
 ### 12.2 服务器端
 
-`CampusServer` 默认监听 8888 端口。服务器接收一个连接后，将处理任务提交到固定大小的工作线程池。每个连接当前只处理一个 Request 和一个 Response，然后关闭连接。
+`CampusServer` 默认在所有可用网络接口上监听 8888 端口。跨电脑联调统一使用 Radmin VPN 组成虚拟局域网，客户端连接服务器电脑的 Radmin VPN IPv4 地址；Radmin VPN 只提供 IP 网络，应用层仍为 TCP Socket。能否连通还取决于双方 Radmin 在线状态和服务器 Windows 防火墙。服务器接收一个连接后，将处理任务提交到固定大小的工作线程池。每个连接当前只处理一个 Request 和一个 Response，然后关闭连接。
+
+一个服务器可以同时服务多个客户端进程。每个客户端分别保存自己的 token；同一账号也可以建立多个相互独立的会话，其中一个客户端退出只删除自己的 token，不影响其他客户端会话。集成测试会并发启动多个 `ClientContext`，验证 token 唯一、会话查询正确和退出隔离。
+
+客户端程序通过启动参数接收服务器地址和端口，例如 `java -jar vcampus-client-0.1.0-SNAPSHOT.jar 26.12.34.56 8888`，其中地址必须替换为服务器的 Radmin VPN IPv4。自动测试只能证明监听方式、并发处理和会话隔离正确；最终验收还必须让服务器和客户端在两台真实电脑上通过 Radmin VPN 完成登录及至少一项业务操作。本课程项目的 Socket 协议没有 TLS，只用于课程组可信成员组成的虚拟局域网，不应直接暴露到公网。
 
 服务器收到对象后先检查是否为 `Request`，再交给 `ActionRouter`。路由器根据 `action` 找到 `UserServerModule` 注册的处理方法，并将返回值写回客户端。
 
@@ -678,9 +728,10 @@ Swing 组件必须在事件分派线程中创建和更新。登录网络请求�
 
 `CampusServer` 使用一个接收线程监听连接，使用固定线程池并发处理客户端请求。并发共享对象采用线程安全结构：
 
-- 会话：`ConcurrentHashMap<String, SessionInfo>`；
+- 会话：`ConcurrentHashMap<String, StoredSession>`，内部记录 `SessionInfo`、创建时间和最后访问时间；
 - 测试用内存账号：`ConcurrentHashMap<String, UserAccount>`；
 - 正式启动账号：Access DAO，每次操作使用独立 JDBC 连接，写入使用事务；
+- 正式启动图书馆：普通查询按次打开连接；借书和归还由事务上下文向多个 Repository 提供同一连接；
 - Action 注册表：`ConcurrentHashMap<String, RequestHandler>`。
 
 `SessionInfo` 和 `UserAccount` 采用不可变对象设计，减少并发修改风险。
@@ -692,10 +743,14 @@ Swing 组件必须在事件分派线程中创建和更新。登录网络请求�
 当前登录模块已经连接 `vCampus.accdb`：
 
 - `AccessUserRepository` 首次连接时创建用户表；
-- `DemoUserAccounts` 只在空库中初始化公开测试账号；
+- `AccessUserAuditRepository` 首次连接时创建只追加的账号管理审计表；
+- `DemoUserAccounts` 在空库中初始化完整公开测试账号，并可在未占用 `20260008` 时为旧开发数据库补入普通教师演示账号；
 - 账号资料和 `AdminScope` 修改会跨服务器重启保留；
 - `InMemoryAuthenticationService` 在内存中保存会话；
 - `AccessHospitalRepository` 保存医生新增申请和已审核医生档案；
+- `AccessLibraryStore` 创建图书馆四张表并协调跨 Repository 事务；
+- `AccessBookRepository`、`AccessBookCopyRepository`、`AccessBorrowRecordRepository` 和
+  `AccessBookCategoryRepository` 保存图书馆业务数据；
 - 服务器重启后全部 token 会失效，用户需要重新登录。
 
 自动化测试仍使用 `InMemoryUserRepository`，防止测试修改正式数据库。
@@ -710,6 +765,10 @@ flowchart LR
     UR --> MEM[测试 InMemoryUserRepository]
     UR --> DAO[生产 AccessUserRepository]
     DAO --> DB[(vCampus.accdb)]
+    USER[UserServerModule] --> AUDIT[UserAuditRepository 接口]
+    AUDIT --> AMEM[测试 InMemoryUserAuditRepository]
+    AUDIT --> ADAO[生产 AccessUserAuditRepository]
+    ADAO --> DB
 ```
 
 ### 14.3 登录相关表
@@ -719,7 +778,7 @@ flowchart LR
 | 字段 | Access 类型 | 必填 | 约束/默认值 | 登录用途 |
 |---|---|---|---|---|
 | `userId` | Short Text(36) | 是 | 主键 | 写入 `SessionInfo.userId`。 |
-| `username` | Short Text(50) | 是 | 唯一索引 | 查找登录账号。 |
+| `username` | Short Text(50) | 是 | 唯一索引、8 位数字 | 技术字段名，保存一卡通号并用于登录。 |
 | `passwordHash` | Short Text(255) | 是 | 带盐慢哈希 | 校验正式密码。 |
 | `passwordSalt` | Short Text(255) | 是 | 每个账号独立 | 防止相同密码产生相同哈希。 |
 | `displayName` | Short Text(100) | 是 | 非空 | 写入会话供界面显示。 |
@@ -736,16 +795,32 @@ flowchart LR
 | 字段 | Access 类型 | 必填 | 约束 | 说明 |
 |---|---|---|---|---|
 | `userAdminScopeId` | AutoNumber | 是 | 主键 | 范围记录编号。 |
-| `userId` | Short Text(36) | 是 | 外键 | 对应登录账号。 |
+| `userId` | Short Text(36) | 是 | 外键 | 对应一卡通账号的稳定内部标识。 |
 | `moduleCode` | Short Text(20) | 是 | 与 `userId` 联合唯一 | `STUDENT`、`COURSE`、`LIBRARY`、`SHOP` 或 `HOSPITAL`。 |
 | `grantedByUserId` | Short Text(36) | 是 | 外键 | 授权人。 |
 | `grantedAt` | Date/Time | 是 | 当前时间 | 授权时间。 |
 
+#### 14.3.3 `tblUserAuditLog`
+
+该表由用户服务器追加写入，保存账号管理操作的成功或失败结果。客户端只能通过 `USER.ADMIN_LIST_AUDIT_LOGS` 读取全部记录；系统不提供网络修改和删除接口。
+
+| 字段 | Access 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `auditId` | Short Text(36) | 是 | UUID 主键。 |
+| `occurredAt` | Date/Time | 是 | 操作发生时间。 |
+| `actorUserId` | Short Text(36) | 是 | 操作者稳定用户 ID。 |
+| `actorUsername` | Short Text(50) | 是 | 操作者当时的一卡通号。 |
+| `actorDisplayName` | Short Text(100) | 是 | 操作者当时的显示名称。 |
+| `actionCode` | Short Text(80) | 是 | 被执行的账号管理 Action。 |
+| `targetText` | Short Text(120) | 是 | 目标账号或批量操作摘要。 |
+| `successful` | Yes/No | 是 | 是否成功。 |
+| `detailText` | Short Text(255) | 是 | 响应码和简短说明，不含凭据。 |
+
 ### 14.4 会话存储
 
-第一阶段会话不写入 Access，而由用户服务器进程中的 `ConcurrentHashMap` 保存。其他服务器模块通过 `ServerContext.sessions()` 提供的只读 `SessionLookup` 查询 token；客户端不能调用 `ServerContext`，也不能直接读取服务器会话表。
+会话不写入 Access，而由用户服务器进程中的 `ConcurrentHashMap` 保存。每条记录包含创建时间和最后访问时间，空闲超时为 30 分钟，绝对有效期为 8 小时；每次成功查询会话会更新最后访问时间，但不会延长绝对有效期。其他服务器模块通过 `ServerContext.sessions()` 提供的只读 `SessionLookup` 查询 token；需要确认任意已有账号时，通过 `ServerContext.users()` 提供的 `UserDirectory` 按 `userId` 或一卡通号查询，只能得到 `userId`、一卡通号、姓名和启用状态。客户端不能调用 `ServerContext`，也不能直接读取服务器会话表或用户 DAO。
 
-后续如需会话过期、跨进程共享或服务器重启后保持登录，应单独设计过期时间、撤销策略和持久化方案，不能直接把完整 token 写入普通日志或审计表。
+如需跨进程共享或服务器重启后保持登录，应单独设计持久化方案，不能直接把完整 token 写入普通日志、数据库明文字段或审计表。
 
 ## 15. 安全与异常设计
 
@@ -764,7 +839,7 @@ flowchart LR
 |---|---|
 | Socket 未使用 TLS | 在真实网络部署前增加 TLS，防止凭据 proof 和 token 被窃听。 |
 | 开发期 proof 为确定性 SHA-256 | 数据库改用 PBKDF2 等带盐慢哈希；网络认证方案需结合 TLS 重新设计。 |
-| token 没有过期时间 | 增加创建时间、最后访问时间、空闲过期和绝对过期。 |
+| 内存中过期 token 可能累积 | 查询时删除当前过期 token，创建会话时批量清理；若并发规模扩大再增加定时清理任务。 |
 | 登录失败没有限速与锁定 | 增加失败计数、短时限流和可审计的锁定/解锁流程。 |
 | 会话只存在内存 | 明确服务器重启后要求重新登录；需要持久化时另行评审。 |
 
@@ -774,9 +849,12 @@ flowchart LR
 
 | 测试类 | 覆盖内容 |
 |---|---|
-| `AuthenticationIntegrationTest` | 正确登录、会话查询、退出、退出后 token 失效、错误密码、子系统管理员范围。 |
+| `AuthenticationIntegrationTest`、`InMemoryAuthenticationServiceTest` | 正确登录、会话查询、退出、错误密码、子系统管理员范围，以及空闲/绝对过期。 |
 | `LoginPanelTest` | 登录界面控件、开发测试账号展示、账号和密码非空校验。 |
 | `DoctorOnboardingIntegrationTest` | 医院管理员分类提交、越权拦截、已有账号精确绑定、外来医生账号自动生成、账号碰撞防护，以及 Access 重启后医生资格保留。 |
+| `AccessLibraryRepositoryTest` | 图书馆表和索引初始化、Repository 映射、唯一约束、借还事务回滚及 Repository 重建后的状态恢复。 |
+| `LibraryPersistenceIntegrationTest` | 真实 Socket 下借书、两次服务器重启、归还、管理员上架及库存汇总的 Access 持久化。 |
+| `UserAdministrationIntegrationTest`、`AccessUserAuditRepositoryTest` | 超级管理员账号维护、越权拦截、成功/失败审计记录及 Access 重启后记录保留。 |
 
 ### 16.2 登录模块验收条件
 
@@ -785,6 +863,7 @@ flowchart LR
 - [ ] 错误密码、未知账号和停用账号均不能创建会话。
 - [ ] 客户端保存会话后，`USER.CURRENT_SESSION` 可以返回同一个 `userId`。
 - [ ] 退出后客户端会话为空，原 token 再次查询返回 `AUTH_REQUIRED`。
+- [ ] 连续空闲 30 分钟或登录满 8 小时后 token 返回 `AUTH_REQUIRED`，客户端回到登录页。
 - [ ] 登录过程不冻结 Swing 界面，密码输入在使用后被清空。
 - [ ] Response 不包含密码、密码 proof 或服务器异常堆栈。
 - [ ] `mvn clean verify` 全部通过。
@@ -802,13 +881,17 @@ flowchart LR
 | 公共请求和响应 | `vcampus-common/src/main/java/edu/seu/vcampus/common/protocol/Request.java`、`Response.java` |
 | 登录 DTO 与密码 proof | `vcampus-common/src/main/java/edu/seu/vcampus/common/user/LoginRequest.java`、`PasswordProof.java` |
 | 会话 DTO | `vcampus-common/src/main/java/edu/seu/vcampus/common/user/SessionInfo.java` |
+| 审计 DTO | `vcampus-common/src/main/java/edu/seu/vcampus/common/user/UserAuditLogEntry.java`、`UserAuditLogResponse.java` |
 | 用户 Action | `vcampus-common/src/main/java/edu/seu/vcampus/common/user/UserActions.java` |
+| Access 审计 DAO | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/AccessUserAuditRepository.java` |
 | Socket 服务器 | `vcampus-server/src/main/java/edu/seu/vcampus/server/infrastructure/CampusServer.java` |
 | Action 路由 | `vcampus-server/src/main/java/edu/seu/vcampus/server/infrastructure/ActionRouter.java` |
 | 用户服务器入口 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/UserServerModule.java` |
 | 身份认证与会话存储 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/InMemoryAuthenticationService.java` |
 | 账号 Repository | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/UserRepository.java` |
 | 生产账号实现 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/AccessUserRepository.java` |
+| 图书馆 Access 事务边界 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/library/AccessLibraryStore.java` |
+| 图书馆 Access Repository | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/library/AccessBookRepository.java`、`AccessBookCopyRepository.java`、`AccessBorrowRecordRepository.java`、`AccessBookCategoryRepository.java` |
 | 测试账号实现 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/InMemoryUserRepository.java` |
 | 子系统会话查询接口 | `vcampus-server/src/main/java/edu/seu/vcampus/server/security/SessionLookup.java` |
 | 用户数据库设计 | `database/schema/user.md` |

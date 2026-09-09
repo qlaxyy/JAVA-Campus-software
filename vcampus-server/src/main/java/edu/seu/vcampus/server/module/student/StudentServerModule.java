@@ -1,153 +1,193 @@
 package edu.seu.vcampus.server.module.student;
 
-import edu.seu.vcampus.common.protocol.ErrorCodes;
-import edu.seu.vcampus.common.protocol.ModuleNames;
+import edu.seu.vcampus.common.protocol.Request;
 import edu.seu.vcampus.common.protocol.Response;
-import edu.seu.vcampus.common.student.StudentActions;
-import edu.seu.vcampus.common.student.StudentProfileRequest;
-import edu.seu.vcampus.common.student.StudentProfileResponse;
-import edu.seu.vcampus.common.student.StudentUpdateProfileRequest;
+import edu.seu.vcampus.common.student.*;
+import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.infrastructure.ActionRouter;
 import edu.seu.vcampus.server.module.ServerContext;
 import edu.seu.vcampus.server.module.ServerModule;
 
+import java.io.Serializable;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
+/**
+ * Server module handling student academic profiles and status change workflows.
+ */
 public final class StudentServerModule implements ServerModule {
 
-    private final StudentService service = new StudentService();
+    private final StudentService studentService;
 
-    @Override
-    public String id() {
-        return ModuleNames.STUDENT;
+    /**
+     * Default constructor for ServerModules automatic assembly.
+     */
+    public StudentServerModule() {
+        this(new StudentService());
     }
 
     /**
-     * 规范化账号字符串：转小写，去除前缀 "u-" 以及连字符 "-"
-     * 例如 "U-STUDENT-001" -> "student001"
+     * Constructor with dependency injection.
      */
-    private String normalizeId(String id) {
-        if (id == null) return "";
-        String clean = id.trim().toLowerCase();
-        if (clean.startsWith("u-")) {
-            clean = clean.substring(2);
-        }
-        return clean.replace("-", "");
+    public StudentServerModule(StudentService studentService) {
+        this.studentService = Objects.requireNonNull(studentService, "studentService must not be null");
+    }
+
+    @Override
+    public String id() {
+        return "student";
     }
 
     @Override
     public void registerHandlers(ActionRouter router, ServerContext context) {
-        // 1. 获取学籍信息
-        router.register(StudentActions.GET_PROFILE, request -> {
-            var sessionOpt = context.sessions().findSession(request.getToken());
-            if (sessionOpt.isEmpty()) {
-                return Response.failure(
-                    request.getRequestId(),
-                    ErrorCodes.AUTH_REQUIRED,
-                    "请先在用户管理模块登录后再查询学籍！"
-                );
+        router.register(StudentActions.GET_PROFILE, req -> handleGetProfile(req, context));
+        router.register(StudentActions.UPDATE_PROFILE, req -> handleUpdateProfile(req, context));
+        router.register(StudentActions.APPLY_STATUS_CHANGE, req -> handleApplyStatusChange(req, context));
+        router.register(StudentActions.LIST_STATUS_CHANGES, req -> handleListStatusChanges(req, context));
+        router.register(StudentActions.AUDIT_STATUS_CHANGE, req -> handleAuditStatusChange(req, context));
+    }
+
+    /**
+     * 查询学籍档案
+     */
+    private Response handleGetProfile(Request request, ServerContext context) {
+        Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
+        if (sessionOpt.isEmpty()) {
+            return Response.failure(request.getRequestId(), "UNAUTHORIZED", "未登录或会话已失效");
+        }
+
+        if (!(request.getData() instanceof StudentProfileRequest req)) {
+            return Response.failure(request.getRequestId(), "BAD_REQUEST", "请求参数错误");
+        }
+
+        StudentProfileResponse profileResponse = studentService.getProfile(req);
+        return Response.success(request, "查询档案成功", profileResponse);
+    }
+
+    /**
+     * 更新学生联络补充档案
+     * 权限规范：仅允许学生本人或具备学籍管理权限的管理员修改（防止商店管理员越权）
+     */
+    private Response handleUpdateProfile(Request request, ServerContext context) {
+        Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
+        if (sessionOpt.isEmpty()) {
+            return Response.failure(request.getRequestId(), "UNAUTHORIZED", "未登录或会话已失效");
+        }
+        SessionInfo session = sessionOpt.get();
+
+        if (!(request.getData() instanceof StudentUpdateProfileRequest req)) {
+            return Response.failure(request.getRequestId(), "BAD_REQUEST", "请求参数错误");
+        }
+
+        boolean isStudentAdmin = session.canAdminister("student");
+        boolean isSelf = session.getUserId().equalsIgnoreCase(req.getStudentId());
+
+        if (!isStudentAdmin && !isSelf) {
+            return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：当前账号无权修改该学生档案");
+        }
+
+        boolean updated = studentService.updateProfile(req);
+        if (updated) {
+            return Response.success(request, "学生档案联络信息已更新", null);
+        } else {
+            return Response.failure(request.getRequestId(), "NOT_FOUND", "更新失败，未找到对应学号的档案记录");
+        }
+    }
+
+    /**
+     * 发起学籍异动申请
+     * 权限规范：仅学生本人可发起自身异动
+     */
+    private Response handleApplyStatusChange(Request request, ServerContext context) {
+        Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
+        if (sessionOpt.isEmpty()) {
+            return Response.failure(request.getRequestId(), "UNAUTHORIZED", "未登录或会话已失效");
+        }
+        SessionInfo session = sessionOpt.get();
+
+        if (!(request.getData() instanceof ApplyStatusChangeRequest req)) {
+            return Response.failure(request.getRequestId(), "BAD_REQUEST", "请求参数错误");
+        }
+
+        boolean isStudentAdmin = session.canAdminister("student");
+        boolean isSelf = session.getUserId().equalsIgnoreCase(req.getStudentId());
+
+        if (!isStudentAdmin && !isSelf) {
+            return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：学生仅能提交本人的异动申请");
+        }
+
+        StatusChangeDto dto = studentService.applyStatusChange(req);
+        if (dto != null) {
+            return Response.success(request, "异动申请提交成功", dto);
+        } else {
+            return Response.failure(request.getRequestId(), "BAD_REQUEST", "申请提交失败，请检查学生学号");
+        }
+    }
+
+    /**
+     * 查询学籍异动申请履历
+     * 权限规范：学籍管理员可通览或查他人；学生仅限查看本人；禁止教师及非学籍管理员调阅
+     */
+    private Response handleListStatusChanges(Request request, ServerContext context) {
+        Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
+        if (sessionOpt.isEmpty()) {
+            return Response.failure(request.getRequestId(), "UNAUTHORIZED", "未登录或会话已失效");
+        }
+        SessionInfo session = sessionOpt.get();
+
+        boolean isStudentAdmin = session.canAdminister("student");
+        String currentUserId = session.getUserId();
+
+        String queryStudentId = null;
+        if (request.getData() instanceof String s && !s.isBlank()) {
+            queryStudentId = s.trim();
+        }
+
+        if (isStudentAdmin) {
+            List<StatusChangeDto> list = studentService.listStatusChanges(queryStudentId);
+            return Response.success(request, "获取异动列表成功", (Serializable) list);
+        }
+
+        // 非学籍管理员且非学生本人（例如教师或商店管理员）直接拦截
+        if (session.getUserId().toLowerCase().contains("teacher") || !session.canAdminister("student")) {
+            if (queryStudentId != null && !queryStudentId.equalsIgnoreCase(currentUserId)) {
+                return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：无权调阅他人学籍异动");
             }
+        }
 
-            if (!(request.getData() instanceof StudentProfileRequest req)) {
-                return Response.failure(
-                    request.getRequestId(),
-                    ErrorCodes.AUTH_REQUIRED,
-                    "无效的学籍查询请求参数"
-                );
-            }
+        // 普通学生强制仅查本人
+        List<StatusChangeDto> list = studentService.listStatusChanges(currentUserId);
+        return Response.success(request, "获取个人异动成功", (Serializable) list);
+    }
 
-            var session = sessionOpt.get();
-            String rawUserId = session.getUserId() != null ? session.getUserId().trim() : "";
-            String cleanUserId = normalizeId(rawUserId);
-            String targetStudentId = req.getStudentId() != null ? req.getStudentId().trim() : "";
-            String cleanTargetId = normalizeId(targetStudentId);
+    /**
+     * 审核学籍异动申请
+     * 权限规范：必须具备学籍管理权限 (SUPER_ADMIN 或具有 student 作用域的管理员)
+     */
+    private Response handleAuditStatusChange(Request request, ServerContext context) {
+        Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
+        if (sessionOpt.isEmpty()) {
+            return Response.failure(request.getRequestId(), "UNAUTHORIZED", "未登录或会话已失效");
+        }
+        SessionInfo session = sessionOpt.get();
 
-            System.out.println("[学籍服务] 收到查询请求 -> 登录用户: [" + rawUserId + " -> " + cleanUserId + "], 目标学号: [" + targetStudentId + " -> " + cleanTargetId + "]");
+        if (!(request.getData() instanceof AuditStatusChangeRequest req)) {
+            return Response.failure(request.getRequestId(), "BAD_REQUEST", "请求参数错误");
+        }
 
-            // 基于规范化后的 ID 判断角色
-            boolean isAdmin = cleanUserId.contains("admin");
-            boolean isTeacher = cleanUserId.contains("teacher");
-            boolean isStudent = !isAdmin && !isTeacher;
+        // 强权限拦截：非学籍管理员直接拒绝
+        if (!session.canAdminister("student")) {
+            return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：当前账号不具备学籍管理审核权限");
+        }
 
-            // 权限控制：
-            // - 管理员：全放行
-            // - 教师：全放行（支持查阅）
-            // - 学生：只能查本人
-            if (isStudent) {
-                if (!cleanTargetId.isEmpty() && !cleanUserId.equals(cleanTargetId)) {
-                    System.out.println("[学籍服务] 越权拦截：学生 [" + rawUserId + "] 试图查询他人 [" + targetStudentId + "]");
-                    return Response.failure(
-                        request.getRequestId(),
-                        ErrorCodes.AUTH_FORBIDDEN,
-                        "权限不足：普通学生仅允许查阅本人的学籍档案！"
-                    );
-                }
-                // 若未填学号，默认查询当前登录本人
-                if (targetStudentId.isEmpty()) {
-                    req.setStudentId(cleanUserId);
-                }
-            }
+        String operator = session.getDisplayName() != null ? session.getDisplayName() : session.getUsername();
+        boolean audited = studentService.auditStatusChange(req.getChangeId(), req.isApproved(), operator);
 
-            StudentProfileResponse resp = service.getProfile(req);
-            return Response.success(request, "查询成功", resp);
-        });
-
-        // 2. 更新学籍补充信息
-        router.register(StudentActions.UPDATE_PROFILE, request -> {
-            var sessionOpt = context.sessions().findSession(request.getToken());
-            if (sessionOpt.isEmpty()) {
-                return Response.failure(
-                    request.getRequestId(),
-                    ErrorCodes.AUTH_REQUIRED,
-                    "未登录或登录已失效，请重新登录！"
-                );
-            }
-
-            if (!(request.getData() instanceof StudentUpdateProfileRequest req)) {
-                return Response.failure(
-                    request.getRequestId(),
-                    ErrorCodes.AUTH_REQUIRED,
-                    "无效的学籍修改请求参数"
-                );
-            }
-
-            var session = sessionOpt.get();
-            String rawUserId = session.getUserId() != null ? session.getUserId().trim() : "";
-            String cleanUserId = normalizeId(rawUserId);
-            String targetStudentId = req.getStudentId() != null ? req.getStudentId().trim() : "";
-            String cleanTargetId = normalizeId(targetStudentId);
-
-            System.out.println("[学籍服务] 收到更新请求 -> 登录用户: [" + rawUserId + " -> " + cleanUserId + "], 目标学号: [" + targetStudentId + " -> " + cleanTargetId + "]");
-
-            boolean isAdmin = cleanUserId.contains("admin");
-            boolean isTeacher = cleanUserId.contains("teacher");
-
-            // 教师账号只读
-            if (isTeacher) {
-                return Response.failure(
-                    request.getRequestId(),
-                    ErrorCodes.AUTH_FORBIDDEN,
-                    "权限不足：教师账号仅具备学籍查阅权限，无权修改档案！"
-                );
-            }
-
-            // 非管理员（学生）只能修改本人的信息
-            if (!isAdmin && !cleanUserId.equals(cleanTargetId)) {
-                return Response.failure(
-                    request.getRequestId(),
-                    ErrorCodes.AUTH_FORBIDDEN,
-                    "权限不足：您只能修改本人的学籍补充信息！"
-                );
-            }
-
-            boolean updated = service.updateProfile(req);
-            if (updated) {
-                return Response.success(request, "个人信息修改成功！", true);
-            } else {
-                return Response.failure(
-                    request.getRequestId(),
-                    ErrorCodes.AUTH_REQUIRED,
-                    "修改失败：未找到对应的学籍档案"
-                );
-            }
-        });
+        if (audited) {
+            return Response.success(request, "异动审核已完成", null);
+        } else {
+            return Response.failure(request.getRequestId(), "BAD_REQUEST", "审核处理失败，记录不存在或已处理");
+        }
     }
 }

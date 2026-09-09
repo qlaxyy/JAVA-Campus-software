@@ -108,7 +108,26 @@ final class InMemoryCourseEnrollmentRepository
         return records.get(
             enrollmentId);
     }
+    @Override
+    public synchronized CourseEnrollmentRecord
+    findSelectedEnrollment(
+        long enrollmentId) {
 
+        for (Map<Long, CourseEnrollmentRecord> records
+            : recordsByUser.values()) {
+
+            CourseEnrollmentRecord record =
+                records.get(
+                    enrollmentId);
+
+            if (record != null) {
+
+                return record;
+            }
+        }
+
+        return null;
+    }
     @Override
     public synchronized List<CourseEnrollmentRecord>
     findSelectedEnrollmentsByOffering(

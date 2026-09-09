@@ -45,7 +45,7 @@ class HospitalSearchIntegrationTest {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(context.login("student001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
             AppointmentBookingView booking = assertInstanceOf(
                     AppointmentBookingView.class,
                     context.send(
@@ -54,7 +54,7 @@ class HospitalSearchIntegrationTest {
                             .getData());
 
             assertTrue(context.logout().isSuccess());
-            assertTrue(context.login("teacher001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260002", "123456".toCharArray()).isSuccess());
             assertTrue(context.send(
                     HospitalActions.SUBMIT_CONSULTATION,
                     new SubmitConsultationRequest(
@@ -63,7 +63,7 @@ class HospitalSearchIntegrationTest {
                     .isSuccess());
 
             assertTrue(context.logout().isSuccess());
-            assertTrue(context.login("student001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
             PatientBillListResponse bills = assertInstanceOf(
                     PatientBillListResponse.class,
                     context.send(HospitalActions.LIST_MY_BILLS, null).getData());
@@ -92,7 +92,7 @@ class HospitalSearchIntegrationTest {
             LocalDateTime start = LocalDateTime.now()
                     .plusDays(5).withHour(16).withMinute(0).withSecond(0).withNano(0);
 
-            assertTrue(context.login("hospitaladmin", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260007", "123456".toCharArray()).isSuccess());
             Response workspaceResponse = context.send(
                     HospitalActions.GET_ADMIN_SCHEDULE_WORKSPACE, null);
             AdminScheduleWorkspaceView workspace = assertInstanceOf(
@@ -117,7 +117,7 @@ class HospitalSearchIntegrationTest {
                             draft.getScheduleId(), true)).isSuccess());
 
             assertTrue(context.logout().isSuccess());
-            assertTrue(context.login("student001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
             SlotListResponse patientSlots = assertInstanceOf(
                     SlotListResponse.class,
                     context.send(
@@ -129,7 +129,7 @@ class HospitalSearchIntegrationTest {
                     .anyMatch(slot -> slot.getScheduleId().equals(draft.getScheduleId())));
 
             assertTrue(context.logout().isSuccess());
-            assertTrue(context.login("teacher001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260002", "123456".toCharArray()).isSuccess());
             DoctorWorkspaceView doctorWorkspace = assertInstanceOf(
                     DoctorWorkspaceView.class,
                     context.send(HospitalActions.GET_DOCTOR_WORKSPACE, null).getData());
@@ -146,7 +146,7 @@ class HospitalSearchIntegrationTest {
                     new CampusClient("127.0.0.1", server.getPort()));
 
             assertTrue(context.login(
-                    "teacher001", "123456".toCharArray()).isSuccess());
+                    "20260002", "123456".toCharArray()).isSuccess());
             Response doctorResponse = context.send(HospitalActions.GET_MODE_ACCESS, null);
             HospitalModeAccessView doctorAccess = assertInstanceOf(
                     HospitalModeAccessView.class, doctorResponse.getData());
@@ -155,7 +155,7 @@ class HospitalSearchIntegrationTest {
             assertFalse(doctorAccess.canAccess(HospitalMode.ADMIN));
 
             assertTrue(context.logout().isSuccess());
-            assertTrue(context.login("hospitaladmin", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260007", "123456".toCharArray()).isSuccess());
             Response adminResponse = context.send(HospitalActions.GET_MODE_ACCESS, null);
             HospitalModeAccessView adminAccess = assertInstanceOf(
                     HospitalModeAccessView.class, adminResponse.getData());
@@ -180,7 +180,7 @@ class HospitalSearchIntegrationTest {
             assertFalse(appointmentsBeforeLogin.isSuccess());
             assertEquals(ErrorCodes.AUTH_REQUIRED, appointmentsBeforeLogin.getCode());
 
-            assertTrue(context.login("student001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
 
             Response departmentsResponse = context.send(
                     HospitalActions.LIST_DEPARTMENTS, null);
@@ -253,7 +253,7 @@ class HospitalSearchIntegrationTest {
 
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
-                    "teacher001", "123456".toCharArray()).isSuccess());
+                    "20260002", "123456".toCharArray()).isSuccess());
             Response otherPatientAppointments = context.send(
                     HospitalActions.SEARCH_APPOINTMENTS, null);
             AppointmentListResponse otherList = assertInstanceOf(
@@ -282,7 +282,7 @@ class HospitalSearchIntegrationTest {
             assertEquals(ErrorCodes.AUTH_REQUIRED, beforeLogin.getCode());
 
             assertTrue(context.login(
-                    "student001", "123456".toCharArray()).isSuccess());
+                    "20260001", "123456".toCharArray()).isSuccess());
             Response studentAttempt = context.send(
                     HospitalActions.GET_DOCTOR_WORKSPACE, null);
             assertFalse(studentAttempt.isSuccess());
@@ -296,7 +296,7 @@ class HospitalSearchIntegrationTest {
 
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
-                    "teacher001", "123456".toCharArray()).isSuccess());
+                    "20260002", "123456".toCharArray()).isSuccess());
             Response workspaceResponse = context.send(
                     HospitalActions.GET_DOCTOR_WORKSPACE, null);
             assertTrue(workspaceResponse.isSuccess());
@@ -349,7 +349,7 @@ class HospitalSearchIntegrationTest {
 
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
-                    "student001", "123456".toCharArray()).isSuccess());
+                    "20260001", "123456".toCharArray()).isSuccess());
             Response recordsResponse = context.send(
                     HospitalActions.LIST_MY_CONSULTATIONS, null);
             assertTrue(recordsResponse.isSuccess());

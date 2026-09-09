@@ -81,6 +81,38 @@ public final class ErrorCodes {
             "HOSPITAL_DEPARTMENT_CONFLICT";
     public static final String HOSPITAL_DEPARTMENT_IN_USE =
             "HOSPITAL_DEPARTMENT_IN_USE";
+    public static final String SHOP_INSUFFICIENT_BALANCE = "SHOP_INSUFFICIENT_BALANCE";
+    public static final String SHOP_OUT_OF_STOCK = "SHOP_OUT_OF_STOCK";
+    public static final String SHOP_PRODUCT_NOT_FOUND = "SHOP_PRODUCT_NOT_FOUND";
+    public static final String SHOP_CATEGORY_NOT_FOUND = "SHOP_CATEGORY_NOT_FOUND";
+    public static final String SHOP_CATEGORY_EXISTS = "SHOP_CATEGORY_EXISTS";
+    public static final String SHOP_ORDER_NOT_FOUND = "SHOP_ORDER_NOT_FOUND";
+    public static final String SHOP_ORDER_NOT_CANCELLABLE = "SHOP_ORDER_NOT_CANCELLABLE";
+    public static final String LIBRARY_BORROW_RECORD_NOT_FOUND =
+            "LIBRARY_BORROW_RECORD_NOT_FOUND";
+    public static final String LIBRARY_ALREADY_RETURNED = "LIBRARY_ALREADY_RETURNED";
+    public static final String LIBRARY_INVALID_STOCK = "LIBRARY_INVALID_STOCK";
+    public static final String LIBRARY_DUPLICATE_ISBN = "LIBRARY_DUPLICATE_ISBN";
+    public static final String LIBRARY_CATEGORY_NOT_FOUND = "LIBRARY_CATEGORY_NOT_FOUND";
+    public static final String LIBRARY_COPY_NOT_FOUND = "LIBRARY_COPY_NOT_FOUND";
+    public static final String LIBRARY_COPY_NOT_AVAILABLE = "LIBRARY_COPY_NOT_AVAILABLE";
+    public static final String LIBRARY_INVALID_COPY_STATUS = "LIBRARY_INVALID_COPY_STATUS";
+    public static final String LIBRARY_DUPLICATE_BARCODE = "LIBRARY_DUPLICATE_BARCODE";
+    public static final String LIBRARY_INVALID_BOOK_STATUS = "LIBRARY_INVALID_BOOK_STATUS";
+    public static final String LIBRARY_RESERVATION_NOT_FOUND =
+            "LIBRARY_RESERVATION_NOT_FOUND";
+    public static final String LIBRARY_DUPLICATE_RESERVATION =
+            "LIBRARY_DUPLICATE_RESERVATION";
+    public static final String LIBRARY_RESERVATION_LIMIT_REACHED =
+            "LIBRARY_RESERVATION_LIMIT_REACHED";
+    public static final String LIBRARY_RESERVATION_COOLDOWN =
+            "LIBRARY_RESERVATION_COOLDOWN";
+    public static final String LIBRARY_RESERVATION_NOT_CANCELLABLE =
+            "LIBRARY_RESERVATION_NOT_CANCELLABLE";
+    public static final String LIBRARY_INVALID_PICKUP_LOCATION =
+            "LIBRARY_INVALID_PICKUP_LOCATION";
+    public static final String LIBRARY_COPY_RESERVED_FOR_OTHER =
+            "LIBRARY_COPY_RESERVED_FOR_OTHER";
 
     private ErrorCodes() {
     }

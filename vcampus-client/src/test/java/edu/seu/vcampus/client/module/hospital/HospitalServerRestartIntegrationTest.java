@@ -83,9 +83,9 @@ class HospitalServerRestartIntegrationTest {
         ExaminationOrderView order;
         // A doctor account acts as a patient, but books another doctor's schedule.
         try (HospitalServerProcess server = start(database, "1-plan")) {
-            ClientContext patient = login(server, "teacher001");
-            ClientContext treatingDoctor = login(server, "student001");
-            ClientContext outsider = login(server, "hospitaladmin");
+            ClientContext patient = login(server, "20260002");
+            ClientContext treatingDoctor = login(server, "20260001");
+            ClientContext outsider = login(server, "20260007");
             oldToken = patient.currentSession().orElseThrow().getToken();
             AppointmentBookingView booking = send(patient, HospitalActions.BOOK_APPOINTMENT,
                     BookAppointmentRequest.firstVisit("restart-test-schedule"), AppointmentBookingView.class);
@@ -107,7 +107,7 @@ class HospitalServerRestartIntegrationTest {
             Response staleSession = new CampusClient("127.0.0.1", server.port()).send(
                     Request.create(HospitalActions.GET_MY_HEALTH_RECORD, oldToken, null));
             assertRejected(staleSession, ErrorCodes.AUTH_REQUIRED);
-            ClientContext patient = login(server, "teacher001");
+            ClientContext patient = login(server, "20260002");
             PatientHealthRecordView record = healthRecord(patient);
             ExaminationOrderView waiting = findOrder(record, order.getOrderId());
             assertEquals(ExaminationStatus.ORDERED, waiting.getStatus());
@@ -126,8 +126,8 @@ class HospitalServerRestartIntegrationTest {
 
         String reviewId;
         try (HospitalServerProcess server = start(database, "3-book-review")) {
-            ClientContext patient = login(server, "teacher001");
-            ClientContext other = login(server, "student001");
+            ClientContext patient = login(server, "20260002");
+            ClientContext other = login(server, "20260001");
             ExaminationOrderView persisted = findOrder(healthRecord(patient), order.getOrderId());
             assertEquals(summary, persisted.getResultSummary());
             assertEquals(ExaminationStatus.RESULT_READY, persisted.getStatus());
@@ -148,9 +148,9 @@ class HospitalServerRestartIntegrationTest {
         }
 
         try (HospitalServerProcess server = start(database, "4-complete-review")) {
-            ClientContext patient = login(server, "teacher001");
-            ClientContext treatingDoctor = login(server, "student001");
-            ClientContext outsider = login(server, "hospitaladmin");
+            ClientContext patient = login(server, "20260002");
+            ClientContext treatingDoctor = login(server, "20260001");
+            ClientContext outsider = login(server, "20260007");
             AppointmentView review = appointment(patient, reviewId);
             assertEquals(VisitType.RESULT_REVIEW, review.getVisitType());
             assertEquals(AppointmentStatus.BOOKED, review.getAppointmentStatus());
@@ -176,7 +176,7 @@ class HospitalServerRestartIntegrationTest {
         assertDiskStatus(database, "tblHospitalExaminationOrder", "orderId", order.getOrderId(), "REVIEWED");
 
         try (HospitalServerProcess server = start(database, "5-history")) {
-            ClientContext patient = login(server, "teacher001");
+            ClientContext patient = login(server, "20260002");
             PatientHealthRecordView record = healthRecord(patient);
             assertEquals(ConsultationOutcome.WAITING_FOR_RESULTS,
                     findConsultation(record, appointmentId).getOutcome());

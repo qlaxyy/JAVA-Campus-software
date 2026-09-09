@@ -18,7 +18,7 @@ public final class ClientMain {
     }
 
     /**
-     * Opens the Swing client for localhost:8888 or optional host and port arguments.
+     * Opens the Swing client for localhost:8888 or the supplied server host and port.
      *
      * @param args optional host followed by optional port
      */

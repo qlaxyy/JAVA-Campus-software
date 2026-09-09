@@ -64,6 +64,8 @@ import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.security.AccountProvisioning;
 import edu.seu.vcampus.server.security.ProvisionedAccount;
+import edu.seu.vcampus.server.security.UserDirectory;
+import edu.seu.vcampus.server.security.UserIdentity;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -262,9 +264,9 @@ final class HospitalService {
     synchronized DoctorApplicationView submitDoctorApplication(
             SubmitDoctorApplicationRequest request,
             String requestedByUserId,
-            AccountProvisioning accounts) {
+            UserDirectory users) {
         Objects.requireNonNull(request, "request must not be null");
-        Objects.requireNonNull(accounts, "accounts must not be null");
+        Objects.requireNonNull(users, "users must not be null");
         HospitalDepartment department = requireDepartment(request.getDepartmentId());
         if (!department.active() || !department.bookable()) {
             throw conflict("只能把医生分配到已启用、可挂号的具体科室。");
@@ -273,8 +275,8 @@ final class HospitalService {
         String displayName = request.getDisplayName();
         String targetUserId = null;
         if (request.getApplicationType() == DoctorApplicationType.EXISTING_ACCOUNT) {
-            ProvisionedAccount account = accounts
-                    .findAccountByUsername(request.getExistingUsername())
+            UserIdentity account = users
+                    .findByCampusCardNumber(request.getExistingUsername())
                     .orElseThrow(() -> conflict("找不到要关联的校园账号。"));
             if (!account.enabled()) {
                 throw conflict("要关联的校园账号已被禁用。请先处理账号状态。");
@@ -289,7 +291,7 @@ final class HospitalService {
             if (duplicateTarget) {
                 throw conflict("该校园账号已有待审核的医生申请。");
             }
-            username = account.username();
+            username = account.campusCardNumber();
             displayName = account.displayName();
             targetUserId = account.userId();
         }
@@ -320,8 +322,11 @@ final class HospitalService {
     synchronized DoctorApplicationView reviewDoctorApplication(
             ReviewDoctorApplicationRequest request,
             String reviewerUserId,
+            UserDirectory users,
             AccountProvisioning accounts) {
         Objects.requireNonNull(request, "request must not be null");
+        Objects.requireNonNull(users, "users must not be null");
+        Objects.requireNonNull(accounts, "accounts must not be null");
         DoctorApplication application = repository
                 .findDoctorApplication(request.getRequestId())
                 .orElseThrow(() -> new HospitalWorkflowException(
@@ -338,26 +343,31 @@ final class HospitalService {
             return toView(rejected);
         }
 
-        ProvisionedAccount account;
+        String accountUserId;
+        String accountUsername;
         if (application.applicationType() == DoctorApplicationType.EXISTING_ACCOUNT) {
-            account = accounts.findAccountByUsername(application.username())
+            UserIdentity account = users.findByCampusCardNumber(application.username())
                     .filter(found -> found.userId().equals(application.targetUserId()))
                     .orElseThrow(() -> conflict("原有校园账号已经不存在或发生变化。"));
             if (!account.enabled()) {
                 throw conflict("要关联的校园账号已被禁用。请先处理账号状态。");
             }
+            accountUserId = account.userId();
+            accountUsername = account.campusCardNumber();
         } else {
-            account = accounts.createGeneratedRegularAccount(
-                    "doctor", application.displayName());
+            ProvisionedAccount account = accounts
+                    .createGeneratedRegularAccount(application.displayName());
+            accountUserId = account.userId();
+            accountUsername = account.username();
         }
         repository.saveDoctorProfile(new DoctorProfile(
-                account.userId(), application.departmentId(),
+                accountUserId, application.departmentId(),
                 application.displayName(),
                 application.doctorTitle(), true));
         DoctorApplication approved = application.reviewed(
                 DoctorApplicationStatus.APPROVED,
-                account.username(),
-                account.userId(),
+                accountUsername,
+                accountUserId,
                 reviewerUserId);
         repository.saveDoctorApplication(approved);
         return toView(approved);

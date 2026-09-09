@@ -32,7 +32,7 @@ class PatientBillsPanelTest {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(context.login("student001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
             AppointmentBookingView booking = assertInstanceOf(
                     AppointmentBookingView.class,
                     context.send(
@@ -40,7 +40,7 @@ class PatientBillsPanelTest {
                             BookAppointmentRequest.firstVisit("slot-general-1"))
                             .getData());
             assertTrue(context.logout().isSuccess());
-            assertTrue(context.login("teacher001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260002", "123456".toCharArray()).isSuccess());
             assertTrue(context.send(
                     HospitalActions.SUBMIT_CONSULTATION,
                     new SubmitConsultationRequest(
@@ -48,7 +48,7 @@ class PatientBillsPanelTest {
                             "课程演示处置", "无", "必要时复诊"))
                     .isSuccess());
             assertTrue(context.logout().isSuccess());
-            assertTrue(context.login("student001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
 
             PatientBillsPanel[] panel = new PatientBillsPanel[1];
             SwingUtilities.invokeAndWait(() -> {

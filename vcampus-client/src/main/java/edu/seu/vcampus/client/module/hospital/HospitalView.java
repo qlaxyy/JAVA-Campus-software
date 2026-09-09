@@ -6,11 +6,14 @@ import edu.seu.vcampus.common.hospital.HospitalMode;
 import edu.seu.vcampus.common.hospital.HospitalModeAccessView;
 import edu.seu.vcampus.common.hospital.DepartmentListResponse;
 import edu.seu.vcampus.common.hospital.DepartmentView;
+import edu.seu.vcampus.common.hospital.ConsultationRecordView;
 import edu.seu.vcampus.common.hospital.DoctorApplicationListResponse;
 import edu.seu.vcampus.common.hospital.DoctorApplicationStatus;
 import edu.seu.vcampus.common.hospital.DoctorApplicationType;
 import edu.seu.vcampus.common.hospital.DoctorApplicationView;
 import edu.seu.vcampus.common.hospital.SubmitDoctorApplicationRequest;
+import edu.seu.vcampus.common.hospital.PatientHealthRecordView;
+import edu.seu.vcampus.common.hospital.PatientBillListResponse;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.user.SessionInfo;
 
@@ -21,6 +24,7 @@ import javax.swing.JOptionPane;
 import javax.swing.JTextField;
 import javax.swing.JTable;
 import javax.swing.JScrollPane;
+import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.table.DefaultTableModel;
 import java.awt.CardLayout;
@@ -28,7 +32,9 @@ import java.awt.Dimension;
 import java.awt.GridLayout;
 import java.awt.event.HierarchyEvent;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
 /** Root view that keeps hospital pages inside the shared application window. */
@@ -36,16 +42,39 @@ public final class HospitalView extends JPanel {
 
     private static final String MODE_SELECT = "mode-select";
     private static final String PATIENT_HOME = "patient-home";
+    private static final String SMART_TRIAGE = "smart-triage";
     private static final String SLOT_SEARCH = "slot-search";
+    private static final String MY_APPOINTMENTS = "my-appointments";
+    private static final String CONSULTATION_RECORDS = "consultation-records";
+    private static final String HEALTH_RECORD = "health-record";
+    private static final String PATIENT_BILLS = "patient-bills";
+    private static final String PATIENT_CARE_GUIDE = "patient-care-guide";
     private static final String DOCTOR_HOME = "doctor-home";
     private static final String ADMIN_HOME = "admin-home";
+    private static final String ADMIN_DEPARTMENTS = "admin-departments";
+    private static final String ADMIN_SCHEDULES = "admin-schedules";
+    private static final String ADMIN_APPOINTMENTS = "admin-appointments";
 
     private final ClientContext context;
     private final CardLayout cards = new CardLayout();
     private final HospitalModePanel modePanel;
     private final HospitalHomePanel homePanel;
+    private final SmartTriagePanel smartTriagePanel;
     private final SlotSearchPanel slotSearchPanel;
+    private final MyAppointmentsPanel myAppointmentsPanel;
+    private final ConsultationRecordsPanel consultationRecordsPanel;
+    private final PatientHealthRecordPanel patientHealthRecordPanel;
+    private final PatientBillsPanel patientBillsPanel;
+    private final PatientCareGuidePanel patientCareGuidePanel;
+    private final DoctorWorkspacePanel doctorWorkspacePanel;
+    private final HospitalStaffHomePanel adminHomePanel;
+    private final AdminDepartmentPanel adminDepartmentPanel;
+    private final AdminSchedulePanel adminSchedulePanel;
+    private final AdminAppointmentPanel adminAppointmentPanel;
+    private final Set<String> guidedUserIds = new HashSet<>();
     private HospitalModeAccessView modeAccess;
+    private int accessRequestVersion;
+    private int patientHomeRequestVersion;
 
     public HospitalView(ClientContext context) {
         this.context = context;
@@ -57,27 +86,52 @@ public final class HospitalView extends JPanel {
                 () -> openMode(HospitalMode.DOCTOR, DOCTOR_HOME),
                 () -> openMode(HospitalMode.ADMIN, ADMIN_HOME),
                 this::openModeSelector);
-        homePanel = new HospitalHomePanel(this::openSlotSearch, this::openModeSelector);
-        slotSearchPanel = new SlotSearchPanel(context, this::openPatientHome);
-        HospitalStaffHomePanel doctorHome = new HospitalStaffHomePanel(
-                "医生工作台",
-                "查看排班和患者就诊背景信息，完成诊断与处置",
-                List.of(
-                        new HospitalStaffHomePanel.WorkspaceFeature(
-                                "我的排班", "查看本人未来排班和出诊号源。"),
-                        new HospitalStaffHomePanel.WorkspaceFeature(
-                                "待接诊患者", "按预约顺序查看今日和待接诊患者。"),
-                        new HospitalStaffHomePanel.WorkspaceFeature(
-                                "患者就诊背景信息", "查看当前患者病历、既往就诊和主诉。"),
-                        new HospitalStaffHomePanel.WorkspaceFeature(
-                                "诊断与处置", "提交诊断、检查意见、治疗意见和简化处方。")),
+        homePanel = new HospitalHomePanel(
+                this::openSlotSearch,
+                this::openSmartTriage,
+                this::openMyAppointments,
+                this::openConsultationRecords,
+                this::openHealthRecord,
+                this::openBills,
+                this::openOrdinaryFollowUpSelection,
+                this::openCareGuide,
+                this::openFollowUp,
                 this::openModeSelector);
-        HospitalStaffHomePanel adminHome = new HospitalStaffHomePanel(
+        slotSearchPanel = new SlotSearchPanel(
+                context,
+                this::openPatientHome,
+                this::openOrdinaryFollowUpSelection);
+        smartTriagePanel = new SmartTriagePanel(
+                context,
+                this::openPatientHome,
+                this::openTriageDepartmentSlots);
+        myAppointmentsPanel = new MyAppointmentsPanel(
+                context,
+                this::openPatientHome,
+                this::openSlotSearch);
+        consultationRecordsPanel = new ConsultationRecordsPanel(
+                context,
+                this::openPatientHome);
+        patientHealthRecordPanel = new PatientHealthRecordPanel(
+                context,
+                this::openPatientHome,
+                this::openOrdinaryFollowUp);
+        patientBillsPanel = new PatientBillsPanel(context, this::openPatientHome);
+        patientCareGuidePanel = new PatientCareGuidePanel(
+                this::openPatientHome,
+                this::openSlotSearch,
+                this::openOrdinaryFollowUpSelection,
+                this::openHealthRecord);
+        doctorWorkspacePanel = new DoctorWorkspacePanel(context, this::openModeSelector);
+        adminHomePanel = new HospitalStaffHomePanel(
                 "医院管理工作台",
                 "维护校医院基础资料、排班、号源和预约秩序",
                 List.of(
                         new HospitalStaffHomePanel.WorkspaceFeature(
-                                "科室管理", "启用、停用和维护校医院科室资料。"),
+                                "科室管理",
+                                "维护科室层级、挂号入口和启用状态。",
+                                "管理科室",
+                                this::openAdminDepartments),
                         new HospitalStaffHomePanel.WorkspaceFeature(
                                 "医生管理",
                                 "提交医生新增申请；账号创建和身份激活须经超级管理员审核。",
@@ -89,16 +143,34 @@ public final class HospitalView extends JPanel {
                                 "查看申请记录",
                                 this::loadDoctorApplications),
                         new HospitalStaffHomePanel.WorkspaceFeature(
-                                "排班管理", "建立、发布或关闭医生排班。"),
+                                "排班管理",
+                                "建立排班草稿，核对后发布号源，或关闭无预约排班。",
+                                "管理排班",
+                                this::openAdminSchedules),
                         new HospitalStaffHomePanel.WorkspaceFeature(
-                                "号源与预约管理", "查看号源容量和处理异常预约。")),
+                                "号源与预约管理",
+                                "查询预约流转，处理尚未开始的异常预约和模拟退款。",
+                                "查看预约订单",
+                                this::openAdminAppointments)),
                 this::openModeSelector);
+        adminDepartmentPanel = new AdminDepartmentPanel(context, this::openAdminHome);
+        adminSchedulePanel = new AdminSchedulePanel(context, this::openAdminHome);
+        adminAppointmentPanel = new AdminAppointmentPanel(context, this::openAdminHome);
 
         add(modePanel, MODE_SELECT);
         add(homePanel, PATIENT_HOME);
+        add(smartTriagePanel, SMART_TRIAGE);
         add(slotSearchPanel, SLOT_SEARCH);
-        add(doctorHome, DOCTOR_HOME);
-        add(adminHome, ADMIN_HOME);
+        add(myAppointmentsPanel, MY_APPOINTMENTS);
+        add(consultationRecordsPanel, CONSULTATION_RECORDS);
+        add(patientHealthRecordPanel, HEALTH_RECORD);
+        add(patientBillsPanel, PATIENT_BILLS);
+        add(patientCareGuidePanel, PATIENT_CARE_GUIDE);
+        add(doctorWorkspacePanel, DOCTOR_HOME);
+        add(adminHomePanel, ADMIN_HOME);
+        add(adminDepartmentPanel, ADMIN_DEPARTMENTS);
+        add(adminSchedulePanel, ADMIN_SCHEDULES);
+        add(adminAppointmentPanel, ADMIN_APPOINTMENTS);
         cards.show(this, MODE_SELECT);
 
         addHierarchyListener(event -> {
@@ -118,17 +190,217 @@ public final class HospitalView extends JPanel {
         slotSearchPanel.activate();
     }
 
+    private void openSmartTriage() {
+        if (!canOpen(HospitalMode.PATIENT)) {
+            homePanel.showMessage("请先到“用户”模块登录，再使用智能导诊。");
+            return;
+        }
+        homePanel.showMessage(" ");
+        cards.show(this, SMART_TRIAGE);
+        smartTriagePanel.activate();
+    }
+
+    private void openTriageDepartmentSlots(String departmentId) {
+        if (!canOpen(HospitalMode.PATIENT)) {
+            homePanel.showMessage("登录状态已失效，请重新登录后查看号源。");
+            cards.show(this, PATIENT_HOME);
+            return;
+        }
+        cards.show(this, SLOT_SEARCH);
+        slotSearchPanel.activateForDepartment(departmentId);
+    }
+
     private void openPatientHome() {
         cards.show(this, PATIENT_HOME);
+        refreshPatientHome();
+    }
+
+    private void openMyAppointments() {
+        if (!canOpen(HospitalMode.PATIENT)) {
+            homePanel.showMessage("请先到“用户”模块登录，再查看预约。");
+            return;
+        }
+        homePanel.showMessage(" ");
+        cards.show(this, MY_APPOINTMENTS);
+        myAppointmentsPanel.activate();
+    }
+
+    private void openConsultationRecords() {
+        if (!canOpen(HospitalMode.PATIENT)) {
+            homePanel.showMessage("请先到“用户”模块登录，再查看问诊记录。");
+            return;
+        }
+        homePanel.showMessage(" ");
+        cards.show(this, CONSULTATION_RECORDS);
+        consultationRecordsPanel.activate();
+    }
+
+    private void openHealthRecord() {
+        if (!canOpen(HospitalMode.PATIENT)) {
+            homePanel.showMessage("请先到“用户”模块登录，再查看健康档案。");
+            return;
+        }
+        homePanel.showMessage(" ");
+        cards.show(this, HEALTH_RECORD);
+        patientHealthRecordPanel.activate();
+    }
+
+    private void openBills() {
+        if (!canOpen(HospitalMode.PATIENT)) {
+            homePanel.showMessage("请先登录，再查看费用清单。");
+            return;
+        }
+        homePanel.showMessage(" ");
+        cards.show(this, PATIENT_BILLS);
+        patientBillsPanel.activate();
+    }
+
+    private void openCareGuide() {
+        if (!canOpen(HospitalMode.PATIENT)) {
+            homePanel.showMessage("请先登录，再查看就医指南。");
+            return;
+        }
+        homePanel.showMessage(" ");
+        cards.show(this, PATIENT_CARE_GUIDE);
+    }
+
+    private void openFollowUp() {
+        if (!canOpen(HospitalMode.PATIENT)) {
+            homePanel.showMessage("请先登录，再处理检查与回诊待办。");
+            return;
+        }
+        homePanel.showMessage(" ");
+        cards.show(this, HEALTH_RECORD);
+        patientHealthRecordPanel.activateForFollowUp();
+    }
+
+    private void openOrdinaryFollowUp(ConsultationRecordView source) {
+        if (!canOpen(HospitalMode.PATIENT)) {
+            homePanel.showMessage("请先登录，再预约普通复诊。");
+            return;
+        }
+        cards.show(this, SLOT_SEARCH);
+        slotSearchPanel.activateForFollowUp(source);
+    }
+
+    private void openOrdinaryFollowUpSelection() {
+        if (!canOpen(HospitalMode.PATIENT)) {
+            homePanel.showMessage("请先登录，再预约普通复诊。");
+            return;
+        }
+        homePanel.showMessage(" ");
+        cards.show(this, HEALTH_RECORD);
+        patientHealthRecordPanel.activateForOrdinaryFollowUpSelection();
+    }
+
+    private void openAdminHome() {
+        cards.show(this, ADMIN_HOME);
+    }
+
+    private void openAdminDepartments() {
+        if (!canOpen(HospitalMode.ADMIN)) {
+            modePanel.showError("当前账号没有进入医院管理模式的权限。");
+            cards.show(this, MODE_SELECT);
+            return;
+        }
+        cards.show(this, ADMIN_DEPARTMENTS);
+        adminDepartmentPanel.activate();
+    }
+
+    private void openAdminSchedules() {
+        if (!canOpen(HospitalMode.ADMIN)) {
+            modePanel.showError("当前账号没有进入医院管理模式的权限。");
+            cards.show(this, MODE_SELECT);
+            return;
+        }
+        cards.show(this, ADMIN_SCHEDULES);
+        adminSchedulePanel.activate();
+    }
+
+    private void openAdminAppointments() {
+        if (!canOpen(HospitalMode.ADMIN)) {
+            modePanel.showError("当前账号没有进入医院管理模式的权限。");
+            cards.show(this, MODE_SELECT);
+            return;
+        }
+        cards.show(this, ADMIN_APPOINTMENTS);
+        adminAppointmentPanel.activate();
     }
 
     private void openMode(HospitalMode mode, String cardName) {
         if (!canOpen(mode)) {
-            modePanel.showError("当前账号没有进入该模式的权限，请重新检查权限。");
+            modePanel.showError("当前账号没有进入该模式的权限，请重试或重新进入校医院。");
             cards.show(this, MODE_SELECT);
             return;
         }
         cards.show(this, cardName);
+        if (mode == HospitalMode.PATIENT) {
+            refreshPatientHome();
+            showGuideForFirstPatientVisit();
+        } else if (mode == HospitalMode.DOCTOR) {
+            doctorWorkspacePanel.activate();
+        }
+    }
+
+    private void refreshPatientHome() {
+        int version = ++patientHomeRequestVersion;
+        homePanel.showCareTaskLoading();
+        homePanel.showBillTaskLoading();
+        if (!canOpen(HospitalMode.PATIENT)) {
+            return;
+        }
+        refreshPatientBills(version);
+        new SwingWorker<Response, Void>() {
+            @Override
+            protected Response doInBackground() throws Exception {
+                return context.send(HospitalActions.GET_MY_HEALTH_RECORD, null);
+            }
+
+            @Override
+            protected void done() {
+                if (version != patientHomeRequestVersion) {
+                    return;
+                }
+                try {
+                    Response response = get();
+                    if (response.isSuccess()
+                            && response.getData() instanceof PatientHealthRecordView record) {
+                        homePanel.showCareTasks(record);
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                } catch (ExecutionException ignored) {
+                    // Core patient services remain usable when the optional task summary fails.
+                }
+            }
+        }.execute();
+    }
+
+    private void refreshPatientBills(int version) {
+        new SwingWorker<Response, Void>() {
+            @Override
+            protected Response doInBackground() throws Exception {
+                return context.send(HospitalActions.LIST_MY_BILLS, null);
+            }
+
+            @Override
+            protected void done() {
+                if (version != patientHomeRequestVersion) {
+                    return;
+                }
+                try {
+                    Response response = get();
+                    if (response.isSuccess()
+                            && response.getData() instanceof PatientBillListResponse bills) {
+                        homePanel.showBillTasks(bills, HospitalView.this::openBills);
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                } catch (ExecutionException ignored) {
+                    // Other patient services remain usable when fee summary loading fails.
+                }
+            }
+        }.execute();
     }
 
     private boolean canOpen(HospitalMode mode) {
@@ -138,6 +410,7 @@ public final class HospitalView extends JPanel {
     }
 
     private void openModeSelector() {
+        int requestVersion = ++accessRequestVersion;
         cards.show(this, MODE_SELECT);
         SessionInfo session = context.currentSession().orElse(null);
         if (session == null) {
@@ -146,10 +419,10 @@ public final class HospitalView extends JPanel {
             return;
         }
         modePanel.showLoading(session);
-        loadModeAccess(session);
+        loadModeAccess(session, requestVersion);
     }
 
-    private void loadModeAccess(SessionInfo requestedSession) {
+    private void loadModeAccess(SessionInfo requestedSession, int requestVersion) {
         new SwingWorker<Response, Void>() {
             @Override
             protected Response doInBackground() throws Exception {
@@ -158,6 +431,9 @@ public final class HospitalView extends JPanel {
 
             @Override
             protected void done() {
+                if (requestVersion != accessRequestVersion) {
+                    return;
+                }
                 try {
                     Response response = get();
                     SessionInfo currentSession = context.currentSession().orElse(null);
@@ -378,5 +654,13 @@ public final class HospitalView extends JPanel {
         }
         return application.getStatus() == DoctorApplicationStatus.REJECTED
                 ? "未创建" : "审核通过后自动生成";
+    }
+
+    private void showGuideForFirstPatientVisit() {
+        SessionInfo session = context.currentSession().orElse(null);
+        if (session == null || !guidedUserIds.add(session.getUserId())) {
+            return;
+        }
+        SwingUtilities.invokeLater(homePanel::showGuide);
     }
 }

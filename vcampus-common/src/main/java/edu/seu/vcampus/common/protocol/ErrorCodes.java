@@ -26,6 +26,61 @@ public final class ErrorCodes {
             "HOSPITAL_DOCTOR_APPLICATION_NOT_FOUND";
     public static final String HOSPITAL_DOCTOR_APPLICATION_CONFLICT =
             "HOSPITAL_DOCTOR_APPLICATION_CONFLICT";
+    public static final String HOSPITAL_SCHEDULE_NOT_FOUND =
+            "HOSPITAL_SCHEDULE_NOT_FOUND";
+    public static final String HOSPITAL_SCHEDULE_CLOSED =
+            "HOSPITAL_SCHEDULE_CLOSED";
+    public static final String HOSPITAL_SCHEDULE_STARTED =
+            "HOSPITAL_SCHEDULE_STARTED";
+    public static final String HOSPITAL_SCHEDULE_CONFLICT =
+            "HOSPITAL_SCHEDULE_CONFLICT";
+    public static final String HOSPITAL_SCHEDULE_HAS_APPOINTMENTS =
+            "HOSPITAL_SCHEDULE_HAS_APPOINTMENTS";
+    public static final String HOSPITAL_BILL_NOT_FOUND =
+            "HOSPITAL_BILL_NOT_FOUND";
+    public static final String HOSPITAL_BILL_NOT_PAYABLE =
+            "HOSPITAL_BILL_NOT_PAYABLE";
+    public static final String HOSPITAL_SLOT_FULL = "HOSPITAL_SLOT_FULL";
+    public static final String HOSPITAL_DUPLICATE_APPOINTMENT =
+            "HOSPITAL_DUPLICATE_APPOINTMENT";
+    public static final String HOSPITAL_SELF_BOOKING_FORBIDDEN =
+            "HOSPITAL_SELF_BOOKING_FORBIDDEN";
+    public static final String HOSPITAL_APPOINTMENT_NOT_FOUND =
+            "HOSPITAL_APPOINTMENT_NOT_FOUND";
+    public static final String HOSPITAL_APPOINTMENT_NOT_CANCELLABLE =
+            "HOSPITAL_APPOINTMENT_NOT_CANCELLABLE";
+    public static final String HOSPITAL_APPOINTMENT_STARTED =
+            "HOSPITAL_APPOINTMENT_STARTED";
+    public static final String HOSPITAL_FIRST_VISIT_WITH_SOURCE =
+            "HOSPITAL_FIRST_VISIT_WITH_SOURCE";
+    public static final String HOSPITAL_FOLLOW_UP_WITHOUT_SOURCE =
+            "HOSPITAL_FOLLOW_UP_WITHOUT_SOURCE";
+    public static final String HOSPITAL_FOLLOW_UP_SOURCE_INVALID =
+            "HOSPITAL_FOLLOW_UP_SOURCE_INVALID";
+    public static final String HOSPITAL_FOLLOW_UP_DOCTOR_MISMATCH =
+            "HOSPITAL_FOLLOW_UP_DOCTOR_MISMATCH";
+    public static final String HOSPITAL_FOLLOW_UP_WINDOW_EXPIRED =
+            "HOSPITAL_FOLLOW_UP_WINDOW_EXPIRED";
+    public static final String HOSPITAL_BOOKING_CONFLICT =
+            "HOSPITAL_BOOKING_CONFLICT";
+    public static final String HOSPITAL_APPOINTMENT_NOT_CONSULTABLE =
+            "HOSPITAL_APPOINTMENT_NOT_CONSULTABLE";
+    public static final String HOSPITAL_APPOINTMENT_NOT_NO_SHOW =
+            "HOSPITAL_APPOINTMENT_NOT_NO_SHOW";
+    public static final String HOSPITAL_CONSULTATION_ALREADY_EXISTS =
+            "HOSPITAL_CONSULTATION_ALREADY_EXISTS";
+    public static final String HOSPITAL_EXAMINATION_NOT_FOUND =
+            "HOSPITAL_EXAMINATION_NOT_FOUND";
+    public static final String HOSPITAL_EXAMINATION_STATE_INVALID =
+            "HOSPITAL_EXAMINATION_STATE_INVALID";
+    public static final String HOSPITAL_RESULT_REVIEW_ALREADY_BOOKED =
+            "HOSPITAL_RESULT_REVIEW_ALREADY_BOOKED";
+    public static final String HOSPITAL_DEPARTMENT_NOT_FOUND =
+            "HOSPITAL_DEPARTMENT_NOT_FOUND";
+    public static final String HOSPITAL_DEPARTMENT_CONFLICT =
+            "HOSPITAL_DEPARTMENT_CONFLICT";
+    public static final String HOSPITAL_DEPARTMENT_IN_USE =
+            "HOSPITAL_DEPARTMENT_IN_USE";
 
     private ErrorCodes() {
     }

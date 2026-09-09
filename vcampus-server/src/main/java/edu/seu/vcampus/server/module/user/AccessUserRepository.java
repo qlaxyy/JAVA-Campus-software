@@ -46,7 +46,8 @@ final class AccessUserRepository implements UserRepository {
             "U-COURSE-ADMIN-001", "20260004",
             "U-LIBRARY-ADMIN-001", "20260005",
             "U-SHOP-ADMIN-001", "20260006",
-            "U-HOSPITAL-ADMIN-001", "20260007");
+            "U-HOSPITAL-ADMIN-001", "20260007",
+            "U-COURSE-TEACHER-001", "20260008");
 
     private final AccessDatabase database;
 
@@ -54,6 +55,7 @@ final class AccessUserRepository implements UserRepository {
         this.database = database;
         initializeSchema();
         normalizeLegacyProfessionalRoles();
+        normalizeLegacyDemoDoctorName();
         migrateLegacyLoginAccounts();
         migrateCanonicalDemoAccountNumbers();
     }
@@ -232,6 +234,21 @@ final class AccessUserRepository implements UserRepository {
                     + "WHERE roleCode = 'TEACHER' OR roleCode = 'DOCTOR'");
         } catch (SQLException exception) {
             throw failure("Cannot normalize legacy professional roles.", exception);
+        }
+    }
+
+    /** Corrects the old display label while retaining the stable doctor account userId. */
+    private void normalizeLegacyDemoDoctorName() {
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE tblUser SET displayName = ? "
+                             + "WHERE userId = ? AND displayName = ?")) {
+            statement.setString(1, "演示医生");
+            statement.setString(2, "U-TEACHER-001");
+            statement.setString(3, "演示教师");
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw failure("Cannot normalize the development doctor label.", exception);
         }
     }
 

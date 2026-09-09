@@ -60,6 +60,25 @@ class AuthenticationIntegrationTest {
     }
 
     @Test
+    void demoTeacherCanLoginButHasNoGlobalAdministrativeAuthority() throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext context = new ClientContext(
+                    new CampusClient("127.0.0.1", server.getPort()));
+
+            Response login = context.login("20260008", "123456".toCharArray());
+
+            assertTrue(login.isSuccess());
+            SessionInfo session = assertInstanceOf(SessionInfo.class, login.getData());
+            assertEquals("U-COURSE-TEACHER-001", session.getUserId());
+            assertEquals("20260008", session.getUsername());
+            assertEquals("演示教师", session.getDisplayName());
+            assertEquals(Role.USER, session.getRole());
+            assertTrue(session.getAdminScopes().isEmpty());
+        }
+    }
+
+    @Test
     void wrongPasswordDoesNotCreateSession() throws Exception {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();

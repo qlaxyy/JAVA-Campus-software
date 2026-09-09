@@ -253,7 +253,8 @@ final class LoginPanelDesign {
             "选课管理员  20260004",
             "图书馆管理员  20260005",
             "商店管理员  20260006",
-            "医院管理员  20260007"
+            "医院管理员  20260007",
+            "教师演示  20260008"
         };
         for (String text : labels) {
             JLabel label = new JLabel(text);

@@ -88,7 +88,7 @@ class DoctorOnboardingIntegrationTest {
             assertTrue(approval.isSuccess());
             DoctorApplicationView reviewed = assertInstanceOf(
                     DoctorApplicationView.class, approval.getData());
-            assertEquals("20260008", reviewed.getUsername());
+            assertEquals("20260009", reviewed.getUsername());
             assertFalse(reviewed.getUsername().equals("20260001"));
 
             DoctorApplicationListResponse hospitalHistory = assertInstanceOf(

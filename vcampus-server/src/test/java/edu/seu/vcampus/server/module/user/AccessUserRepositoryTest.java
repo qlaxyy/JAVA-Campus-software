@@ -55,8 +55,14 @@ class AccessUserRepositoryTest {
 
         InMemoryAuthenticationService restarted =
                 UserAuthenticationBootstrap.createAccessBacked(databasePath);
-        assertEquals(8, restarted.users().findAll().size());
+        assertEquals(9, restarted.users().findAll().size());
         assertFalse(restarted.users().findByUsername("20260001").orElseThrow().enabled());
+        UserAccount teacher = restarted.users()
+                .findByUsername("20260008").orElseThrow();
+        assertEquals("U-COURSE-TEACHER-001", teacher.userId());
+        assertEquals("演示教师", teacher.displayName());
+        assertEquals(Role.USER, teacher.role());
+        assertTrue(teacher.adminScopes().isEmpty());
     }
 
     @Test

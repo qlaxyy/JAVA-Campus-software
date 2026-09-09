@@ -67,7 +67,7 @@ class UserAdministrationIntegrationTest {
             Response initial = administrator.send(UserActions.ADMIN_LIST_ACCOUNTS, null);
             UserAccountListResponse accounts = assertInstanceOf(
                     UserAccountListResponse.class, initial.getData());
-            assertEquals(8, accounts.getAccounts().size());
+            assertEquals(9, accounts.getAccounts().size());
 
             CreateUserAccountRequest request = new CreateUserAccountRequest(
                     "20261001", "新建用户", proof("20261001"), Set.of(AdminScope.COURSE));

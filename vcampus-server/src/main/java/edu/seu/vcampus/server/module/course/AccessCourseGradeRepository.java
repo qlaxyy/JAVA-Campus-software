@@ -42,7 +42,9 @@ final class AccessCourseGradeRepository
         long enrollmentId) {
 
         String sql =
-            "SELECT gradeId, enrollmentId, score, recordedAt "
+            "SELECT gradeId, enrollmentId, "
+                + "score, usualScore, "
+                + "finalExamScore, recordedAt "
                 + "FROM tblGrade "
                 + "WHERE enrollmentId = ?";
 
@@ -81,7 +83,9 @@ final class AccessCourseGradeRepository
     public List<CourseGradeRecord> findAll() {
 
         String sql =
-            "SELECT gradeId, enrollmentId, score, recordedAt "
+            "SELECT gradeId, enrollmentId, "
+                + "score, usualScore, "
+                + "finalExamScore, recordedAt "
                 + "FROM tblGrade "
                 + "ORDER BY gradeId";
 
@@ -117,25 +121,44 @@ final class AccessCourseGradeRepository
     @Override
     public synchronized CourseGradeRecord save(
         long enrollmentId,
-        double score,
+        double usualScore,
+        double finalExamScore,
         LocalDateTime recordedAt) {
 
         Optional<CourseGradeRecord> existing =
             findByEnrollmentId(
                 enrollmentId);
 
+        /*
+         * score 是旧版数据库字段。
+         *
+         * 暂时继续写入默认 40% + 60% 的结果，
+         * 保证旧代码和数据库约束可以继续工作。
+         *
+         * 新版页面显示的总成绩会由
+         * CourseGradePolicyService 按实际比例计算。
+         */
+        double compatibilityScore =
+            roundScore(
+                usualScore * 0.4
+                    + finalExamScore * 0.6);
+
         if (existing.isPresent()) {
 
             update(
                 enrollmentId,
-                score,
+                usualScore,
+                finalExamScore,
+                compatibilityScore,
                 recordedAt);
 
         } else {
 
             insert(
                 enrollmentId,
-                score,
+                usualScore,
+                finalExamScore,
+                compatibilityScore,
                 recordedAt);
         }
 
@@ -151,13 +174,17 @@ final class AccessCourseGradeRepository
      */
     private void insert(
         long enrollmentId,
-        double score,
+        double usualScore,
+        double finalExamScore,
+        double compatibilityScore,
         LocalDateTime recordedAt) {
 
         String sql =
             "INSERT INTO tblGrade "
-                + "(enrollmentId, score, recordedAt) "
-                + "VALUES (?, ?, ?)";
+                + "(enrollmentId, score, "
+                + "usualScore, finalExamScore, "
+                + "recordedAt) "
+                + "VALUES (?, ?, ?, ?, ?)";
 
         try (Connection connection =
                  database.openConnection();
@@ -171,10 +198,18 @@ final class AccessCourseGradeRepository
 
             statement.setDouble(
                 2,
-                score);
+                compatibilityScore);
+
+            statement.setDouble(
+                3,
+                usualScore);
+
+            statement.setDouble(
+                4,
+                finalExamScore);
 
             statement.setTimestamp(
-                3,
+                5,
                 Timestamp.valueOf(
                     recordedAt));
 
@@ -189,16 +224,21 @@ final class AccessCourseGradeRepository
     }
 
     /**
-     * 更新已有成绩。
+     * 更新成绩。
      */
     private void update(
         long enrollmentId,
-        double score,
+        double usualScore,
+        double finalExamScore,
+        double compatibilityScore,
         LocalDateTime recordedAt) {
 
         String sql =
             "UPDATE tblGrade "
-                + "SET score = ?, recordedAt = ? "
+                + "SET score = ?, "
+                + "usualScore = ?, "
+                + "finalExamScore = ?, "
+                + "recordedAt = ? "
                 + "WHERE enrollmentId = ?";
 
         try (Connection connection =
@@ -209,15 +249,23 @@ final class AccessCourseGradeRepository
 
             statement.setDouble(
                 1,
-                score);
+                compatibilityScore);
+
+            statement.setDouble(
+                2,
+                usualScore);
+
+            statement.setDouble(
+                3,
+                finalExamScore);
 
             statement.setTimestamp(
-                2,
+                4,
                 Timestamp.valueOf(
                     recordedAt));
 
             statement.setLong(
-                3,
+                5,
                 enrollmentId);
 
             statement.executeUpdate();
@@ -231,62 +279,167 @@ final class AccessCourseGradeRepository
     }
 
     /**
-     * 从查询结果读取成绩。
+     * 读取成绩记录。
      */
     private CourseGradeRecord readRecord(
         ResultSet result)
         throws SQLException {
 
+        double oldScore =
+            result.getDouble(
+                "score");
+
+        Double usualScore =
+            nullableDouble(
+                result,
+                "usualScore");
+
+        Double finalExamScore =
+            nullableDouble(
+                result,
+                "finalExamScore");
+
         Timestamp timestamp =
             result.getTimestamp(
                 "recordedAt");
 
+        /*
+         * 兼容迁移前的旧成绩。
+         *
+         * 如果新字段为空，就使用原有 score，
+         * 这样原有总成绩不会发生变化。
+         */
         return new CourseGradeRecord(
             result.getLong(
                 "gradeId"),
             result.getLong(
                 "enrollmentId"),
-            result.getDouble(
-                "score"),
+            usualScore == null
+                ? oldScore
+                : usualScore,
+            finalExamScore == null
+                ? oldScore
+                : finalExamScore,
             timestamp.toLocalDateTime());
     }
 
     /**
-     * 初始化成绩表。
+     * 读取可能为 null 的 DOUBLE 字段。
+     */
+    private Double nullableDouble(
+        ResultSet result,
+        String column)
+        throws SQLException {
+
+        double value =
+            result.getDouble(
+                column);
+
+        return result.wasNull()
+            ? null
+            : value;
+    }
+
+    /**
+     * 初始化或升级成绩表。
      */
     private void initialiseSchema() {
 
         try (Connection connection =
                  database.openConnection()) {
 
-            if (tableExists(
+            if (!tableExists(
                 connection,
                 TABLE)) {
+
+                createTable(
+                    connection);
 
                 return;
             }
 
-            try (Statement statement =
-                     connection.createStatement()) {
-
-                statement.executeUpdate(
-                    "CREATE TABLE tblGrade ("
-                        + "gradeId COUNTER PRIMARY KEY, "
-                        + "enrollmentId LONG NOT NULL, "
-                        + "score DOUBLE NOT NULL, "
-                        + "recordedAt DATETIME NOT NULL)");
-
-                statement.executeUpdate(
-                    "CREATE UNIQUE INDEX "
-                        + "ux_tblGrade_enrollmentId "
-                        + "ON tblGrade (enrollmentId)");
-            }
+            migrateExistingTable(
+                connection);
 
         } catch (SQLException exception) {
 
             throw failure(
                 "无法初始化课程成绩表。",
                 exception);
+        }
+    }
+
+    /**
+     * 创建新版成绩表。
+     */
+    private void createTable(
+        Connection connection)
+        throws SQLException {
+
+        try (Statement statement =
+                 connection.createStatement()) {
+
+            statement.executeUpdate(
+                "CREATE TABLE tblGrade ("
+                    + "gradeId COUNTER PRIMARY KEY, "
+                    + "enrollmentId LONG NOT NULL, "
+                    + "score DOUBLE NOT NULL, "
+                    + "usualScore DOUBLE, "
+                    + "finalExamScore DOUBLE, "
+                    + "recordedAt DATETIME NOT NULL)");
+
+            statement.executeUpdate(
+                "CREATE UNIQUE INDEX "
+                    + "ux_tblGrade_enrollmentId "
+                    + "ON tblGrade "
+                    + "(enrollmentId)");
+        }
+    }
+
+    /**
+     * 升级已经存在的旧成绩表。
+     */
+    private void migrateExistingTable(
+        Connection connection)
+        throws SQLException {
+
+        try (Statement statement =
+                 connection.createStatement()) {
+
+            if (!columnExists(
+                connection,
+                TABLE,
+                "usualScore")) {
+
+                statement.executeUpdate(
+                    "ALTER TABLE tblGrade "
+                        + "ADD COLUMN usualScore DOUBLE");
+            }
+
+            if (!columnExists(
+                connection,
+                TABLE,
+                "finalExamScore")) {
+
+                statement.executeUpdate(
+                    "ALTER TABLE tblGrade "
+                        + "ADD COLUMN finalExamScore DOUBLE");
+            }
+
+            /*
+             * 旧数据迁移：
+             * 将原 score 同时作为平时和期末成绩，
+             * 从而保持原总成绩不变。
+             */
+            statement.executeUpdate(
+                "UPDATE tblGrade "
+                    + "SET usualScore = score "
+                    + "WHERE usualScore IS NULL");
+
+            statement.executeUpdate(
+                "UPDATE tblGrade "
+                    + "SET finalExamScore = score "
+                    + "WHERE finalExamScore IS NULL");
         }
     }
 
@@ -320,6 +473,59 @@ final class AccessCourseGradeRepository
         }
 
         return false;
+    }
+
+    /**
+     * 判断字段是否存在。
+     */
+    private boolean columnExists(
+        Connection connection,
+        String tableName,
+        String columnName)
+        throws SQLException {
+
+        DatabaseMetaData metadata =
+            connection.getMetaData();
+
+        try (ResultSet columns =
+                 metadata.getColumns(
+                     null,
+                     null,
+                     "%",
+                     "%")) {
+
+            while (columns.next()) {
+
+                String actualTable =
+                    columns.getString(
+                        "TABLE_NAME");
+
+                String actualColumn =
+                    columns.getString(
+                        "COLUMN_NAME");
+
+                if (tableName.equalsIgnoreCase(
+                    actualTable)
+                    && columnName.equalsIgnoreCase(
+                    actualColumn)) {
+
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * 成绩保留两位小数。
+     */
+    private double roundScore(
+        double score) {
+
+        return Math.round(
+            score * 100.0)
+            / 100.0;
     }
 
     private IllegalStateException failure(

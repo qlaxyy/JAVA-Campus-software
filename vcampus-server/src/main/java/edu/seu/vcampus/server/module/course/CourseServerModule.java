@@ -30,10 +30,11 @@ import edu.seu.vcampus.common.course.AdminListGradesRequest;
 import edu.seu.vcampus.common.course.AdminUpdateGradeRequest;
 import edu.seu.vcampus.common.user.Role;
 import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
-
+import edu.seu.vcampus.common.course.TeacherListStudentsRequest;
 import java.nio.file.Path;
-
-
+import edu.seu.vcampus.common.course.CourseGradeInfo;
+import edu.seu.vcampus.common.course.TeacherStudentInfo;
+import edu.seu.vcampus.common.course.TeacherUpdateGradePolicyRequest;
 
 
 
@@ -42,6 +43,11 @@ import java.nio.file.Path;
  */
 public final class CourseServerModule
     implements ServerModule {
+    /**
+     * 教学班成绩比例业务。
+     */
+    private final CourseGradePolicyService
+        gradePolicyService;
     /**
      * 成绩管理业务。
      */
@@ -95,6 +101,8 @@ public final class CourseServerModule
      */
     private final CourseSelectionService
         selectionService;
+    private final CourseTeacherService
+        teacherService;
     /**
      * 教务强制操作日志。
      */
@@ -143,7 +151,22 @@ public final class CourseServerModule
                 ? new InMemoryCourseAdminAuditRepository()
                 : new AccessCourseAdminAuditRepository(
                 database);
+        /*
+         * =========================
+         * 教学班成绩比例
+         * =========================
+         */
+        CourseGradePolicyRepository
+            gradePolicyRepository =
+            database == null
+                ? new InMemoryCourseGradePolicyRepository()
+                : new AccessCourseGradePolicyRepository(
+                database);
 
+        this.gradePolicyService =
+            new CourseGradePolicyService(
+                gradePolicyRepository,
+                clock);
         this.adminAuditService =
             new CourseAdminAuditService(
                 clock,
@@ -306,7 +329,10 @@ public final class CourseServerModule
                 enrollmentRepository,
                 offeringSettingsRepository,
                 courseSettingsRepository);
-
+        this.teacherService =
+            new CourseTeacherService(
+                this.offeringAdministrationService,
+                enrollmentRepository);
             /*
              * =========================
              * 7. 历史修读 Repository
@@ -477,6 +503,7 @@ public final class CourseServerModule
             new CourseGradeService(
                 this.enrollmentService,
                 gradeRepository,
+                this.gradePolicyService,
                 clock);
 
         // 原来默认构造器的全部内容放在这里
@@ -496,6 +523,11 @@ public final class CourseServerModule
         GeneralCourseService generalCourseService,
         CourseSelectionService selectionService,
         CourseEnrollmentService enrollmentService) {
+
+        this.gradePolicyService =
+            new CourseGradePolicyService(
+                new InMemoryCourseGradePolicyRepository(),
+                Clock.systemDefaultZone());
         this.adminAuditService =
             new CourseAdminAuditService(
                 Clock.systemDefaultZone());
@@ -544,6 +576,7 @@ public final class CourseServerModule
             new CourseGradeService(
                 this.enrollmentService,
                 new InMemoryCourseGradeRepository(),
+                this.gradePolicyService,
                 Clock.systemDefaultZone());
         CourseSubstitutionRepository
             adminSubstitutionRepository =
@@ -573,6 +606,11 @@ public final class CourseServerModule
             new CourseAdminStatisticsService(
                 this.batchService,
                 this.offeringAdministrationService);
+
+        this.teacherService =
+            new CourseTeacherService(
+                this.offeringAdministrationService,
+                adminEnrollmentRepository);
 
     }
 
@@ -811,13 +849,699 @@ public final class CourseServerModule
                 adminForceDropCourse(
                     request,
                     context));
-
+        /*
+         * =========================
+         * 教师查询本人教学班
+         * =========================
+         */
+        router.register(
+            CourseActions.TEACHER_LIST_OFFERINGS,
+            request ->
+                teacherListOfferings(
+                    request,
+                    context));
         router.register(
             CourseActions.ADMIN_UPDATE_OFFERING,
             request ->
                 adminUpdateOffering(
                     request,
                     context));
+        /*
+         * =========================
+         * 教师查询教学班学生名单
+         * =========================
+         */
+        router.register(
+            CourseActions.TEACHER_LIST_STUDENTS,
+            request ->
+                teacherListStudents(
+                    request,
+                    context));
+        /*
+         * =========================
+         * 教师查询教学班成绩
+         * =========================
+         */
+        router.register(
+            CourseActions.TEACHER_LIST_GRADES,
+            request ->
+                teacherListGrades(
+                    request,
+                    context));
+
+        /*
+         * =========================
+         * 教师录入或修改成绩
+         * =========================
+         */
+        router.register(
+            CourseActions.TEACHER_UPDATE_GRADE,
+            request ->
+                teacherUpdateGrade(
+                    request,
+                    context));
+        /*
+         * =========================
+         * 教师查询成绩比例
+         * =========================
+         */
+        router.register(
+            CourseActions.TEACHER_GET_GRADE_POLICY,
+            request ->
+                teacherGetGradePolicy(
+                    request,
+                    context));
+
+        /*
+         * =========================
+         * 教师修改成绩比例
+         * =========================
+         */
+        router.register(
+            CourseActions.TEACHER_UPDATE_GRADE_POLICY,
+            request ->
+                teacherUpdateGradePolicy(
+                    request,
+                    context));
+    }
+    /**
+     * 教师查询本人教学班的成绩比例。
+     */
+    private Response teacherGetGradePolicy(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!teacherService.isTeacher(
+            session.getUsername())) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "当前账号不是课程教师。");
+        }
+
+        if (!(request.getData()
+            instanceof TeacherListStudentsRequest
+            policyRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "成绩比例查询请求格式错误。");
+        }
+
+        long batchId =
+            policyRequest.getBatchId();
+
+        long offeringId =
+            policyRequest.getOfferingId();
+
+        if (batchId <= 0
+            || offeringId <= 0) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "批次 ID 或教学班 ID 不正确。");
+        }
+
+        if (batchService.findBatch(
+            batchId) == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "未找到指定选课批次。");
+        }
+
+        if (!teacherService.canManageOffering(
+            session.getUsername(),
+            offeringId)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "你没有该教学班的成绩管理权限。");
+        }
+
+        return Response.success(
+            request,
+            "成绩比例加载成功。",
+            gradePolicyService.getPolicy(
+                offeringId));
+    }
+    /**
+     * 教师修改本人教学班的成绩比例。
+     */
+    private Response teacherUpdateGradePolicy(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!teacherService.isTeacher(
+            session.getUsername())) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "当前账号不是课程教师。");
+        }
+
+        if (!(request.getData()
+            instanceof TeacherUpdateGradePolicyRequest
+            updateRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "成绩比例修改请求格式错误。");
+        }
+
+        long offeringId =
+            updateRequest.getOfferingId();
+
+        if (!teacherService.canManageOffering(
+            session.getUsername(),
+            offeringId)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "你没有该教学班的成绩管理权限。");
+        }
+
+        CourseGradePolicyUpdateResult result =
+            gradePolicyService.updatePolicy(
+                offeringId,
+                updateRequest
+                    .getUsualWeightPercent(),
+                updateRequest
+                    .getFinalExamWeightPercent());
+
+        if (!result.success()) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                result.message());
+        }
+
+        adminAuditService
+            .recordUpdateGradePolicy(
+                session.getUsername(),
+                offeringId,
+                updateRequest
+                    .getUsualWeightPercent(),
+                updateRequest
+                    .getFinalExamWeightPercent(),
+                updateRequest.getReason());
+
+        return Response.success(
+            request,
+            result.message(),
+            result.policy());
+    }
+    /**
+     * 教师查询本人负责的教学班。
+     */
+    private Response teacherListOfferings(
+        Request request,
+        ServerContext context) {
+
+        /*
+         * =========================
+         * 1. 登录检查
+         * =========================
+         */
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        /*
+         * =========================
+         * 2. 临时教师身份检查
+         * =========================
+         */
+        if (!teacherService.isTeacher(
+            session.getUsername())) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "当前账号没有教师权限。");
+        }
+
+        /*
+         * =========================
+         * 3. 请求数据检查
+         * =========================
+         */
+        if (!(request.getData()
+            instanceof BatchRequest
+            batchRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "教师教学班查询请求无效。");
+        }
+
+        /*
+         * =========================
+         * 4. 批次检查
+         * =========================
+         */
+        if (batchService.findBatch(
+            batchRequest.getBatchId()) == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "选课批次不存在。");
+        }
+
+        /*
+         * =========================
+         * 5. 查询本人负责的教学班
+         * =========================
+         */
+        return Response.success(
+            request,
+            "教师教学班加载成功。",
+            new ArrayList<>(
+                teacherService
+                    .listTeacherCourses(
+                        session.getUsername(),
+                        batchRequest.getBatchId())));
+
+
+    }
+    /**
+     * 教师查询自己负责教学班中的学生名单。
+     */
+    private Response teacherListStudents(
+        Request request,
+        ServerContext context) {
+
+        /*
+         * =========================
+         * 1. 登录检查
+         * =========================
+         */
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        /*
+         * =========================
+         * 2. 教师身份检查
+         * =========================
+         */
+        if (!teacherService.isTeacher(
+            session.getUsername())) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "当前账号不是课程教师。");
+        }
+
+        /*
+         * =========================
+         * 3. 请求格式检查
+         * =========================
+         */
+        if (!(request.getData()
+            instanceof TeacherListStudentsRequest
+            listRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "学生名单查询请求格式错误。");
+        }
+
+        long batchId =
+            listRequest.getBatchId();
+
+        long offeringId =
+            listRequest.getOfferingId();
+
+        if (batchId <= 0
+            || offeringId <= 0) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "批次 ID 或教学班 ID 不正确。");
+        }
+
+        /*
+         * =========================
+         * 4. 批次检查
+         * =========================
+         */
+        if (batchService.findBatch(
+            batchId) == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "未找到指定选课批次。");
+        }
+
+        /*
+         * =========================
+         * 5. 教学班权限检查
+         * =========================
+         */
+        if (!teacherService.canManageOffering(
+            session.getUsername(),
+            offeringId)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "你没有该教学班的管理权限。");
+        }
+
+        /*
+         * =========================
+         * 6. 返回学生名单
+         * =========================
+         */
+        return Response.success(
+            request,
+            "学生名单加载成功。",
+            new ArrayList<>(
+                teacherService.listStudents(
+                    session.getUsername(),
+                    batchId,
+                    offeringId)));
+    }
+    /**
+     * 教师查询自己负责教学班的成绩。
+     */
+    private Response teacherListGrades(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!teacherService.isTeacher(
+            session.getUsername())) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "当前账号不是课程教师。");
+        }
+
+        if (!(request.getData()
+            instanceof TeacherListStudentsRequest
+            listRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "成绩查询请求格式错误。");
+        }
+
+        long batchId =
+            listRequest.getBatchId();
+
+        long offeringId =
+            listRequest.getOfferingId();
+
+        if (batchId <= 0
+            || offeringId <= 0) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "批次 ID 或教学班 ID 不正确。");
+        }
+
+        if (batchService.findBatch(
+            batchId) == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "未找到指定选课批次。");
+        }
+
+        if (!teacherService.canManageOffering(
+            session.getUsername(),
+            offeringId)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "你没有该教学班的成绩管理权限。");
+        }
+
+        List<TeacherStudentInfo> students =
+            teacherService.listStudents(
+                session.getUsername(),
+                batchId,
+                offeringId);
+
+        List<CourseGradeInfo> grades =
+            new ArrayList<>();
+
+        for (TeacherStudentInfo student
+            : students) {
+
+            List<CourseGradeInfo> studentGrades =
+                gradeService.listGrades(
+                    student.getStudentId());
+
+            for (CourseGradeInfo grade
+                : studentGrades) {
+
+                if (grade.getEnrollmentId()
+                    == student.getEnrollmentId()
+                    && grade.getOfferingId()
+                    == offeringId) {
+
+                    grades.add(
+                        grade);
+
+                    break;
+                }
+            }
+        }
+
+        return Response.success(
+            request,
+            "成绩加载成功。",
+            new ArrayList<>(
+                grades));
+    }
+    /**
+     * 教师录入或修改自己负责教学班的成绩。
+     */
+    private Response teacherUpdateGrade(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!teacherService.isTeacher(
+            session.getUsername())) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "当前账号不是课程教师。");
+        }
+
+        if (!(request.getData()
+            instanceof AdminUpdateGradeRequest
+            updateRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "成绩修改请求格式错误。");
+        }
+
+        String studentId =
+            updateRequest
+                .getStudentId()
+                .trim();
+
+        long enrollmentId =
+            updateRequest
+                .getEnrollmentId();
+
+        double usualScore =
+            updateRequest
+                .getUsualScore();
+
+        double finalExamScore =
+            updateRequest
+                .getFinalExamScore();
+
+        if (studentId.isBlank()) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "学生学号不能为空。");
+        }
+
+        if (enrollmentId <= 0) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "选课记录 ID 不正确。");
+        }
+
+        if (!validGradeScore(
+            usualScore)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "平时成绩必须在 0 到 100 之间。");
+        }
+
+        if (!validGradeScore(
+            finalExamScore)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "期末成绩必须在 0 到 100 之间。");
+        }
+
+        if (!teacherService.canManageEnrollment(
+            session.getUsername(),
+            studentId,
+            enrollmentId)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "该选课记录不属于你负责的教学班。");
+        }
+
+        GradeUpdateResult result =
+            gradeService.updateGrade(
+                studentId,
+                enrollmentId,
+                usualScore,
+                finalExamScore);
+
+        if (!result.success()) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                result.message());
+        }
+
+        adminAuditService.recordUpdateGrade(
+            session.getUsername(),
+            studentId,
+            enrollmentId,
+            usualScore,
+            finalExamScore,
+            result.grade()
+                .getTotalScore(),
+            updateRequest.getReason());
+
+        return Response.success(
+            request,
+            result.message(),
+            result.grade());
+    }
+    /**
+     * 判断成绩是否在合法范围内。
+     */
+    private boolean validGradeScore(
+        double score) {
+
+        return !Double.isNaN(
+            score)
+            && !Double.isInfinite(
+            score)
+            && score >= 0.0
+            && score <= 100.0;
     }
     /**
      * 教务修改课程基本信息。
@@ -968,6 +1692,7 @@ public final class CourseServerModule
                         adminRequest
                             .getStudentId())));
     }
+
     /**
      * 教务修改选课批次。
      */
@@ -1452,11 +2177,38 @@ public final class CourseServerModule
                 "成绩修改请求格式错误。");
         }
 
+        double usualScore =
+            updateRequest
+                .getUsualScore();
+
+        double finalExamScore =
+            updateRequest
+                .getFinalExamScore();
+
+        if (!validGradeScore(
+            usualScore)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "平时成绩必须在 0 到 100 之间。");
+        }
+
+        if (!validGradeScore(
+            finalExamScore)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "期末成绩必须在 0 到 100 之间。");
+        }
+
         GradeUpdateResult result =
             gradeService.updateGrade(
                 updateRequest.getStudentId(),
                 updateRequest.getEnrollmentId(),
-                updateRequest.getScore());
+                usualScore,
+                finalExamScore);
 
         if (!result.success()) {
 
@@ -1465,13 +2217,18 @@ public final class CourseServerModule
                 ErrorCodes.COMMON_INVALID_REQUEST,
                 result.message());
         }
+
         adminAuditService
             .recordUpdateGrade(
                 session.getUsername(),
                 updateRequest.getStudentId(),
                 updateRequest.getEnrollmentId(),
-                updateRequest.getScore(),
+                usualScore,
+                finalExamScore,
+                result.grade()
+                    .getTotalScore(),
                 updateRequest.getReason());
+
         return Response.success(
             request,
             result.message(),

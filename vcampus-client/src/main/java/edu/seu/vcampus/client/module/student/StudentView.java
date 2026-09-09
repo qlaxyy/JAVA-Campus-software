@@ -76,6 +76,28 @@ public class StudentView extends JPanel {
         setEditableState(false);
     }
 
+    /**
+     * 判断当前登录用户是否具备学籍管理员权限（支持 SUPER_ADMIN 与 STUDENT adminScope）
+     */
+    private boolean isStudentAdmin() {
+        return context.currentSession()
+            .map(session -> session.canAdminister("student") || session.canAdminister("STUDENT"))
+            .orElse(false);
+    }
+
+    /**
+     * 获取清洗后的当前登录账号 ID
+     */
+    private String getCurrentCleanUserId() {
+        String rawId = context.currentSession()
+            .map(s -> s.getUserId() != null ? s.getUserId().trim().toLowerCase() : "")
+            .orElse("");
+        if (rawId.startsWith("u-")) {
+            rawId = rawId.substring(2);
+        }
+        return rawId.replace("-", "");
+    }
+
     private void initUI() {
         setLayout(new BorderLayout());
         setBackground(new Color(248, 249, 250));
@@ -202,7 +224,7 @@ public class StudentView extends JPanel {
         cardStudy.add(studyBody, BorderLayout.CENTER);
         cardsGrid.add(cardStudy);
 
-        // 卡片 3：联络补充（支持修改）
+        // 卡片 3：联络补充（仅本人与学籍管理员可修改）
         JPanel cardContact = createCardPanel("联络与补充信息", "学生本人维护与紧急联系");
         JPanel contactBody = new JPanel(new GridLayout(6, 1, 0, 4));
         contactBody.setOpaque(false);
@@ -227,7 +249,7 @@ public class StudentView extends JPanel {
         cardContact.add(contactAction, BorderLayout.SOUTH);
         cardsGrid.add(cardContact);
 
-        // 卡片 4：学籍异动申请卡片（基于当前会话严格鉴权）
+        // 卡片 4：学籍异动申请卡片（基于 canAdminister 严密隔离）
         JPanel cardChange = createCardPanel("学籍异动申请", "申请转专业、休学与复学流程");
         JButton btnOpenChange = new JButton("办理/查看异动");
         btnOpenChange.setFont(FONT_SUB);
@@ -240,24 +262,11 @@ public class StudentView extends JPanel {
         ));
 
         btnOpenChange.addActionListener(e -> {
-            String rawId = context.currentSession()
-                .map(s -> s.getUserId() != null ? s.getUserId().trim().toLowerCase() : "")
-                .orElse("");
+            boolean hasAdminScope = isStudentAdmin();
+            String currentUid = getCurrentCleanUserId();
 
-            if (rawId.startsWith("u-")) {
-                rawId = rawId.substring(2);
-            }
-            rawId = rawId.replace("-", "");
-
-            boolean isTeacher = rawId.contains("teacher");
-            boolean isAdmin = rawId.contains("admin");
-
-            if (isTeacher) {
-                JOptionPane.showMessageDialog(this, "权限不足：普通教师无权访问学籍异动管理模块！", "权限受限", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-
-            if (isAdmin) {
+            // 1. 如果具有学籍管理员权限，打开全校审批工作台
+            if (hasAdminScope) {
                 StatusChangeDialog dlg = new StatusChangeDialog(
                     SwingUtilities.getWindowAncestor(this),
                     context,
@@ -271,27 +280,35 @@ public class StudentView extends JPanel {
                 return;
             }
 
-            String targetStudentId = rawId;
-            if (currentProfile != null && !rawId.equals(currentProfile.getStudentId())) {
-                JOptionPane.showMessageDialog(this, "权限不足：学生仅能查看与办理本人的学籍异动！", "权限受限", JOptionPane.WARNING_MESSAGE);
+            // 2. 如果是学生本人，允许打开个人异动申请与进度追踪
+            boolean isSelf = (currentProfile != null && currentUid.equalsIgnoreCase(currentProfile.getStudentId()))
+                || (currentProfile == null && !currentUid.contains("teacher") && !currentUid.contains("admin"));
+
+            if (isSelf) {
+                String targetId = currentProfile != null ? currentProfile.getStudentId() : currentUid;
+                StatusChangeDialog dlg = new StatusChangeDialog(
+                    SwingUtilities.getWindowAncestor(this),
+                    context,
+                    targetId,
+                    false,
+                    () -> {
+                        if (currentProfile != null) executeQuery();
+                    }
+                );
+                dlg.setVisible(true);
                 return;
             }
 
-            StatusChangeDialog dlg = new StatusChangeDialog(
-                SwingUtilities.getWindowAncestor(this),
-                context,
-                targetStudentId,
-                false,
-                () -> {
-                    if (currentProfile != null) executeQuery();
-                }
-            );
-            dlg.setVisible(true);
+            // 3. 其他非学籍管理员角色（如商店管理员、教师等），全面拦截
+            JOptionPane.showMessageDialog(this,
+                "权限不足：当前账号不具备学籍管理权限，且非学生本人！",
+                "权限受限",
+                JOptionPane.WARNING_MESSAGE);
         });
         cardChange.add(btnOpenChange, BorderLayout.SOUTH);
         cardsGrid.add(cardChange);
 
-        // 卡片 5：学籍证明下载（严格权限隔离）
+        // 卡片 5：学籍证明下载（严禁非本人且非学籍管理员开具）
         JPanel cardCert = createCardPanel("学籍证明开具", "在线开具并打印中英文在读证明");
         JButton btnDownloadCert = new JButton("开具证明");
         btnDownloadCert.setFont(FONT_SUB);
@@ -308,37 +325,19 @@ public class StudentView extends JPanel {
                 return;
             }
 
-            String rawId = context.currentSession()
-                .map(s -> s.getUserId() != null ? s.getUserId().trim().toLowerCase() : "")
-                .orElse("");
+            boolean hasAdminScope = isStudentAdmin();
+            String currentUid = getCurrentCleanUserId();
+            boolean isSelf = currentUid.equalsIgnoreCase(currentProfile.getStudentId());
 
-            if (rawId.startsWith("u-")) {
-                rawId = rawId.substring(2);
-            }
-            rawId = rawId.replace("-", "");
-
-            boolean isTeacher = rawId.contains("teacher");
-            boolean isAdmin = rawId.contains("admin");
-
-            // (1) 普通教师：完全禁止查看与开具学籍证明
-            if (isTeacher) {
+            // 只有学籍管理员或学生本人有权开具
+            if (!hasAdminScope && !isSelf) {
                 JOptionPane.showMessageDialog(this,
-                    "权限不足：普通教师无权开具或查阅学生学籍证明！",
+                    "权限不足：当前账号不具备学籍管理权限，仅允许学生本人或学籍管理员开具证明！",
                     "权限受限",
                     JOptionPane.WARNING_MESSAGE);
                 return;
             }
 
-            // (2) 学生：仅允许开具本人的学籍证明，严禁代开他人
-            if (!isAdmin && !rawId.equals(currentProfile.getStudentId())) {
-                JOptionPane.showMessageDialog(this,
-                    "权限不足：学生仅能开具本人的学籍在读证明！",
-                    "权限受限",
-                    JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-
-            // (3) 验证通过，弹出证明窗口
             StudentCertificateDialog dlg = new StudentCertificateDialog(
                 SwingUtilities.getWindowAncestor(this),
                 currentProfile
@@ -517,7 +516,13 @@ public class StudentView extends JPanel {
                         lblStatus.setForeground(new Color(13, 120, 90));
                         currentProfile = profileRes.getProfile();
                         renderProfile(currentProfile);
-                        btnEdit.setEnabled(true);
+
+                        // 权限收紧：只有本人或具备学籍管理权限的账号才允许启用【编辑修改】
+                        boolean hasAdminScope = isStudentAdmin();
+                        String currentUid = getCurrentCleanUserId();
+                        boolean isSelf = currentUid.equalsIgnoreCase(currentProfile.getStudentId());
+                        btnEdit.setEnabled(hasAdminScope || isSelf);
+
                         setEditableState(false);
                     }
                 } catch (Exception ex) {
@@ -530,6 +535,15 @@ public class StudentView extends JPanel {
 
     private void executeUpdate() {
         if (currentProfile == null) return;
+
+        // 二次防御校验
+        boolean hasAdminScope = isStudentAdmin();
+        String currentUid = getCurrentCleanUserId();
+        boolean isSelf = currentUid.equalsIgnoreCase(currentProfile.getStudentId());
+        if (!hasAdminScope && !isSelf) {
+            JOptionPane.showMessageDialog(this, "权限不足：当前账号无权修改该学生档案！", "拒绝访问", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
 
         String phone = txtPhone.getText().trim();
         String email = txtEmail.getText().trim();

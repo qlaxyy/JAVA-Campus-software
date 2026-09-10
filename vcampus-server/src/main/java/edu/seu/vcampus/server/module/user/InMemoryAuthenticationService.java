@@ -12,8 +12,6 @@ import edu.seu.vcampus.server.security.TeacherDirectory;
 import edu.seu.vcampus.common.user.PasswordProof;
 import edu.seu.vcampus.common.user.Role;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Arrays;
@@ -123,12 +121,17 @@ public final class InMemoryAuthenticationService
         UserAccount user = users.findByUsername(username).orElse(null);
         if (user == null
                 || !user.enabled()
-                || !proofMatches(user.passwordProof(), request.getPasswordProof())) {
+                || !user.passwordMatches(request.getPasswordProof())) {
             loginAttempts.recordFailure(username, now);
             return Optional.empty();
         }
 
         loginAttempts.recordSuccess(username);
+
+        if (user.passwordNeedsUpgrade()) {
+            user = user.withPasswordProof(request.getPasswordProof());
+            users.save(user);
+        }
 
         SessionInfo session = new SessionInfo(
                 createToken(),
@@ -162,7 +165,7 @@ public final class InMemoryAuthenticationService
         }
         UserAccount user = users.findById(userId).orElse(null);
         if (user == null
-                || !proofMatches(user.passwordProof(), currentPasswordProof)) {
+                || !user.passwordMatches(currentPasswordProof)) {
             return false;
         }
         users.save(user.withPasswordProof(newPasswordProof));
@@ -304,12 +307,6 @@ public final class InMemoryAuthenticationService
         byte[] token = new byte[TOKEN_BYTES];
         secureRandom.nextBytes(token);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(token);
-    }
-
-    private static boolean proofMatches(String expected, String actual) {
-        return MessageDigest.isEqual(
-                expected.getBytes(StandardCharsets.US_ASCII),
-                actual.getBytes(StandardCharsets.US_ASCII));
     }
 
     private static boolean isPasswordProof(String value) {

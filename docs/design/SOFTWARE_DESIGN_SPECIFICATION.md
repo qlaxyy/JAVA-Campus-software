@@ -89,7 +89,7 @@
 
 #### 2.1.3 安全可行性
 
-当前实现不会把密码明文放入 `LoginRequest`，客户端先生成开发期 SHA-256 proof；服务器使用固定时间比较方式校验 proof，并用安全随机数产生 token。但该方案没有 TLS，也不是正式密码存储方案，只适合课程开发阶段。最终版本应使用加密传输和带盐慢哈希。
+当前实现不会把密码明文放入 `LoginRequest`，客户端先生成开发期 SHA-256 proof；服务器数据库再使用每账号独立随机盐的 PBKDF2-HMAC-SHA256 慢哈希保存该 proof，并用固定时间方式比较校验结果。旧数据库中的 proof 在首次成功登录后自动升级。安全随机数用于产生 token。由于 Socket 尚未使用 TLS，proof 仍可能在传输中被截获和重放，真实网络部署前还需增加加密传输。
 
 ### 2.2 需求分析
 
@@ -320,12 +320,15 @@ sequenceDiagram
     else 允许尝试
         AS->>UR: findByUsername(username)
         UR-->>AS: UserAccount / empty
-        AS->>AS: 检查 enabled 和 passwordProof
+        AS->>AS: 检查 enabled，并以盐值和迭代次数校验慢哈希
         alt 验证失败
             AS->>AL: recordFailure(username)
             AS-->>UM: Optional.empty
         else 验证成功
             AS->>AL: recordSuccess(username)
+            opt 旧数据库凭据
+                AS->>UR: 保存带盐 PBKDF2 凭据并清除旧 proof
+            end
             AS->>AS: 生成 token，保存 SessionInfo
             AS-->>UM: Optional<SessionInfo>
         end
@@ -478,8 +481,17 @@ classDiagram
         -String displayName
         -Role role
         -Set~AdminScope~ adminScopes
-        -String passwordProof
+        -PasswordCredential passwordCredential
         -boolean enabled
+    }
+
+    class PasswordCredential {
+        -String legacyProof
+        -String hash
+        -String salt
+        -int iterations
+        ~matches(String passwordProof) boolean
+        ~needsUpgrade() boolean
     }
 
     LoginPanel --> ClientContext : 持有并调用
@@ -500,6 +512,7 @@ classDiagram
     UserRepository <|.. AccessUserRepository : 生产实现
     InMemoryUserRepository "1" o-- "0..*" UserAccount : 保存账号
     AccessUserRepository --> UserAccount : 持久化
+    UserAccount *-- PasswordCredential : 保存校验凭据
 ```
 
 #### 5.6.2 网络 DTO 类图
@@ -844,6 +857,8 @@ flowchart LR
 | `username` | Short Text(50) | 是 | 唯一索引、8 位数字 | 技术字段名，保存一卡通号并用于登录。 |
 | `passwordHash` | Short Text(255) | 是 | 带盐慢哈希 | 校验正式密码。 |
 | `passwordSalt` | Short Text(255) | 是 | 每个账号独立 | 防止相同密码产生相同哈希。 |
+| `passwordIterations` | Long Integer | 是 | `120000` | PBKDF2 迭代次数，允许以后逐账号升级。 |
+| `passwordProof` | Short Text(64) | 兼容列 | 64 个 `0` | 旧库迁移使用；已升级账号不保存可登录的 proof。 |
 | `displayName` | Short Text(100) | 是 | 非空 | 写入会话供界面显示。 |
 | `roleCode` | Short Text(20) | 是 | `USER` / `SUPER_ADMIN` | 写入会话角色。 |
 | `status` | Short Text(20) | 是 | 默认 `ACTIVE` | 非启用账号拒绝登录。 |
@@ -915,7 +930,7 @@ flowchart LR
 | 当前限制 | 后续改进 |
 |---|---|
 | Socket 未使用 TLS | 在真实网络部署前增加 TLS，防止凭据 proof 和 token 被窃听。 |
-| 开发期 proof 为确定性 SHA-256 | 数据库改用 PBKDF2 等带盐慢哈希；网络认证方案需结合 TLS 重新设计。 |
+| 开发期网络 proof 为确定性 SHA-256 | 数据库已经使用带独立盐值的 PBKDF2；网络认证方案仍需结合 TLS 重新设计。 |
 | 内存中过期 token 可能累积 | 查询时删除当前过期 token，创建会话时批量清理；若并发规模扩大再增加定时清理任务。 |
 | 登录失败没有限速与锁定 | 增加失败计数、短时限流和可审计的锁定/解锁流程。 |
 | 会话只存在内存 | 明确服务器重启后要求重新登录；需要持久化时另行评审。 |

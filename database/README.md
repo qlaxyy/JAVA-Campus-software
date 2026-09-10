@@ -31,7 +31,7 @@
 | 用户管理 | [user.md](schema/user.md) | 账号、全局角色、管理范围、公共教师基础档案 | 无 |
 | 学生学籍 | [student.md](schema/student.md) | 学生、院系、专业、班级 | `userId` |
 | 选课系统 | [course.md](schema/course.md) | 课程、开课、选课、成绩 | `userId`、`studentId` |
-| 图书馆 | [library.md](schema/library.md) | 图书、馆藏、借阅记录 | `userId`、`studentId` |
+| 图书馆 | [library.md](schema/library.md) | 书目、实体单册、借阅记录、预约 | `userId` |
 | 商店 | [shop.md](schema/shop.md) | 商品、库存、购物车、订单 | `userId` |
 | 医院 | [hospital.md](schema/hospital.md) | 医生申请、医生档案、科室、排班、号源、预约 | `userId`、`studentId` |
 

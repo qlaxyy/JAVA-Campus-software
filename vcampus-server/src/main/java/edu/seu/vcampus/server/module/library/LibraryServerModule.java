@@ -48,15 +48,18 @@ public final class LibraryServerModule implements ServerModule {
     /** Creates the production library module backed by the shared Access database. */
     public static LibraryServerModule createAccessBacked(Path databasePath) {
         AccessLibraryStore store = new AccessLibraryStore(new AccessDatabase(databasePath));
+        Clock clock = Clock.systemDefaultZone();
         BookRepository books = new AccessBookRepository(store);
         BorrowRecordRepository records = new AccessBorrowRecordRepository(store);
         BookCategoryRepository categories = new AccessBookCategoryRepository(store);
         BookCopyRepository copies = new AccessBookCopyRepository(store);
         ReservationRepository reservations = new AccessReservationRepository(store);
+        AccessLibraryDemonstrationData.seedIfEligible(
+                store, copies, records, reservations, clock);
         LibraryService service = new LibraryService(
                 books,
                 records,
-                Clock.systemDefaultZone(),
+                clock,
                 () -> UUID.randomUUID().toString(),
                 categories,
                 copies,

@@ -24,11 +24,16 @@ final class AccessLibraryStore implements LibraryTransactionManager {
 
     private final AccessDatabase database;
     private final ThreadLocal<Connection> transactionConnection = new ThreadLocal<>();
+    private final boolean newlyCreatedLibrarySchema;
 
     AccessLibraryStore(AccessDatabase database) {
         this.database = Objects.requireNonNull(database, "database must not be null");
-        initializeSchema();
+        newlyCreatedLibrarySchema = initializeSchema();
         seedDemonstrationCatalog();
+    }
+
+    boolean isNewlyCreatedLibrarySchema() {
+        return newlyCreatedLibrarySchema;
     }
 
     @Override
@@ -85,14 +90,21 @@ final class AccessLibraryStore implements LibraryTransactionManager {
         }
     }
 
-    private void initializeSchema() {
+    private boolean initializeSchema() {
         try (Connection connection = database.openConnection()) {
-            if (!tableExists(connection, CATEGORY_TABLE)) {
+            boolean categoryExists = tableExists(connection, CATEGORY_TABLE);
+            boolean bookExists = tableExists(connection, BOOK_TABLE);
+            boolean copyExists = tableExists(connection, COPY_TABLE);
+            boolean borrowExists = tableExists(connection, BORROW_TABLE);
+            boolean reservationExists = tableExists(connection, RESERVATION_TABLE);
+            boolean newlyCreated = !(categoryExists || bookExists || copyExists
+                    || borrowExists || reservationExists);
+            if (!categoryExists) {
                 executeSql(connection, "CREATE TABLE tblBookCategory ("
                         + "categoryId TEXT(20) PRIMARY KEY, "
                         + "categoryName TEXT(50) NOT NULL)");
             }
-            if (!tableExists(connection, BOOK_TABLE)) {
+            if (!bookExists) {
                 executeSql(connection, "CREATE TABLE tblBook ("
                         + "bookId TEXT(20) PRIMARY KEY, "
                         + "isbn TEXT(20) NOT NULL, "
@@ -114,7 +126,7 @@ final class AccessLibraryStore implements LibraryTransactionManager {
                 executeSql(connection,
                         "CREATE INDEX ix_tblBook_category ON tblBook (categoryId)");
             }
-            if (!tableExists(connection, COPY_TABLE)) {
+            if (!copyExists) {
                 executeSql(connection, "CREATE TABLE tblBookCopy ("
                         + "copyId TEXT(36) PRIMARY KEY, "
                         + "barcode TEXT(50) NOT NULL, "
@@ -129,7 +141,7 @@ final class AccessLibraryStore implements LibraryTransactionManager {
                 executeSql(connection, "CREATE INDEX ix_tblBookCopy_book_status "
                         + "ON tblBookCopy (bookId, [status])");
             }
-            if (!tableExists(connection, BORROW_TABLE)) {
+            if (!borrowExists) {
                 executeSql(connection, "CREATE TABLE tblBorrowRecord ("
                         + "recordId TEXT(36) PRIMARY KEY, "
                         + "userId TEXT(36) NOT NULL, "
@@ -145,7 +157,7 @@ final class AccessLibraryStore implements LibraryTransactionManager {
                 executeSql(connection, "CREATE INDEX ix_tblBorrowRecord_copy_status "
                         + "ON tblBorrowRecord (copyId, [status])");
             }
-            if (!tableExists(connection, RESERVATION_TABLE)) {
+            if (!reservationExists) {
                 executeSql(connection, "CREATE TABLE tblReservation ("
                         + "reservationId TEXT(36) PRIMARY KEY, "
                         + "userId TEXT(36) NOT NULL, "
@@ -169,6 +181,7 @@ final class AccessLibraryStore implements LibraryTransactionManager {
                 executeSql(connection, "CREATE INDEX ix_tblReservation_copy_status "
                         + "ON tblReservation (assignedCopyId, [status])");
             }
+            return newlyCreated;
         } catch (SQLException exception) {
             throw failure("Cannot initialize Access library schema.", exception);
         }

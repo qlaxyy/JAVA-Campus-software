@@ -100,7 +100,7 @@
 | 用户 | 统一登录、会话、退出、账号与管理范围维护 | 登录、账号管理、CSV 批量导入和 Access 持久化已纳入 |
 | 学籍 | 学生资料查询与学籍管理 | 待负责人材料汇总 |
 | 选课 | 选课批次、课程查询、选课、退课与冲突校验 | 待负责人材料汇总 |
-| 图书馆 | 图书检索、借阅、归还与馆藏管理 | 待负责人材料汇总 |
+| 图书馆 | 线上检索预约、模拟借还、个人记录与馆藏管理 | [图书馆交付说明](../modules/library-borrow-return.md) |
 | 商店 | 商品、购物车、订单与库存管理 | 待负责人材料汇总 |
 | 医院 | 患者、医生、管理员模式，号源与预约管理 | 待负责人材料汇总 |
 
@@ -637,17 +637,18 @@ classDiagram
 
 负责人：杨凯涵。后续按 4.3 节结构补充选课批次、课程查询、选课退课、冲突与容量规则、接口、数据库、图表和测试。
 
-## 8. 图书馆子系统设计说明（V2 阶段 4 已实现）
+## 8. 图书馆子系统设计说明（预约与入口调整阶段 4 已实现）
 
-负责人：吴昊哲。当前已完成书目与实体单册分离、按馆藏地汇总、条码借还、个人记录、
-书目与单册维护、全馆借阅查询、Access Repository 和借还事务。
+负责人：吴昊哲。当前已完成书目与实体单册分离、按馆藏地汇总、线上预约、个人图书馆、
+模拟自助条码借还、书目与单册维护、全馆借阅查询、Access Repository 和跨 Repository 事务。
 
 当前实现及评审入口：[借阅归还交付说明](../modules/library-borrow-return.md)、
 [图书管理员维护设计与测试](../modules/library-admin-maintenance.md)。
 图书管理员是具有 `AdminScope.LIBRARY` 的 `Role.USER`，超级管理员也具备此能力；
 服务器从 token 取得会话，通过 `SessionInfo.canAdminister(ModuleNames.LIBRARY)` 判断。
-分类接口使用 `categoryId/categoryName`。正式启动时，书目、实体单册、分类和借阅记录均保存在
-`vCampus.accdb`；借书与归还的多个 Repository 通过 `AccessLibraryStore` 复用同一个 JDBC Connection。
+分类接口使用 `categoryId/categoryName`。正式启动时，书目、实体单册、分类、借阅记录和预约均保存在
+`vCampus.accdb`；预约分配、借书、归还等多表操作通过 `AccessLibraryStore` 复用同一个 JDBC Connection。
+仅在首次创建整套图书馆表且业务表为空时初始化一致演示状态，已有数据库不会补种或重置。
 
 ## 9. 商店子系统设计说明（已实现首条完整业务链路，其余待负责人材料汇总）
 
@@ -794,7 +795,7 @@ Swing 组件必须在事件分派线程中创建和更新。登录网络请求�
 - 会话：`ConcurrentHashMap<String, StoredSession>`，内部记录 `SessionInfo`、创建时间和最后访问时间；
 - 测试用内存账号：`ConcurrentHashMap<String, UserAccount>`；
 - 正式启动账号：Access DAO，每次操作使用独立 JDBC 连接，写入使用事务；
-- 正式启动图书馆：普通查询按次打开连接；借书和归还由事务上下文向多个 Repository 提供同一连接；
+- 正式启动图书馆：普通查询按次打开连接；预约、借书和归还由事务上下文向多个 Repository 提供同一连接；
 - Action 注册表：`ConcurrentHashMap<String, RequestHandler>`。
 
 `SessionInfo` 和 `UserAccount` 采用不可变对象设计，减少并发修改风险。
@@ -811,9 +812,9 @@ Swing 组件必须在事件分派线程中创建和更新。登录网络请求�
 - 账号资料和 `AdminScope` 修改会跨服务器重启保留；
 - `InMemoryAuthenticationService` 在内存中保存会话；
 - `AccessHospitalRepository` 保存医生新增申请和已审核医生档案；
-- `AccessLibraryStore` 创建图书馆四张表并协调跨 Repository 事务；
-- `AccessBookRepository`、`AccessBookCopyRepository`、`AccessBorrowRecordRepository` 和
-  `AccessBookCategoryRepository` 保存图书馆业务数据；
+- `AccessLibraryStore` 创建图书馆五张表并协调跨 Repository 事务；
+- `AccessBookRepository`、`AccessBookCopyRepository`、`AccessBorrowRecordRepository`、
+  `AccessBookCategoryRepository` 和 `AccessReservationRepository` 保存图书馆业务数据；
 - 服务器重启后全部 token 会失效，用户需要重新登录。
 
 自动化测试仍使用 `InMemoryUserRepository`，防止测试修改正式数据库。
@@ -929,8 +930,8 @@ flowchart LR
 | `AuthenticationIntegrationTest`、`InMemoryAuthenticationServiceTest` | 正确登录、会话查询、退出、错误密码、子系统管理员范围，以及空闲/绝对过期。 |
 | `LoginPanelTest` | 登录界面控件、开发测试账号展示、账号和密码非空校验。 |
 | `DoctorOnboardingIntegrationTest` | 医院管理员分类提交、越权拦截、已有账号精确绑定、外来医生账号自动生成、账号碰撞防护，以及 Access 重启后医生资格保留。 |
-| `AccessLibraryRepositoryTest` | 图书馆表和索引初始化、Repository 映射、唯一约束、借还事务回滚及 Repository 重建后的状态恢复。 |
-| `LibraryPersistenceIntegrationTest` | 真实 Socket 下借书、两次服务器重启、归还、管理员上架及库存汇总的 Access 持久化。 |
+| `AccessLibraryRepositoryTest` | 图书馆表和索引初始化、Repository 映射、唯一约束、借还/预约事务回滚，以及新库演示种子不变量。 |
+| `LibraryPersistenceIntegrationTest` | 真实 Socket 下演示借阅与预约跨重启保留、已有库不重复补种，以及借书、归还、管理员上架。 |
 | `UserAdministrationIntegrationTest`、`AccessUserAuditRepositoryTest` | 超级管理员账号维护、越权拦截、成功/失败审计记录及 Access 重启后记录保留。 |
 
 ### 16.2 登录模块验收条件

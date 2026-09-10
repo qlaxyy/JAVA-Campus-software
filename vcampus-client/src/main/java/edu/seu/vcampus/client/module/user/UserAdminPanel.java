@@ -54,6 +54,7 @@ public final class UserAdminPanel extends JPanel {
     private final UserAccountTableModel tableModel = new UserAccountTableModel();
     private final JTable table = new JTable(tableModel);
     private final JLabel statusLabel = new JLabel("进入页面后加载账号列表");
+    private final JLabel summaryLabel = new JLabel("账号数据尚未加载");
     private final JButton addButton = new JButton("新增账号");
     private final JButton importButton = new JButton("批量导入");
     private final JButton editButton = new JButton("编辑账号");
@@ -66,26 +67,36 @@ public final class UserAdminPanel extends JPanel {
 
     public UserAdminPanel(ClientContext context) {
         this.context = context;
-        setLayout(new BorderLayout(12, 12));
-        setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+        setLayout(new BorderLayout(0, 14));
+        setBorder(BorderFactory.createEmptyBorder(18, 22, 18, 22));
+        setBackground(UserUiTheme.PAGE);
 
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setAutoCreateRowSorter(true);
         table.getSelectionModel().addListSelectionListener(event -> updateButtons());
+        table.getColumnModel().getColumn(0).setPreferredWidth(125);
+        table.getColumnModel().getColumn(1).setPreferredWidth(180);
+        table.getColumnModel().getColumn(2).setPreferredWidth(80);
+        table.getColumnModel().getColumn(3).setPreferredWidth(125);
+        table.getColumnModel().getColumn(4).setPreferredWidth(170);
 
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        actions.add(addButton);
-        actions.add(importButton);
-        actions.add(editButton);
-        actions.add(statusButton);
-        actions.add(resetButton);
-        actions.add(teacherManagementButton);
-        actions.add(doctorReviewButton);
-        actions.add(auditButton);
+        JPanel top = new JPanel(new BorderLayout(0, 12));
+        top.setOpaque(false);
+        top.add(UserUiTheme.createSectionHeader("账号名单", summaryLabel), BorderLayout.NORTH);
+        top.add(createActionBar(), BorderLayout.SOUTH);
 
-        add(actions, BorderLayout.NORTH);
-        add(new JScrollPane(table), BorderLayout.CENTER);
-        add(statusLabel, BorderLayout.SOUTH);
+        add(top, BorderLayout.NORTH);
+        add(UserUiTheme.createTableScrollPane(table), BorderLayout.CENTER);
+        add(UserUiTheme.createStatusBar(statusLabel), BorderLayout.SOUTH);
+
+        UserUiTheme.stylePrimaryButton(addButton);
+        UserUiTheme.styleSecondaryButton(importButton);
+        UserUiTheme.styleSecondaryButton(editButton);
+        UserUiTheme.styleDangerButton(statusButton);
+        UserUiTheme.styleDangerButton(resetButton);
+        UserUiTheme.styleSecondaryButton(teacherManagementButton);
+        UserUiTheme.styleSecondaryButton(doctorReviewButton);
+        UserUiTheme.styleSecondaryButton(auditButton);
 
         addButton.addActionListener(event -> createAccount());
         importButton.addActionListener(event -> importAccounts());
@@ -109,16 +120,47 @@ public final class UserAdminPanel extends JPanel {
         });
     }
 
+    private JPanel createActionBar() {
+        JPanel actions = new JPanel(new BorderLayout(18, 0));
+        actions.setOpaque(false);
+
+        JPanel accountActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        accountActions.setOpaque(false);
+        accountActions.add(addButton);
+        accountActions.add(importButton);
+        accountActions.add(editButton);
+        accountActions.add(statusButton);
+        accountActions.add(resetButton);
+
+        JPanel relatedActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        relatedActions.setOpaque(false);
+        relatedActions.add(teacherManagementButton);
+        relatedActions.add(doctorReviewButton);
+        relatedActions.add(auditButton);
+
+        actions.add(accountActions, BorderLayout.WEST);
+        actions.add(relatedActions, BorderLayout.EAST);
+        return actions;
+    }
+
     private UserAccountView selectedAccount() {
         int viewRow = table.getSelectedRow();
         return viewRow < 0 ? null : tableModel.accountAt(table.convertRowIndexToModel(viewRow));
     }
 
     private void updateButtons() {
-        boolean selected = selectedAccount() != null;
+        UserAccountView selectedAccount = selectedAccount();
+        boolean selected = selectedAccount != null;
         editButton.setEnabled(selected);
         statusButton.setEnabled(selected);
         resetButton.setEnabled(selected);
+        statusButton.setText(selected && !selectedAccount.isEnabled()
+                ? "启用账号" : "禁用账号");
+        if (selected && !selectedAccount.isEnabled()) {
+            UserUiTheme.styleSecondaryButton(statusButton);
+        } else {
+            UserUiTheme.styleDangerButton(statusButton);
+        }
     }
 
     private void refreshAccounts() {
@@ -129,6 +171,11 @@ public final class UserAdminPanel extends JPanel {
                             && response.getData() instanceof UserAccountListResponse data) {
                         tableModel.setAccounts(data.getAccounts());
                         table.clearSelection();
+                        long enabledCount = data.getAccounts().stream()
+                                .filter(UserAccountView::isEnabled)
+                                .count();
+                        summaryLabel.setText("共 " + data.getAccounts().size()
+                                + " 个账号 · " + enabledCount + " 个启用");
                         statusLabel.setText("已加载 " + data.getAccounts().size() + " 个账号");
                     } else {
                         showFailure(response);
@@ -345,7 +392,7 @@ public final class UserAdminPanel extends JPanel {
         };
         JTable auditTable = new JTable(model);
         auditTable.setAutoCreateRowSorter(true);
-        JScrollPane scrollPane = new JScrollPane(auditTable);
+        JScrollPane scrollPane = UserUiTheme.createTableScrollPane(auditTable);
         scrollPane.setPreferredSize(new java.awt.Dimension(920, 420));
         JOptionPane.showMessageDialog(
                 this,

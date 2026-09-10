@@ -103,6 +103,27 @@ class InMemoryAuthenticationServiceTest {
     }
 
     @Test
+    void successfulLoginUpgradesLegacyPasswordProof() {
+        InMemoryUserRepository repository = new InMemoryUserRepository();
+        String proof = PasswordProof.create("20260123", "123456".toCharArray());
+        repository.save(UserAccount.fromPersistence(
+                "U-LEGACY-LOGIN", "20260123", "旧账号",
+                edu.seu.vcampus.common.user.Role.USER, java.util.Set.of(),
+                proof, null, null, 0, true));
+        InMemoryAuthenticationService authentication =
+                new InMemoryAuthenticationService(repository);
+
+        assertTrue(authentication.login(new LoginRequest("20260123", proof)).isPresent());
+
+        UserAccount upgraded = repository.findById("U-LEGACY-LOGIN").orElseThrow();
+        assertFalse(upgraded.passwordNeedsUpgrade());
+        assertEquals("0".repeat(64), upgraded.persistedLegacyPasswordProof());
+        assertTrue(upgraded.passwordHash() != null && !upgraded.passwordHash().isBlank());
+        assertTrue(upgraded.passwordSalt() != null && !upgraded.passwordSalt().isBlank());
+        assertEquals(PasswordCredential.CURRENT_ITERATIONS, upgraded.passwordIterations());
+    }
+
+    @Test
     void superAdministratorMaintainsTeacherQualificationWithoutChangingRole() {
         InMemoryAuthenticationService authentication = new InMemoryAuthenticationService();
 

@@ -12,6 +12,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -121,6 +127,36 @@ class InMemoryAuthenticationServiceTest {
         assertTrue(upgraded.passwordHash() != null && !upgraded.passwordHash().isBlank());
         assertTrue(upgraded.passwordSalt() != null && !upgraded.passwordSalt().isBlank());
         assertEquals(PasswordCredential.CURRENT_ITERATIONS, upgraded.passwordIterations());
+    }
+
+    @Test
+    void concurrentAccountProvisioningGeneratesDistinctCampusCardNumbers()
+            throws Exception {
+        InMemoryAuthenticationService authentication =
+                new InMemoryAuthenticationService();
+        int contenders = 12;
+        CountDownLatch ready = new CountDownLatch(contenders);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(contenders)) {
+            java.util.List<Future<String>> futures = new java.util.ArrayList<>();
+            for (int index = 0; index < contenders; index++) {
+                int accountIndex = index;
+                futures.add(executor.submit(() -> {
+                    ready.countDown();
+                    start.await(5, TimeUnit.SECONDS);
+                    return authentication.createGeneratedRegularAccount(
+                            "并发账号" + accountIndex).username();
+                }));
+            }
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+
+            Set<String> generated = new HashSet<>();
+            for (Future<String> future : futures) {
+                generated.add(future.get(20, TimeUnit.SECONDS));
+            }
+            assertEquals(contenders, generated.size());
+        }
     }
 
     @Test

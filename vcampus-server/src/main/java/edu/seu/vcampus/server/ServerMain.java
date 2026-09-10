@@ -2,12 +2,15 @@ package edu.seu.vcampus.server;
 
 import edu.seu.vcampus.server.infrastructure.CampusServer;
 import edu.seu.vcampus.server.module.ServerModules;
+import edu.seu.vcampus.server.module.user.LocalSuperAdminRecovery;
 
+import java.io.Console;
 import java.net.Inet4Address;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.List;
@@ -31,6 +34,10 @@ public final class ServerMain {
      * @throws Exception when the server cannot start or is interrupted
      */
     public static void main(String[] args) throws Exception {
+        if (args.length > 0 && "--reset-super-admin-password".equals(args[0])) {
+            resetSuperAdministratorPassword(args);
+            return;
+        }
         int port = args.length > 0 ? Integer.parseInt(args[0]) : DEFAULT_PORT;
         Path databasePath = args.length > 1 ? Path.of(args[1]) : DEFAULT_DATABASE_PATH;
         CampusServer server = new CampusServer(
@@ -44,6 +51,41 @@ public final class ServerMain {
         System.out.printf("Persistent server data is stored in %s.%n",
                 databasePath.toAbsolutePath().normalize());
         server.awaitTermination();
+    }
+
+    private static void resetSuperAdministratorPassword(String[] args) {
+        if (args.length > 3) {
+            throw new IllegalArgumentException(
+                    "Usage: --reset-super-admin-password [campusCardNumber] [databasePath]");
+        }
+        String campusCardNumber = args.length > 1 ? args[1] : "20260000";
+        Path databasePath = args.length > 2 ? Path.of(args[2]) : DEFAULT_DATABASE_PATH;
+        Console console = System.console();
+        if (console == null) {
+            throw new IllegalStateException(
+                    "无法安全读取密码。请停止服务器后，在 PowerShell 或 CMD 中执行该命令。");
+        }
+
+        console.printf("即将重置超级管理员 %s 的密码。%n", campusCardNumber);
+        console.printf("数据库：%s%n", databasePath.toAbsolutePath().normalize());
+        char[] password = console.readPassword("请输入新密码（至少 6 个字符）：");
+        char[] confirmation = console.readPassword("请再次输入新密码：");
+        try {
+            if (password == null || confirmation == null
+                    || !Arrays.equals(password, confirmation)) {
+                throw new IllegalArgumentException("两次输入的密码不一致。");
+            }
+            LocalSuperAdminRecovery.resetPassword(
+                    databasePath, campusCardNumber, password);
+            console.printf("密码重置成功。请重新启动服务器并使用新密码登录。%n");
+        } finally {
+            if (password != null) {
+                Arrays.fill(password, '\0');
+            }
+            if (confirmation != null) {
+                Arrays.fill(confirmation, '\0');
+            }
+        }
     }
 
     private static void printClientConnectionAddresses(int port) {

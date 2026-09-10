@@ -248,6 +248,8 @@ flowchart LR
 
 登录行为由 `LoginPanel` 实现，布局与样式集中在 `LoginPanelDesign`，避免视觉代码和网络登录逻辑混在一起。界面采用与主界面一致的青绿色主题，左侧仅保留系统英文标识，右侧提供登录表单和开发期测试账号。
 
+超级管理员的账号名单与教师名单统一使用 `UserUiTheme`：主操作、普通操作和危险操作采用不同视觉层级，表格以加高行距、交替底色和明显选中态提高可读性，启用、禁用及操作结果使用状态色区分。账号名单支持按一卡通号或姓名实时搜索，并可组合筛选启停状态与子系统管理范围；这些筛选只处理客户端已经取得的账号列表，不新增服务器查询接口。编辑、启停、重置密码、修改教师和取消教师资格等按钮必须先选中一条记录才可使用；写操作成功后页面自动重新加载，因此不额外设置手动刷新按钮。
+
 主要控件如下：
 
 | 控件 | 组件类型 | 名称 | 作用 |
@@ -969,6 +971,7 @@ flowchart LR
 |---|---|
 | 登录行为 | `vcampus-client/src/main/java/edu/seu/vcampus/client/module/user/LoginPanel.java` |
 | 登录界面布局与样式 | `vcampus-client/src/main/java/edu/seu/vcampus/client/module/user/LoginPanelDesign.java` |
+| 用户与教师管理样式 | `vcampus-client/src/main/java/edu/seu/vcampus/client/module/user/UserUiTheme.java` |
 | 登录后主界面与模块导航 | `vcampus-client/src/main/java/edu/seu/vcampus/client/view/MainFrame.java` |
 | 客户端登录与会话入口 | `vcampus-client/src/main/java/edu/seu/vcampus/client/application/ClientContext.java` |
 | 客户端会话保存 | `vcampus-client/src/main/java/edu/seu/vcampus/client/application/ClientSession.java` |

@@ -16,7 +16,6 @@ import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
@@ -25,7 +24,10 @@ import javax.swing.SwingUtilities;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
-import java.awt.GridLayout;
+import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.awt.Window;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -46,6 +48,7 @@ final class TeacherManagementDialog extends JDialog {
     private final JButton editButton = new JButton("修改教师信息");
     private final JButton cancelButton = new JButton("取消教师资格");
     private final JLabel statusLabel = new JLabel("正在加载教师名单……");
+    private final JLabel summaryLabel = new JLabel("教师数据尚未加载");
     private List<TeacherProfileView> allProfiles = List.of();
     private boolean busy;
 
@@ -57,25 +60,42 @@ final class TeacherManagementDialog extends JDialog {
         this.context = context;
         this.accounts = List.copyOf(accounts);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
-        setSize(900, 540);
+        setSize(980, 600);
+        setMinimumSize(new java.awt.Dimension(820, 500));
         setLocationRelativeTo(owner);
 
-        JPanel content = new JPanel(new BorderLayout(12, 12));
-        content.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+        JPanel content = new JPanel(new BorderLayout(0, 14));
+        content.setBorder(BorderFactory.createEmptyBorder(18, 22, 18, 22));
+        content.setBackground(UserUiTheme.PAGE);
         setContentPane(content);
 
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel top = new JPanel(new BorderLayout(0, 12));
+        top.setOpaque(false);
+        top.add(UserUiTheme.createSectionHeader("教师名单", summaryLabel), BorderLayout.NORTH);
+
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        toolbar.setOpaque(false);
         toolbar.add(importButton);
         toolbar.add(addButton);
         toolbar.add(editButton);
         toolbar.add(cancelButton);
-        content.add(toolbar, BorderLayout.NORTH);
+        top.add(toolbar, BorderLayout.SOUTH);
+        content.add(top, BorderLayout.NORTH);
 
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setAutoCreateRowSorter(true);
         table.getSelectionModel().addListSelectionListener(event -> updateButtons());
-        content.add(new JScrollPane(table), BorderLayout.CENTER);
-        content.add(statusLabel, BorderLayout.SOUTH);
+        table.getColumnModel().getColumn(0).setPreferredWidth(130);
+        table.getColumnModel().getColumn(1).setPreferredWidth(180);
+        table.getColumnModel().getColumn(2).setPreferredWidth(240);
+        table.getColumnModel().getColumn(3).setPreferredWidth(180);
+        content.add(UserUiTheme.createTableScrollPane(table), BorderLayout.CENTER);
+        content.add(UserUiTheme.createStatusBar(statusLabel), BorderLayout.SOUTH);
+
+        UserUiTheme.stylePrimaryButton(addButton);
+        UserUiTheme.styleSecondaryButton(importButton);
+        UserUiTheme.styleSecondaryButton(editButton);
+        UserUiTheme.styleDangerButton(cancelButton);
 
         importButton.setToolTipText("导入 UTF-8 CSV：campusCardNumber,department,title");
         importButton.addActionListener(event -> importTeachers());
@@ -110,6 +130,7 @@ final class TeacherManagementDialog extends JDialog {
                         long activeCount = allProfiles.stream()
                                 .filter(TeacherProfileView::isActive)
                                 .count();
+                        summaryLabel.setText("共 " + activeCount + " 位有效教师");
                         statusLabel.setText("共 " + activeCount + " 位有效教师");
                     } else {
                         showFailure(response);
@@ -174,13 +195,8 @@ final class TeacherManagementDialog extends JDialog {
             String existingTitle) {
         JTextField department = new JTextField(existingDepartment, 24);
         JTextField title = new JTextField(existingTitle, 24);
-        JPanel form = new JPanel(new GridLayout(0, 1, 4, 4));
-        form.add(new JLabel("一卡通号：" + campusCardNumber));
-        form.add(new JLabel("姓名：" + displayName));
-        form.add(new JLabel("院系"));
-        form.add(department);
-        form.add(new JLabel("职称"));
-        form.add(title);
+        JPanel form = createProfileForm(
+                campusCardNumber, displayName, department, title);
         if (JOptionPane.showConfirmDialog(
                 this,
                 form,
@@ -196,6 +212,50 @@ final class TeacherManagementDialog extends JDialog {
         } catch (IllegalArgumentException exception) {
             showValidationError("院系和职称不能为空。");
         }
+    }
+
+    private static JPanel createProfileForm(
+            String campusCardNumber,
+            String displayName,
+            JTextField department,
+            JTextField title) {
+        JPanel form = new JPanel(new GridBagLayout());
+        form.setBorder(BorderFactory.createEmptyBorder(8, 8, 4, 8));
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.gridx = 0;
+        constraints.gridwidth = 2;
+        constraints.weightx = 1.0;
+        constraints.fill = GridBagConstraints.HORIZONTAL;
+        constraints.anchor = GridBagConstraints.WEST;
+        constraints.insets = new Insets(0, 0, 14, 0);
+
+        JLabel account = new JLabel(campusCardNumber + "  ·  " + displayName);
+        account.setForeground(UserUiTheme.PRIMARY_DARK);
+        account.setFont(account.getFont().deriveFont(Font.BOLD, 15F));
+        form.add(account, constraints);
+
+        constraints.gridy = 1;
+        constraints.gridwidth = 1;
+        constraints.weightx = 0.0;
+        constraints.insets = new Insets(0, 0, 10, 12);
+        form.add(new JLabel("院系"), constraints);
+        constraints.gridx = 1;
+        constraints.weightx = 1.0;
+        constraints.insets = new Insets(0, 0, 10, 0);
+        department.setPreferredSize(new java.awt.Dimension(300, 34));
+        form.add(department, constraints);
+
+        constraints.gridx = 0;
+        constraints.gridy = 2;
+        constraints.weightx = 0.0;
+        constraints.insets = new Insets(0, 0, 0, 12);
+        form.add(new JLabel("职称"), constraints);
+        constraints.gridx = 1;
+        constraints.weightx = 1.0;
+        constraints.insets = new Insets(0, 0, 0, 0);
+        title.setPreferredSize(new java.awt.Dimension(300, 34));
+        form.add(title, constraints);
+        return form;
     }
 
     private void cancelTeacher() {

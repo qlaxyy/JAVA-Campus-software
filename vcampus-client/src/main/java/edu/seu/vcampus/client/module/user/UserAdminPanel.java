@@ -23,17 +23,23 @@ import edu.seu.vcampus.common.hospital.ReviewDoctorApplicationRequest;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
+import javax.swing.RowFilter;
 import javax.swing.SwingWorker;
 import javax.swing.SwingUtilities;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.event.HierarchyEvent;
@@ -44,6 +50,8 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
@@ -53,8 +61,18 @@ public final class UserAdminPanel extends JPanel {
     private final ClientContext context;
     private final UserAccountTableModel tableModel = new UserAccountTableModel();
     private final JTable table = new JTable(tableModel);
+    private final TableRowSorter<UserAccountTableModel> tableSorter =
+            new TableRowSorter<>(tableModel);
     private final JLabel statusLabel = new JLabel("进入页面后加载账号列表");
     private final JLabel summaryLabel = new JLabel("账号数据尚未加载");
+    private final JTextField searchField = new JTextField();
+    private final JComboBox<String> statusFilter = new JComboBox<>(new String[]{
+        "全部状态", "启用", "禁用"
+    });
+    private final JComboBox<String> scopeFilter = new JComboBox<>(new String[]{
+        "全部管理范围", "无管理权", "超级管理员", "学籍", "选课", "图书馆", "商店", "医院"
+    });
+    private final JButton clearFilterButton = new JButton("清除筛选");
     private final JButton addButton = new JButton("新增账号");
     private final JButton importButton = new JButton("批量导入");
     private final JButton editButton = new JButton("编辑账号");
@@ -72,7 +90,7 @@ public final class UserAdminPanel extends JPanel {
         setBackground(UserUiTheme.PAGE);
 
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        table.setAutoCreateRowSorter(true);
+        table.setRowSorter(tableSorter);
         table.getSelectionModel().addListSelectionListener(event -> updateButtons());
         table.getColumnModel().getColumn(0).setPreferredWidth(125);
         table.getColumnModel().getColumn(1).setPreferredWidth(180);
@@ -83,7 +101,11 @@ public final class UserAdminPanel extends JPanel {
         JPanel top = new JPanel(new BorderLayout(0, 12));
         top.setOpaque(false);
         top.add(UserUiTheme.createSectionHeader("账号名单", summaryLabel), BorderLayout.NORTH);
-        top.add(createActionBar(), BorderLayout.SOUTH);
+        JPanel controls = new JPanel(new BorderLayout(0, 10));
+        controls.setOpaque(false);
+        controls.add(createActionBar(), BorderLayout.NORTH);
+        controls.add(createFilterBar(), BorderLayout.SOUTH);
+        top.add(controls, BorderLayout.SOUTH);
 
         add(top, BorderLayout.NORTH);
         add(UserUiTheme.createTableScrollPane(table), BorderLayout.CENTER);
@@ -97,6 +119,10 @@ public final class UserAdminPanel extends JPanel {
         UserUiTheme.styleSecondaryButton(teacherManagementButton);
         UserUiTheme.styleSecondaryButton(doctorReviewButton);
         UserUiTheme.styleSecondaryButton(auditButton);
+        UserUiTheme.styleSecondaryButton(clearFilterButton);
+        UserUiTheme.styleSearchField(searchField);
+        UserUiTheme.styleFilterBox(statusFilter, 115);
+        UserUiTheme.styleFilterBox(scopeFilter, 145);
 
         addButton.addActionListener(event -> createAccount());
         importButton.addActionListener(event -> importAccounts());
@@ -108,7 +134,27 @@ public final class UserAdminPanel extends JPanel {
         teacherManagementButton.addActionListener(event -> openTeacherManagement());
         doctorReviewButton.addActionListener(event -> loadDoctorApplications());
         auditButton.addActionListener(event -> loadAuditLogs());
+        searchField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent event) {
+                applyFilters();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent event) {
+                applyFilters();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent event) {
+                applyFilters();
+            }
+        });
+        statusFilter.addActionListener(event -> applyFilters());
+        scopeFilter.addActionListener(event -> applyFilters());
+        clearFilterButton.addActionListener(event -> clearFilters());
         updateButtons();
+        applyFilters();
 
         addHierarchyListener(event -> {
             if (!loaded
@@ -118,6 +164,20 @@ public final class UserAdminPanel extends JPanel {
                 refreshAccounts();
             }
         });
+    }
+
+    private JPanel createFilterBar() {
+        JPanel filters = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        filters.setOpaque(false);
+        JLabel searchLabel = new JLabel("搜索");
+        searchLabel.setForeground(UserUiTheme.TEXT);
+        filters.add(searchLabel);
+        searchField.setToolTipText("输入一卡通号或姓名，列表会实时筛选");
+        filters.add(searchField);
+        filters.add(statusFilter);
+        filters.add(scopeFilter);
+        filters.add(clearFilterButton);
+        return filters;
     }
 
     private JPanel createActionBar() {
@@ -163,6 +223,79 @@ public final class UserAdminPanel extends JPanel {
         }
     }
 
+    private void applyFilters() {
+        String query = searchField.getText();
+        String status = (String) statusFilter.getSelectedItem();
+        String scope = (String) scopeFilter.getSelectedItem();
+        tableSorter.setRowFilter(new RowFilter<>() {
+            @Override
+            public boolean include(
+                    Entry<? extends UserAccountTableModel, ? extends Integer> entry) {
+                return matchesAccount(
+                        tableModel.accountAt(entry.getIdentifier()), query, status, scope);
+            }
+        });
+        table.clearSelection();
+        boolean active = !query.isBlank()
+                || statusFilter.getSelectedIndex() > 0
+                || scopeFilter.getSelectedIndex() > 0;
+        clearFilterButton.setEnabled(active);
+        updateSummary();
+    }
+
+    private void clearFilters() {
+        searchField.setText("");
+        statusFilter.setSelectedIndex(0);
+        scopeFilter.setSelectedIndex(0);
+        applyFilters();
+        searchField.requestFocusInWindow();
+    }
+
+    private void updateSummary() {
+        int total = tableModel.getRowCount();
+        int visible = table.getRowCount();
+        long enabled = tableModel.accounts().stream()
+                .filter(UserAccountView::isEnabled)
+                .count();
+        String prefix = visible == total
+                ? "共 " + total + " 个账号"
+                : "显示 " + visible + " / " + total + " 个账号";
+        summaryLabel.setText(prefix + " · " + enabled + " 个启用");
+    }
+
+    static boolean matchesAccount(
+            UserAccountView account,
+            String query,
+            String status,
+            String scope) {
+        String normalizedQuery = query == null
+                ? "" : query.strip().toLowerCase(Locale.ROOT);
+        boolean textMatches = normalizedQuery.isEmpty()
+                || account.getUsername().toLowerCase(Locale.ROOT).contains(normalizedQuery)
+                || account.getDisplayName().toLowerCase(Locale.ROOT).contains(normalizedQuery);
+        boolean statusMatches = "全部状态".equals(status)
+                || ("启用".equals(status) && account.isEnabled())
+                || ("禁用".equals(status) && !account.isEnabled());
+        boolean scopeMatches = matchesScope(account, scope);
+        return textMatches && statusMatches && scopeMatches;
+    }
+
+    private static boolean matchesScope(UserAccountView account, String scope) {
+        if (scope == null || "全部管理范围".equals(scope)) {
+            return true;
+        }
+        if ("超级管理员".equals(scope)) {
+            return account.getRole() == edu.seu.vcampus.common.user.Role.SUPER_ADMIN;
+        }
+        Set<edu.seu.vcampus.common.user.AdminScope> scopes = account.getAdminScopes();
+        if ("无管理权".equals(scope)) {
+            return account.getRole() != edu.seu.vcampus.common.user.Role.SUPER_ADMIN
+                    && scopes.isEmpty();
+        }
+        return scopes.stream().anyMatch(value ->
+                UserAccountTableModel.scopeName(value).equals(scope));
+    }
+
     private void refreshAccounts() {
         runRequest("正在加载账号……",
                 () -> context.send(UserActions.ADMIN_LIST_ACCOUNTS, null),
@@ -171,11 +304,7 @@ public final class UserAdminPanel extends JPanel {
                             && response.getData() instanceof UserAccountListResponse data) {
                         tableModel.setAccounts(data.getAccounts());
                         table.clearSelection();
-                        long enabledCount = data.getAccounts().stream()
-                                .filter(UserAccountView::isEnabled)
-                                .count();
-                        summaryLabel.setText("共 " + data.getAccounts().size()
-                                + " 个账号 · " + enabledCount + " 个启用");
+                        applyFilters();
                         statusLabel.setText("已加载 " + data.getAccounts().size() + " 个账号");
                     } else {
                         showFailure(response);

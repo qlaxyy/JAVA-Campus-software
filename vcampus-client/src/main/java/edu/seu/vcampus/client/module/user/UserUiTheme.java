@@ -2,10 +2,12 @@ package edu.seu.vcampus.client.module.user;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 import javax.swing.border.LineBorder;
 import javax.swing.plaf.basic.BasicButtonUI;
@@ -97,6 +99,23 @@ final class UserUiTheme {
 
     static void styleDangerButton(JButton button) {
         styleButton(button, SURFACE, DANGER, new Color(239, 170, 170));
+    }
+
+    static void styleSearchField(JTextField field) {
+        field.setPreferredSize(new Dimension(250, 36));
+        field.setBackground(SURFACE);
+        field.setForeground(TEXT);
+        field.setFont(field.getFont().deriveFont(13F));
+        field.setBorder(BorderFactory.createCompoundBorder(
+                new LineBorder(BORDER, 1, true),
+                BorderFactory.createEmptyBorder(7, 10, 7, 10)));
+    }
+
+    static void styleFilterBox(JComboBox<?> comboBox, int width) {
+        comboBox.setPreferredSize(new Dimension(width, 36));
+        comboBox.setBackground(SURFACE);
+        comboBox.setForeground(TEXT);
+        comboBox.setFont(comboBox.getFont().deriveFont(13F));
     }
 
     static void styleButton(

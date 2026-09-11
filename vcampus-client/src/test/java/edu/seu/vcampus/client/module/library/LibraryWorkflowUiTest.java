@@ -49,7 +49,7 @@ class LibraryWorkflowUiTest {
             SelfServicePanel terminal = named(terminalMode, SelfServicePanel.class,
                     "library.selfService");
             JLabel terminalUser = named(terminal, JLabel.class, "library.selfService.user");
-            assertEquals("当前用户：周一", terminalUser.getText());
+            assertEquals("当前用户：吴尚扬", terminalUser.getText());
             assertFalse(terminalUser.getText().contains("U-STUDENT-001"));
             assertFalse(buttons(catalog).stream().anyMatch(button -> button.getText().contains("借阅")));
             assertFalse(buttons(records).stream().anyMatch(button -> button.getText().contains("归还选中")));

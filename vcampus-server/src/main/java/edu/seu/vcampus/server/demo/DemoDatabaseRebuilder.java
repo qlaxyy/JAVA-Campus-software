@@ -106,7 +106,7 @@ public final class DemoDatabaseRebuilder {
             statement.setTimestamp(2, Timestamp.valueOf(LocalDateTime.now()));
             statement.setString(3, FinalDemoRoster.SUPER_ADMIN_USER_ID);
             statement.setString(4, "20260000");
-            statement.setString(5, "吴尚扬");
+            statement.setString(5, "超级管理员");
             statement.setString(6, "DEMO_DATABASE_INITIALIZED");
             statement.setString(7, "database/vCampus.accdb");
             statement.setBoolean(8, true);

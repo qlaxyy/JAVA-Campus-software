@@ -2,6 +2,7 @@ package edu.seu.vcampus.server.module.student;
 
 import edu.seu.vcampus.common.protocol.Request;
 import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.common.protocol.ModuleNames;
 import edu.seu.vcampus.common.student.*;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.infrastructure.ActionRouter;
@@ -67,7 +68,7 @@ public final class StudentServerModule implements ServerModule {
     /**
      * 查询学籍档案
      * 权限规范：
-     * 1. 学籍管理员（canAdminister("student")）可通览全校学生档案
+     * 1. 学籍管理员（canAdminister(ModuleNames.STUDENT)）可通览全校学生档案
      * 2. 学生本人仅可查询自身档案
      * 3. 教师需通过 context.teachers() 验证有效资格
      * 4. 非教务人员（纯医生、商店管理员等）直接拦截
@@ -92,7 +93,7 @@ public final class StudentServerModule implements ServerModule {
         String currentUsername = cleanId(session.getUsername());
         String cleanTargetId = cleanId(targetId);
 
-        boolean isStudentAdmin = session.canAdminister("student");
+        boolean isStudentAdmin = session.canAdminister(ModuleNames.STUDENT);
         boolean isSelf = currentUserId.equalsIgnoreCase(cleanTargetId)
             || currentUsername.equalsIgnoreCase(cleanTargetId);
 
@@ -130,7 +131,7 @@ public final class StudentServerModule implements ServerModule {
         String currentUsername = cleanId(session.getUsername());
         String cleanTargetId = cleanId(req.getStudentId());
 
-        boolean isStudentAdmin = session.canAdminister("student");
+        boolean isStudentAdmin = session.canAdminister(ModuleNames.STUDENT);
         boolean isSelf = currentUserId.equalsIgnoreCase(cleanTargetId)
             || currentUsername.equalsIgnoreCase(cleanTargetId);
 
@@ -167,7 +168,7 @@ public final class StudentServerModule implements ServerModule {
         String currentUsername = cleanId(session.getUsername());
         String cleanTargetId = cleanId(req.getStudentId());
 
-        boolean isStudentAdmin = session.canAdminister("student");
+        boolean isStudentAdmin = session.canAdminister(ModuleNames.STUDENT);
         boolean isSelf = currentUserId.equalsIgnoreCase(cleanTargetId)
             || currentUsername.equalsIgnoreCase(cleanTargetId);
 
@@ -197,7 +198,7 @@ public final class StudentServerModule implements ServerModule {
         }
         SessionInfo session = sessionOpt.get();
 
-        boolean isStudentAdmin = session.canAdminister("student");
+        boolean isStudentAdmin = session.canAdminister(ModuleNames.STUDENT);
         String currentStudentNumber = session.getUsername();
 
         String queryStudentId = null;
@@ -215,7 +216,7 @@ public final class StudentServerModule implements ServerModule {
         boolean isTeacher = context.teachers()
             .findByUserId(session.getUserId())
             .isPresent();
-        if (isTeacher || !session.canAdminister("student")) {
+        if (isTeacher || !session.canAdminister(ModuleNames.STUDENT)) {
             if (queryStudentId != null
                     && !queryStudentId.equalsIgnoreCase(cleanId(currentStudentNumber))) {
                 return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：无权调阅他人学籍异动");
@@ -229,7 +230,7 @@ public final class StudentServerModule implements ServerModule {
 
     /**
      * 审核学籍异动申请
-     * 权限规范：严禁教师及非学籍管理员审核，仅限 canAdminister("student")
+     * 权限规范：严禁教师及非学籍管理员审核，仅限 canAdminister(ModuleNames.STUDENT)
      */
     private Response handleAuditStatusChange(Request request, ServerContext context) {
         Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
@@ -242,7 +243,7 @@ public final class StudentServerModule implements ServerModule {
             return Response.failure(request.getRequestId(), "BAD_REQUEST", "请求参数错误");
         }
 
-        if (!session.canAdminister("student")) {
+        if (!session.canAdminister(ModuleNames.STUDENT)) {
             return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：当前账号不具备学籍管理审核权限");
         }
 

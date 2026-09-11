@@ -57,7 +57,8 @@ final class AccessGeneralCourseRepository
         String sql =
             "SELECT c.courseId, c.courseCode, "
                 + "c.courseName, c.credits, "
-                + "c.courseType, g.generalCategory "
+                + "c.courseType, c.departmentName, "
+                + "g.generalCategory "
                 + "FROM tblCourse AS c "
                 + "INNER JOIN tblGeneralCourse AS g "
                 + "ON c.courseId = g.courseId "
@@ -97,6 +98,8 @@ final class AccessGeneralCourseRepository
                                 "credits"),
                             result.getString(
                                 "courseType"),
+                            result.getString(
+                                "departmentName"),
                             false,
                             findOfferings(
                                 connection,
@@ -408,8 +411,9 @@ final class AccessGeneralCourseRepository
         String courseSql =
             "INSERT INTO tblCourse "
                 + "(courseId, courseCode, courseName, "
-                + "credits, courseType, courseGroup) "
-                + "VALUES (?, ?, ?, ?, ?, ?)";
+                + "credits, courseType, departmentName, "
+                + "courseGroup) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?)";
 
         try (PreparedStatement statement =
                  connection.prepareStatement(
@@ -437,6 +441,10 @@ final class AccessGeneralCourseRepository
 
             statement.setString(
                 6,
+                course.getDepartmentName());
+
+            statement.setString(
+                7,
                 COURSE_GROUP);
 
             statement.executeUpdate();

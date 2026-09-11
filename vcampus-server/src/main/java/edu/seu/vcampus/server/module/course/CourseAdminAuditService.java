@@ -103,12 +103,11 @@ final class CourseAdminAuditService {
     }
 
     /**
-     * 记录强制选课。
+     * 记录教务强制选课。
      */
     synchronized void recordForceSelect(
         String operatorUsername,
         String studentId,
-        long batchId,
         long offeringId,
         String reason) {
 
@@ -116,7 +115,7 @@ final class CourseAdminAuditService {
             operatorUsername,
             studentId,
             CourseAdminOperationType.FORCE_SELECT,
-            batchId,
+            null,
             offeringId,
             null,
             optionalText(
@@ -199,7 +198,6 @@ final class CourseAdminAuditService {
      */
     synchronized void recordUpdateOffering(
         String operatorUsername,
-        long batchId,
         long offeringId,
         int capacity,
         boolean open,
@@ -219,18 +217,16 @@ final class CourseAdminAuditService {
             operatorUsername,
             "-",
             CourseAdminOperationType.UPDATE_OFFERING,
-            batchId,
+            null,
             offeringId,
             null,
             details);
     }
-
     /**
      * 记录课程基本信息修改。
      */
     synchronized void recordUpdateCourse(
         String operatorUsername,
-        long batchId,
         long courseId,
         String courseCode,
         String courseName,
@@ -262,7 +258,7 @@ final class CourseAdminAuditService {
             operatorUsername,
             "-",
             CourseAdminOperationType.UPDATE_COURSE,
-            batchId,
+            null,
             null,
             null,
             details);

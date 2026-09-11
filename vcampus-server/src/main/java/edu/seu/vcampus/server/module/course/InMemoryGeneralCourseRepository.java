@@ -17,11 +17,8 @@ final class InMemoryGeneralCourseRepository
         long batchId) {
 
         return List.of(
-            createNaturalScience(),
-            createHumanities(),
-            createInnovation(),
-            createMentalHealth(),
-            createAesthetic()
+            createNaturalScience()
+
         );
     }
 
@@ -38,7 +35,6 @@ final class InMemoryGeneralCourseRepository
                 15001L,
                 "01",
                 List.of(
-                    "刘老师"
                 ),
                 List.of(
                     new ScheduleInfo(
@@ -67,6 +63,7 @@ final class InMemoryGeneralCourseRepository
                 "宇宙与文明",
                 2.0,
                 "任选",
+                "通识教育中心",
                 false,
                 List.of(
                     offering

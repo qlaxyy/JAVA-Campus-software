@@ -6,32 +6,25 @@ import java.util.Objects;
 
 /**
  * 教务修改教学班设置请求。
+ *
+ * 教学班设置是全局数据，不属于选课批次。
  */
 public final class AdminUpdateOfferingRequest
     implements Serializable {
 
     @Serial
-    private static final long serialVersionUID =
-        1L;
+    private static final long serialVersionUID = 1L;
 
-    private final long batchId;
     private final long offeringId;
     private final int capacity;
     private final boolean open;
     private final String reason;
 
     public AdminUpdateOfferingRequest(
-        long batchId,
         long offeringId,
         int capacity,
         boolean open,
         String reason) {
-
-        if (batchId <= 0) {
-
-            throw new IllegalArgumentException(
-                "batchId must be positive");
-        }
 
         if (offeringId <= 0) {
 
@@ -44,9 +37,6 @@ public final class AdminUpdateOfferingRequest
             throw new IllegalArgumentException(
                 "capacity must not be negative");
         }
-
-        this.batchId =
-            batchId;
 
         this.offeringId =
             offeringId;
@@ -61,11 +51,6 @@ public final class AdminUpdateOfferingRequest
             requireText(
                 reason,
                 "reason");
-    }
-
-    public long getBatchId() {
-
-        return batchId;
     }
 
     public long getOfferingId() {
@@ -96,15 +81,15 @@ public final class AdminUpdateOfferingRequest
             value,
             fieldName + " must not be null");
 
-        String cleaned =
+        String normalized =
             value.trim();
 
-        if (cleaned.isBlank()) {
+        if (normalized.isEmpty()) {
 
             throw new IllegalArgumentException(
                 fieldName + " must not be blank");
         }
 
-        return cleaned;
+        return normalized;
     }
 }

@@ -8,17 +8,22 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 教务端教学班管理业务。
+ * 教务端课程和教学班管理业务。
+ *
+ * 课程及教学班是全局数据，
+ * 不按照选课批次区分。
  */
 final class CourseOfferingAdministrationService {
 
-    private final CourseBatchService
-        batchService;
+    private static final long REPOSITORY_SCOPE =
+        0L;
 
     private final CoursePlanRepository
         planRepository;
+
     private final CourseSettingsRepository
         courseSettingsRepository;
+
     private final CourseSubstitutionRepository
         substitutionRepository;
 
@@ -35,7 +40,6 @@ final class CourseOfferingAdministrationService {
         settingsRepository;
 
     CourseOfferingAdministrationService(
-        CourseBatchService batchService,
         CoursePlanRepository planRepository,
         CourseSubstitutionRepository
             substitutionRepository,
@@ -45,14 +49,9 @@ final class CourseOfferingAdministrationService {
         CourseEnrollmentRepository
             enrollmentRepository,
         CourseOfferingSettingsRepository
-            settingsRepository,CourseSettingsRepository
+            settingsRepository,
+        CourseSettingsRepository
             courseSettingsRepository) {
-        this.courseSettingsRepository =
-            Objects.requireNonNull(
-                courseSettingsRepository);
-        this.batchService =
-            Objects.requireNonNull(
-                batchService);
 
         this.planRepository =
             Objects.requireNonNull(
@@ -77,77 +76,44 @@ final class CourseOfferingAdministrationService {
         this.settingsRepository =
             Objects.requireNonNull(
                 settingsRepository);
+
+        this.courseSettingsRepository =
+            Objects.requireNonNull(
+                courseSettingsRepository);
     }
 
     /**
-     * 查询应用教务设置后的全部课程。
+     * 查询全部课程。
+     */
+    List<CourseInfo> listCourses() {
+
+        return rawCourses()
+            .stream()
+            .map(this::applySettings)
+            .map(this::applyCourseSettings)
+            .toList();
+    }
+
+    /**
+     * 兼容教师端和统计功能现有调用。
+     *
+     * 课程数据不再按照批次区分。
      */
     List<CourseInfo> listCourses(
-        long batchId) {
+        long ignoredBatchId) {
 
-        if (batchService.findBatch(
-            batchId) == null) {
-
-            return List.of();
-        }
-
-        List<CourseInfo> courses =
-            new ArrayList<>();
-
-        courses.addAll(
-            planRepository.findPlanCourses(
-                batchId));
-
-        courses.addAll(
-            substitutionRepository
-                .findSubstituteCourses(
-                    batchId));
-
-        for (PeCourseRecord record
-            : peCourseRepository
-            .findPeCourses(
-                batchId)) {
-
-            courses.add(
-                record.course());
-        }
-
-        for (GeneralCourseRecord record
-            : generalCourseRepository
-            .findGeneralCourses(
-                batchId)) {
-
-            courses.add(
-                record.course());
-        }
-
-        return courses.stream()
-            .map(course ->
-                applyCourseSettings(
-                    batchId,
-                    applySettings(
-                        batchId,
-                        course)))
-            .toList();
+        return listCourses();
     }
 
     /**
      * 教务修改课程基本信息。
      */
     synchronized CourseUpdateResult updateCourse(
-        long batchId,
         long courseId,
         String courseCode,
         String courseName,
         double credits,
         String courseType) {
-
-        if (batchService.findBatch(
-            batchId) == null) {
-
-            return CourseUpdateResult.failure(
-                "选课批次不存在。");
-        }
 
         if (courseCode == null
             || courseCode.isBlank()) {
@@ -180,7 +146,7 @@ final class CourseOfferingAdministrationService {
             null;
 
         for (CourseInfo course
-            : listCourses(batchId)) {
+            : listCourses()) {
 
             if (course.getCourseId()
                 == courseId) {
@@ -207,11 +173,8 @@ final class CourseOfferingAdministrationService {
         String normalizedType =
             courseType.trim();
 
-        /*
-         * 同一批次内课程代码不能重复。
-         */
         for (CourseInfo course
-            : listCourses(batchId)) {
+            : listCourses()) {
 
             if (course.getCourseId()
                 != courseId
@@ -225,7 +188,6 @@ final class CourseOfferingAdministrationService {
 
         courseSettingsRepository.save(
             new CourseSettings(
-                batchId,
                 courseId,
                 normalizedCode,
                 normalizedName,
@@ -234,24 +196,22 @@ final class CourseOfferingAdministrationService {
 
         CourseInfo updatedCourse =
             applyCourseSettings(
-                batchId,
                 targetCourse);
 
         return CourseUpdateResult.success(
             "课程信息修改成功。",
             updatedCourse);
     }
+
     /**
      * 应用教务修改后的课程基本信息。
      */
     private CourseInfo applyCourseSettings(
-        long batchId,
         CourseInfo course) {
 
         CourseSettings settings =
             courseSettingsRepository
                 .find(
-                    batchId,
                     course.getCourseId())
                 .orElse(null);
 
@@ -266,30 +226,22 @@ final class CourseOfferingAdministrationService {
             settings.courseName(),
             settings.credits(),
             settings.courseType(),
+            course.getDepartmentName(),
             course.isSelected(),
             course.getOfferings());
     }
+
     /**
      * 修改教学班容量和开放状态。
      */
     synchronized CourseOfferingUpdateResult
     updateOffering(
-        long batchId,
         long offeringId,
         int capacity,
         boolean open) {
 
-        if (batchService.findBatch(
-            batchId) == null) {
-
-            return CourseOfferingUpdateResult
-                .failure(
-                    "选课批次不存在。");
-        }
-
         OfferingInfo offering =
             findOffering(
-                batchId,
                 offeringId);
 
         if (offering == null) {
@@ -316,7 +268,6 @@ final class CourseOfferingAdministrationService {
 
         settingsRepository.save(
             new CourseOfferingSettings(
-                batchId,
                 offeringId,
                 capacity,
                 open));
@@ -325,38 +276,25 @@ final class CourseOfferingAdministrationService {
             .success(
                 "教学班设置修改成功。");
     }
+
     /**
-     * 将教学班设置应用到学生端课程。
+     * 将全局课程和教学班设置应用到学生端课程。
      *
-     * 学生端课程已经计算过已选人数和冲突状态，
-     * 因此这里不重复增加选课人数。
-     */
-    /**
-     * 将课程信息设置和教学班设置
-     * 同时应用到学生端课程。
+     * 参数保留仅用于兼容学生端现有调用，
+     * 不影响课程或教学班设置。
      */
     CourseInfo applyStudentSettings(
-        long batchId,
+        long ignoredBatchId,
         CourseInfo course) {
 
-        /*
-         * 先应用课程代码、名称、学分和类型设置。
-         */
         CourseInfo updatedCourse =
             applyCourseSettings(
-                batchId,
                 course);
 
-        /*
-         * 再应用各教学班的容量和开放状态。
-         */
         List<OfferingInfo> updatedOfferings =
             updatedCourse.getOfferings()
                 .stream()
-                .map(offering ->
-                    applyStudentSettings(
-                        batchId,
-                        offering))
+                .map(this::applyStudentSettings)
                 .toList();
 
         return new CourseInfo(
@@ -365,21 +303,28 @@ final class CourseOfferingAdministrationService {
             updatedCourse.getCourseName(),
             updatedCourse.getCredits(),
             updatedCourse.getCourseType(),
+            updatedCourse.getDepartmentName(),
             updatedCourse.isSelected(),
             updatedOfferings);
     }
 
     /**
-     * 将容量和开放状态应用到学生端教学班。
+     * 将全局教学班设置应用到学生端教学班。
      */
     OfferingInfo applyStudentSettings(
-        long batchId,
+        long ignoredBatchId,
+        OfferingInfo offering) {
+
+        return applyStudentSettings(
+            offering);
+    }
+
+    private OfferingInfo applyStudentSettings(
         OfferingInfo offering) {
 
         CourseOfferingSettings settings =
             settingsRepository
                 .find(
-                    batchId,
                     offering.getOfferingId())
                 .orElse(null);
 
@@ -426,10 +371,6 @@ final class CourseOfferingAdministrationService {
 
         } else {
 
-            /*
-             * 保留时间冲突、同课程已选等
-             * 学生个人状态。
-             */
             status =
                 offering.getAvailabilityStatus();
         }
@@ -448,20 +389,39 @@ final class CourseOfferingAdministrationService {
             offering.isSelected(),
             status);
     }
+
     /**
-     * 将教务设置应用到一门课程。
+     * 将全局设置应用到课程。
+     *
+     * 参数保留仅用于兼容教师端和统计功能。
      */
     CourseInfo applySettings(
-        long batchId,
+        long ignoredBatchId,
+        CourseInfo course) {
+
+        return applyCourseSettings(
+            applySettings(
+                course));
+    }
+
+    /**
+     * 将全局设置应用到教学班。
+     */
+    OfferingInfo applySettings(
+        long ignoredBatchId,
+        OfferingInfo offering) {
+
+        return applySettings(
+            offering);
+    }
+
+    private CourseInfo applySettings(
         CourseInfo course) {
 
         List<OfferingInfo> offerings =
             course.getOfferings()
                 .stream()
-                .map(offering ->
-                    applySettings(
-                        batchId,
-                        offering))
+                .map(this::applySettings)
                 .toList();
 
         return new CourseInfo(
@@ -470,21 +430,17 @@ final class CourseOfferingAdministrationService {
             course.getCourseName(),
             course.getCredits(),
             course.getCourseType(),
+            course.getDepartmentName(),
             course.isSelected(),
             offerings);
     }
 
-    /**
-     * 将教务设置应用到一个教学班。
-     */
-    OfferingInfo applySettings(
-        long batchId,
+    private OfferingInfo applySettings(
         OfferingInfo offering) {
 
         CourseOfferingSettings settings =
             settingsRepository
                 .find(
-                    batchId,
                     offering.getOfferingId())
                 .orElse(null);
 
@@ -496,8 +452,7 @@ final class CourseOfferingAdministrationService {
         boolean open =
             settings == null
                 ? !"OFFERING_CLOSED".equals(
-                offering
-                    .getAvailabilityStatus())
+                offering.getAvailabilityStatus())
                 : settings.open();
 
         int selectedCount =
@@ -553,12 +508,10 @@ final class CourseOfferingAdministrationService {
      * 根据 ID 查找原始教学班。
      */
     private OfferingInfo findOffering(
-        long batchId,
         long offeringId) {
 
         for (CourseInfo course
-            : rawCourses(
-            batchId)) {
+            : rawCourses()) {
 
             for (OfferingInfo offering
                 : course.getOfferings()) {
@@ -574,25 +527,26 @@ final class CourseOfferingAdministrationService {
         return null;
     }
 
-    private List<CourseInfo> rawCourses(
-        long batchId) {
+    /**
+     * 查询各类仓库中的原始课程。
+     */
+    private List<CourseInfo> rawCourses() {
 
         List<CourseInfo> courses =
             new ArrayList<>();
 
         courses.addAll(
             planRepository.findPlanCourses(
-                batchId));
+                REPOSITORY_SCOPE));
 
         courses.addAll(
             substitutionRepository
                 .findSubstituteCourses(
-                    batchId));
+                    REPOSITORY_SCOPE));
 
         for (PeCourseRecord record
-            : peCourseRepository
-            .findPeCourses(
-                batchId)) {
+            : peCourseRepository.findPeCourses(
+            REPOSITORY_SCOPE)) {
 
             courses.add(
                 record.course());
@@ -601,7 +555,7 @@ final class CourseOfferingAdministrationService {
         for (GeneralCourseRecord record
             : generalCourseRepository
             .findGeneralCourses(
-                batchId)) {
+                REPOSITORY_SCOPE)) {
 
             courses.add(
                 record.course());
@@ -610,6 +564,7 @@ final class CourseOfferingAdministrationService {
         return courses;
     }
 }
+
 /**
  * 修改课程信息的结果。
  */
@@ -637,6 +592,7 @@ record CourseUpdateResult(
             null);
     }
 }
+
 /**
  * 教学班修改结果。
  */

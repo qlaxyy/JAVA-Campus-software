@@ -19,8 +19,7 @@ final class InMemoryPeCourseRepository
         return List.of(
             createBasketball(),
             createYoga(),
-            createBadminton(),
-            createHealthClass()
+            createBadminton()
         );
     }
 
@@ -34,7 +33,6 @@ final class InMemoryPeCourseRepository
                 14001L,
                 "01",
                 List.of(
-                    "周老师"
                 ),
                 List.of(
                     new ScheduleInfo(
@@ -98,7 +96,6 @@ final class InMemoryPeCourseRepository
                 14002L,
                 "01",
                 List.of(
-                    "吴老师"
                 ),
                 List.of(
                     new ScheduleInfo(
@@ -168,7 +165,6 @@ final class InMemoryPeCourseRepository
                 14003L,
                 "01",
                 List.of(
-                    "郑老师"
                 ),
                 List.of(
                     new ScheduleInfo(
@@ -197,6 +193,7 @@ final class InMemoryPeCourseRepository
                 "羽毛球",
                 1.0,
                 "任选",
+                "体育系",
                 false,
                 List.of(
                     offering

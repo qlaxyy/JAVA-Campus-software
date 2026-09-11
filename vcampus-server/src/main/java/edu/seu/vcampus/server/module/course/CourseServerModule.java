@@ -946,7 +946,7 @@ public final class CourseServerModule
         }
 
         if (!teacherService.isTeacher(
-            session.getUsername())) {
+            session.getUserId())){
 
             return Response.failure(
                 request.getRequestId(),
@@ -989,7 +989,7 @@ public final class CourseServerModule
         }
 
         if (!teacherService.canManageOffering(
-            session.getUsername(),
+            session.getUserId(),
             offeringId)) {
 
             return Response.failure(
@@ -1026,7 +1026,7 @@ public final class CourseServerModule
         }
 
         if (!teacherService.isTeacher(
-            session.getUsername())) {
+            session.getUserId())) {
 
             return Response.failure(
                 request.getRequestId(),
@@ -1048,7 +1048,7 @@ public final class CourseServerModule
             updateRequest.getOfferingId();
 
         if (!teacherService.canManageOffering(
-            session.getUsername(),
+            session.getUserId(),
             offeringId)) {
 
             return Response.failure(
@@ -1120,7 +1120,7 @@ public final class CourseServerModule
          * =========================
          */
         if (!teacherService.isTeacher(
-            session.getUsername())) {
+            session.getUserId())) {
 
             return Response.failure(
                 request.getRequestId(),
@@ -1168,7 +1168,7 @@ public final class CourseServerModule
             new ArrayList<>(
                 teacherService
                     .listTeacherCourses(
-                        session.getUsername(),
+                        session.getUserId() ,
                         batchRequest.getBatchId())));
 
 
@@ -1205,7 +1205,7 @@ public final class CourseServerModule
          * =========================
          */
         if (!teacherService.isTeacher(
-            session.getUsername())) {
+            session.getUserId())) {
 
             return Response.failure(
                 request.getRequestId(),
@@ -1263,7 +1263,7 @@ public final class CourseServerModule
          * =========================
          */
         if (!teacherService.canManageOffering(
-            session.getUsername(),
+            session.getUserId(),
             offeringId)) {
 
             return Response.failure(
@@ -1282,7 +1282,7 @@ public final class CourseServerModule
             "学生名单加载成功。",
             new ArrayList<>(
                 teacherService.listStudents(
-                    session.getUsername(),
+                    session.getUserId(),
                     batchId,
                     offeringId)));
     }
@@ -1308,7 +1308,7 @@ public final class CourseServerModule
         }
 
         if (!teacherService.isTeacher(
-            session.getUsername())) {
+            session.getUserId())) {
 
             return Response.failure(
                 request.getRequestId(),
@@ -1351,7 +1351,7 @@ public final class CourseServerModule
         }
 
         if (!teacherService.canManageOffering(
-            session.getUsername(),
+            session.getUserId(),
             offeringId)) {
 
             return Response.failure(
@@ -1362,7 +1362,7 @@ public final class CourseServerModule
 
         List<TeacherStudentInfo> students =
             teacherService.listStudents(
-                session.getUsername(),
+                session.getUserId(),
                 batchId,
                 offeringId);
 
@@ -1420,7 +1420,7 @@ public final class CourseServerModule
         }
 
         if (!teacherService.isTeacher(
-            session.getUsername())) {
+            session.getUserId())) {
 
             return Response.failure(
                 request.getRequestId(),
@@ -1490,7 +1490,7 @@ public final class CourseServerModule
         }
 
         if (!teacherService.canManageEnrollment(
-            session.getUsername(),
+            session.getUserId(),
             studentId,
             enrollmentId)) {
 

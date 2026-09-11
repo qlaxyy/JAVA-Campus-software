@@ -40,9 +40,8 @@ final class CourseTeacherView
                         "当前用户尚未登录。"));
 
         this.teacher =
-            TemporaryCourseTeacherDirectory
-                .findTeacher(
-                    session.getUsername())
+            TemporaryCourseTeacherDirectory.findTeacher(
+                    session.getUserId())
                 .orElseThrow(() ->
                     new IllegalStateException(
                         "当前账号不在教师名单中。"));

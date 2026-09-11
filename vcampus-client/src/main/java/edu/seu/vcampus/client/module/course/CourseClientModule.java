@@ -71,9 +71,8 @@ public final class CourseClientModule
          * 当前通过课程模块临时名单判断。
          * 正式教师角色完成后替换此处。
          */
-        if (TemporaryCourseTeacherDirectory
-            .isTeacher(
-                session.getUsername())) {
+        if (TemporaryCourseTeacherDirectory.isTeacher(
+            session.getUserId())) {
 
             return new CourseTeacherView(
                 context);

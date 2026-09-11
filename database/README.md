@@ -2,6 +2,8 @@
 
 服务器唯一运行数据库为 `database/vCampus.accdb`。它只由服务器端 JDBC/DAO 访问；其他组员只运行客户端，通过 Radmin VPN 连接服务器，不能复制、打开或直接修改该文件。
 
+各模块实际初始化的账号、课程、图书、商品、科室及演示业务记录，见 [`FINAL_DEMO_INITIAL_DATA.md`](FINAL_DEMO_INITIAL_DATA.md)。
+
 ## 身份字段
 
 - `username`：兼容既有 Java 接口的字段名，实际保存 8 位一卡通号，也是登录账号。

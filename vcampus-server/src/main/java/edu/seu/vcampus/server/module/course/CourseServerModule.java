@@ -945,8 +945,7 @@ public final class CourseServerModule
                 "请先登录。");
         }
 
-        if (!teacherService.isTeacher(
-            session.getUserId())){
+        if (context.teachers().findByUserId(session.getUserId()).isEmpty()) {
 
             return Response.failure(
                 request.getRequestId(),
@@ -1025,8 +1024,7 @@ public final class CourseServerModule
                 "请先登录。");
         }
 
-        if (!teacherService.isTeacher(
-            session.getUserId())) {
+        if (context.teachers().findByUserId(session.getUserId()).isEmpty()) {
 
             return Response.failure(
                 request.getRequestId(),
@@ -1116,11 +1114,10 @@ public final class CourseServerModule
 
         /*
          * =========================
-         * 2. 临时教师身份检查
+         * 2. 公共教师资格检查
          * =========================
          */
-        if (!teacherService.isTeacher(
-            session.getUserId())) {
+        if (context.teachers().findByUserId(session.getUserId()).isEmpty()) {
 
             return Response.failure(
                 request.getRequestId(),
@@ -1168,7 +1165,7 @@ public final class CourseServerModule
             new ArrayList<>(
                 teacherService
                     .listTeacherCourses(
-                        session.getUserId() ,
+                        session.getUserId(),
                         batchRequest.getBatchId())));
 
 
@@ -1204,8 +1201,7 @@ public final class CourseServerModule
          * 2. 教师身份检查
          * =========================
          */
-        if (!teacherService.isTeacher(
-            session.getUserId())) {
+        if (context.teachers().findByUserId(session.getUserId()).isEmpty()) {
 
             return Response.failure(
                 request.getRequestId(),
@@ -1307,8 +1303,7 @@ public final class CourseServerModule
                 "请先登录。");
         }
 
-        if (!teacherService.isTeacher(
-            session.getUserId())) {
+        if (context.teachers().findByUserId(session.getUserId()).isEmpty()) {
 
             return Response.failure(
                 request.getRequestId(),
@@ -1419,8 +1414,7 @@ public final class CourseServerModule
                 "请先登录。");
         }
 
-        if (!teacherService.isTeacher(
-            session.getUserId())) {
+        if (context.teachers().findByUserId(session.getUserId()).isEmpty()) {
 
             return Response.failure(
                 request.getRequestId(),

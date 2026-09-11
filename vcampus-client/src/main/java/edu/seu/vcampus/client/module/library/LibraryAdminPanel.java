@@ -37,6 +37,7 @@ public final class LibraryAdminPanel extends JPanel {
     private static final String ACTIVE = "ACTIVE";
     private static final String INACTIVE = "INACTIVE";
     private static final String AVAILABLE = "AVAILABLE";
+    private static final String RESERVED = "RESERVED";
     private static final String LOANED = "LOANED";
     private static final String WAITING_SHELVING = "WAITING_SHELVING";
     private static final String WITHDRAWN = "WITHDRAWN";
@@ -450,7 +451,8 @@ public final class LibraryAdminPanel extends JPanel {
         if (LibraryActions.SHELVE_BOOK_COPY.equals(action) && !WAITING_SHELVING.equals(copy.getStatus())) { return; }
         if (LibraryActions.RESTORE_BOOK_COPY.equals(action) && !WITHDRAWN.equals(copy.getStatus())) { return; }
         if (LibraryActions.WITHDRAW_BOOK_COPY.equals(action)
-                && (LOANED.equals(copy.getStatus()) || WITHDRAWN.equals(copy.getStatus()))) { return; }
+                && (RESERVED.equals(copy.getStatus()) || LOANED.equals(copy.getStatus())
+                || WITHDRAWN.equals(copy.getStatus()))) { return; }
         if (LibraryActions.WITHDRAW_BOOK_COPY.equals(action) && !confirmWithdrawal(copy)) { return; }
         submitCopy(action, new BookCopyIdRequest(copy.getCopyId()), operation);
     }
@@ -645,15 +647,18 @@ public final class LibraryAdminPanel extends JPanel {
         newCopy.setEnabled(ready && selectedBookId != null);
         barcode.setEnabled(ready && addingCopy);
         boolean copyEditable = ready && (addingCopy
-                || copy != null && !WITHDRAWN.equals(copy.getStatus()));
+                || copy != null && !RESERVED.equals(copy.getStatus())
+                && !WITHDRAWN.equals(copy.getStatus()));
         location.setEnabled(copyEditable);
         callNumber.setEnabled(copyEditable);
         addCopy.setEnabled(ready && addingCopy);
-        updateCopy.setEnabled(ready && !addingCopy && copy != null && !WITHDRAWN.equals(copy.getStatus()));
+        updateCopy.setEnabled(ready && !addingCopy && copy != null
+                && !RESERVED.equals(copy.getStatus()) && !WITHDRAWN.equals(copy.getStatus()));
         shelfCopy.setEnabled(ready && copy != null && WAITING_SHELVING.equals(copy.getStatus()));
         restoreCopy.setEnabled(ready && copy != null && WITHDRAWN.equals(copy.getStatus()));
         withdrawCopy.setEnabled(ready && copy != null
-                && !LOANED.equals(copy.getStatus()) && !WITHDRAWN.equals(copy.getStatus()));
+                && !RESERVED.equals(copy.getStatus()) && !LOANED.equals(copy.getStatus())
+                && !WITHDRAWN.equals(copy.getStatus()));
         borrowScope.setEnabled(!working);
         refreshBorrows.setEnabled(!working);
     }
@@ -715,6 +720,7 @@ public final class LibraryAdminPanel extends JPanel {
     private static String displayCopyStatus(String value) {
         return switch (value) {
             case AVAILABLE -> "在架";
+            case RESERVED -> "预约待取";
             case LOANED -> "已借出";
             case WAITING_SHELVING -> "待上架";
             case WITHDRAWN -> "已注销";
@@ -725,6 +731,7 @@ public final class LibraryAdminPanel extends JPanel {
     private static String displayCopyAvailability(BookDTO book, BookCopyDTO copy) {
         return switch (copy.getStatus()) {
             case WITHDRAWN -> "不参与馆藏";
+            case RESERVED -> "不可借（预约待取）";
             case LOANED -> "不可借（已借出）";
             case WAITING_SHELVING -> "不可借（待上架）";
             case AVAILABLE -> book != null && ACTIVE.equals(book.getStatus())

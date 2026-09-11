@@ -1,9 +1,8 @@
 package edu.seu.vcampus.client.module.course;
 
 import edu.seu.vcampus.client.application.ClientContext;
-import edu.seu.vcampus.common.course.TemporaryCourseTeacherDirectory;
-import edu.seu.vcampus.common.course.TemporaryCourseTeacherDirectory.TeacherAssignment;
 import edu.seu.vcampus.common.user.SessionInfo;
+import edu.seu.vcampus.common.user.TeacherProfileView;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -24,27 +23,19 @@ final class CourseTeacherView
 
     private final ClientContext context;
 
-    private final TeacherAssignment teacher;
+    private final TeacherProfileView teacher;
 
     CourseTeacherView(
-        ClientContext context) {
+        ClientContext context,
+        TeacherProfileView teacher) {
 
         this.context =
             Objects.requireNonNull(
                 context);
 
-        SessionInfo session =
-            context.currentSession()
-                .orElseThrow(() ->
-                    new IllegalStateException(
-                        "当前用户尚未登录。"));
-
         this.teacher =
-            TemporaryCourseTeacherDirectory.findTeacher(
-                    session.getUserId())
-                .orElseThrow(() ->
-                    new IllegalStateException(
-                        "当前账号不在教师名单中。"));
+            Objects.requireNonNull(
+                teacher);
 
         initialiseView();
     }
@@ -237,9 +228,11 @@ final class CourseTeacherView
         JLabel assignment =
             new JLabel(
                 "当前教师："
-                    + teacher.teacherName()
-                    + "；负责教学班："
-                    + teacher.offeringIds());
+                    + teacher.getDisplayName()
+                    + "；"
+                    + teacher.getDepartment()
+                    + "；"
+                    + teacher.getTitle());
 
         assignment.setForeground(
             CourseTheme.PRIMARY);
@@ -293,11 +286,12 @@ final class CourseTeacherView
                 .map(
                     SessionInfo::getDisplayName)
                 .orElse(
-                    teacher.teacherName());
+                    teacher.getDisplayName());
 
         return displayName
             + " · "
-            + teacher.teacherName()
-            + " · 普通教师";
+            + teacher.getDepartment()
+            + " · "
+            + teacher.getTitle();
     }
 }

@@ -11,7 +11,7 @@ import java.awt.Font;
 import java.awt.GridLayout;
 import java.util.List;
 
-/** Honest information architecture for staff workspaces not implemented yet. */
+/** Entry page for the hospital administrator's operational workspaces. */
 final class HospitalStaffHomePanel extends JPanel {
 
     HospitalStaffHomePanel(
@@ -22,9 +22,14 @@ final class HospitalStaffHomePanel extends JPanel {
         setLayout(new BorderLayout(0, 20));
         setBackground(HospitalTheme.BACKGROUND);
         setBorder(BorderFactory.createEmptyBorder(24, 28, 24, 28));
-        add(createHeader(titleText, subtitleText, switchMode), BorderLayout.NORTH);
-        add(createFeatureGrid(features), BorderLayout.CENTER);
-        JLabel notice = new JLabel("当前已建立工作台结构，具体业务将在后续提交中逐项接入。");
+        add(HospitalResponsiveLayout.constrainWidth(
+                createHeader(titleText, subtitleText, switchMode)), BorderLayout.NORTH);
+        add(HospitalResponsiveLayout.verticalScroll(
+                createFeatureGrid(features)), BorderLayout.CENTER);
+        boolean allAvailable = features.stream().allMatch(feature -> feature.action() != null);
+        JLabel notice = new JLabel(allAvailable
+                ? "所有管理操作均通过服务器业务接口完成；管理员不直接修改数据库或临床病历。"
+                : "可用功能已标明；其余业务将在后续提交中逐项接入。");
         notice.setForeground(HospitalTheme.MUTED);
         add(notice, BorderLayout.SOUTH);
     }
@@ -52,7 +57,7 @@ final class HospitalStaffHomePanel extends JPanel {
     }
 
     private JPanel createFeatureGrid(List<WorkspaceFeature> features) {
-        JPanel grid = new JPanel(new GridLayout(0, 2, 16, 16));
+        JPanel grid = HospitalResponsiveLayout.grid(2, 300, 16, 16);
         grid.setOpaque(false);
         features.forEach(feature -> grid.add(featureCard(feature)));
         return grid;
@@ -69,10 +74,14 @@ final class HospitalStaffHomePanel extends JPanel {
                 + feature.description() + "</body></html>");
         detail.setForeground(HospitalTheme.MUTED);
         boolean available = feature.action() != null;
-        JButton state = new JButton(available ? feature.actionText() : "后续实现");
+        JButton state = available
+                ? HospitalTheme.primaryButton(feature.actionText())
+                : new JButton("后续实现");
         state.setEnabled(available);
         if (available) {
             state.addActionListener(event -> feature.action().run());
+        } else {
+            HospitalTheme.applyDisabledStyle(state);
         }
         card.add(title, BorderLayout.NORTH);
         card.add(detail, BorderLayout.CENTER);

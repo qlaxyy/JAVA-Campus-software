@@ -56,6 +56,12 @@ class LibraryWorkflowUiTest {
 
             JTable searchResults = named(catalog, JTable.class, "library.searchResults");
             JTextArea holdingDetails = named(catalog, JTextArea.class, "library.holdingDetails");
+            @SuppressWarnings("rawtypes")
+            JComboBox reservationLocation = named(
+                    catalog, JComboBox.class, "library.reservation.location");
+            JButton reserve = named(catalog, JButton.class, "library.reservation.create");
+            JLabel reservationHint = named(catalog, JLabel.class, "library.reservation.hint");
+            JLabel searchStatus = named(catalog, JLabel.class, "library.searchStatus");
             onEdt(() -> {
                 named(catalog, JTextField.class, "library.search.keyword").setText("9787111213826");
                 button(catalog, "搜索").doClick();
@@ -64,7 +70,22 @@ class LibraryWorkflowUiTest {
             onEdt(() -> searchResults.setRowSelectionInterval(0, 0));
             awaitUi(() -> holdingDetails.getText().contains("九龙湖校区—中文图书阅览室3")
                     && holdingDetails.getText().contains("可借")
-                    && holdingDetails.getText().contains("馆藏"));
+                    && holdingDetails.getText().contains("馆藏")
+                    && reservationLocation.getItemCount() > 0 && reserve.isEnabled());
+            assertTrue(reservationHint.getText().contains("保留 24 小时"));
+            onEdt(reserve::doClick);
+            awaitUi(() -> searchStatus.getText().contains("预约成功")
+                    && searchStatus.getText().contains("SEU-B001-001"));
+
+            onEdt(() -> tabs.setSelectedIndex(1));
+            JTable reservations = named(records, JTable.class, "library.myReservations");
+            JButton cancelReservation = named(
+                    records, JButton.class, "library.reservation.cancel");
+            awaitUi(() -> reservations.getRowCount() == 1 && reservations.isEnabled());
+            assertEquals("待取书", reservations.getValueAt(0, 2));
+            assertEquals("SEU-B001-001", reservations.getValueAt(0, 4));
+            onEdt(() -> reservations.setRowSelectionInterval(0, 0));
+            awaitUi(cancelReservation::isEnabled);
 
             onEdt(() -> named(online, JButton.class, "library.mode.back.online").doClick());
             assertTrue(selection.isVisible());
@@ -81,16 +102,21 @@ class LibraryWorkflowUiTest {
             awaitUi(() -> borrow.isEnabled() && giveBack.isEnabled());
             onEdt(borrow::doClick);
             JLabel outcome = named(terminal, JLabel.class, "library.selfService.outcome");
+            JLabel reservationCheck = named(
+                    terminal, JLabel.class, "library.selfService.reservationCheck");
             awaitUi(() -> outcome.getText().contains("借书成功"));
+            assertTrue(reservationCheck.getText().contains("这是为当前用户保留的单册"));
 
             JTable current = named(records, JTable.class, "library.currentBorrows");
             onEdt(() -> named(terminalMode, JButton.class,
                     "library.mode.back.terminal").doClick());
             assertTrue(selection.isVisible());
             onEdt(() -> named(modes, JButton.class, "library.mode.online").doClick());
-            onEdt(() -> tabs.setSelectedIndex(1));
-            awaitUi(() -> current.getRowCount() == 1 && current.isEnabled());
+            awaitUi(() -> current.getRowCount() == 1 && current.isEnabled()
+                    && "已借阅".equals(reservations.getValueAt(0, 2)));
             assertEquals("SEU-B001-001", current.getValueAt(0, 1));
+            onEdt(() -> reservations.setRowSelectionInterval(0, 0));
+            assertFalse(cancelReservation.isEnabled());
 
             onEdt(() -> {
                 named(online, JButton.class, "library.mode.back.online").doClick();
@@ -121,7 +147,7 @@ class LibraryWorkflowUiTest {
             onEdt(() -> view.set(new LibraryClientModule().createView(context)));
             List<JTable> tables = descendants(view.get()).stream()
                     .filter(JTable.class::isInstance).map(JTable.class::cast).toList();
-            assertEquals(6, tables.size());
+            assertEquals(7, tables.size());
             for (JTable table : tables) {
                 assertEquals(ListSelectionModel.SINGLE_SELECTION, table.getSelectionModel().getSelectionMode());
                 assertFalse(table.getTableHeader().getReorderingAllowed());

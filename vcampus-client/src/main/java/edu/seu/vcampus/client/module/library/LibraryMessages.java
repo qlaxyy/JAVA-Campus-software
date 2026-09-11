@@ -23,6 +23,13 @@ final class LibraryMessages {
             case ErrorCodes.LIBRARY_OVERDUE_BORROW_EXISTS -> "存在逾期未还图书，请先归还";
             case ErrorCodes.LIBRARY_BORROW_RECORD_NOT_FOUND -> "未找到本人的借阅记录，请刷新列表";
             case ErrorCodes.LIBRARY_ALREADY_RETURNED -> "该记录已归还，请刷新列表";
+            case ErrorCodes.LIBRARY_RESERVATION_NOT_FOUND -> "预约不存在，请刷新预约记录";
+            case ErrorCodes.LIBRARY_DUPLICATE_RESERVATION -> "同一书目已有有效预约，请勿重复预约";
+            case ErrorCodes.LIBRARY_RESERVATION_LIMIT_REACHED -> "最多同时存在 3 条有效预约";
+            case ErrorCodes.LIBRARY_RESERVATION_COOLDOWN -> "该书目的待取预约曾过期，请在 7 天冷却期结束后重试";
+            case ErrorCodes.LIBRARY_RESERVATION_NOT_CANCELLABLE -> "该预约已经结束，不能取消";
+            case ErrorCodes.LIBRARY_INVALID_PICKUP_LOCATION -> "所选馆藏地没有该书目的有效馆藏";
+            case ErrorCodes.LIBRARY_COPY_RESERVED_FOR_OTHER -> "该单册已为其他读者预约保留";
             case ErrorCodes.LIBRARY_INVALID_STOCK, ErrorCodes.LIBRARY_DUPLICATE_ISBN,
                     ErrorCodes.LIBRARY_CATEGORY_NOT_FOUND -> response.getMessage();
             case ErrorCodes.COMMON_INVALID_REQUEST, ErrorCodes.COMMON_INVALID_ARGUMENT ->

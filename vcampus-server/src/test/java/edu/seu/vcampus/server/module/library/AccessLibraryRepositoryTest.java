@@ -172,6 +172,83 @@ class AccessLibraryRepositoryTest {
     }
 
     @Test
+    void newLibrarySchemaReceivesConsistentDemonstrationActivity() {
+        Path databasePath = temporaryDirectory.resolve("demonstration.accdb");
+        Repositories repositories = repositories(databasePath);
+
+        AccessLibraryDemonstrationData.seedIfEligible(
+                repositories.store(), repositories.copies(), repositories.records(),
+                repositories.reservations(), CLOCK);
+
+        assertEquals(2, repositories.records().findAll().size());
+        BorrowRecord current = repositories.records()
+                .findById(AccessLibraryDemonstrationData.CURRENT_RECORD_ID)
+                .orElseThrow();
+        assertEquals(AccessLibraryDemonstrationData.DEMO_USER_ID, current.userId());
+        assertEquals(BorrowStatus.BORROWED, current.status());
+        assertEquals(BookCopyStatus.LOANED, repositories.copies()
+                .findById(current.copyId()).orElseThrow().status());
+
+        BorrowRecord history = repositories.records()
+                .findById(AccessLibraryDemonstrationData.HISTORY_RECORD_ID)
+                .orElseThrow();
+        assertEquals(BorrowStatus.RETURNED, history.status());
+        assertEquals(BookCopyStatus.AVAILABLE, repositories.copies()
+                .findById(history.copyId()).orElseThrow().status());
+
+        Reservation ready = repositories.reservations()
+                .findById(AccessLibraryDemonstrationData.READY_RESERVATION_ID)
+                .orElseThrow();
+        assertEquals(ReservationStatus.READY_FOR_PICKUP, ready.status());
+        assertEquals(24, java.time.Duration.between(
+                ready.readyAt(), ready.expiresAt()).toHours());
+        assertEquals(BookCopyStatus.RESERVED, repositories.copies()
+                .findById(ready.assignedCopyId()).orElseThrow().status());
+    }
+
+    @Test
+    void existingEmptyLibrarySchemaDoesNotReceiveDemonstrationActivity() {
+        Path databasePath = temporaryDirectory.resolve("existing-empty.accdb");
+        Repositories first = repositories(databasePath);
+        assertTrue(first.store().isNewlyCreatedLibrarySchema());
+        assertTrue(first.records().findAll().isEmpty());
+        assertTrue(first.reservations().findAll().isEmpty());
+
+        Repositories restarted = repositories(databasePath);
+        assertFalse(restarted.store().isNewlyCreatedLibrarySchema());
+        AccessLibraryDemonstrationData.seedIfEligible(
+                restarted.store(), restarted.copies(), restarted.records(),
+                restarted.reservations(), CLOCK);
+
+        assertTrue(restarted.records().findAll().isEmpty());
+        assertTrue(restarted.reservations().findAll().isEmpty());
+        assertTrue(restarted.copies().findByBookId("B001").stream()
+                .allMatch(copy -> copy.status() == BookCopyStatus.AVAILABLE));
+    }
+
+    @Test
+    void demonstrationActivityRollsBackWhenFinalWriteFails() {
+        Path databasePath = temporaryDirectory.resolve("demonstration-rollback.accdb");
+        Repositories repositories = repositories(databasePath);
+        ReservationRepository failing = failAfterUpdate(repositories.reservations());
+
+        assertThrows(IllegalStateException.class,
+                () -> AccessLibraryDemonstrationData.seedIfEligible(
+                        repositories.store(), repositories.copies(), repositories.records(),
+                        failing, CLOCK));
+
+        Repositories restarted = repositories(databasePath);
+        assertTrue(restarted.records().findAll().isEmpty());
+        assertTrue(restarted.reservations().findAll().isEmpty());
+        assertEquals(BookCopyStatus.AVAILABLE, restarted.copies()
+                .findByBarcode(AccessLibraryDemonstrationData.LOANED_BARCODE)
+                .orElseThrow().status());
+        assertEquals(BookCopyStatus.AVAILABLE, restarted.copies()
+                .findByBarcode(AccessLibraryDemonstrationData.RESERVED_BARCODE)
+                .orElseThrow().status());
+    }
+
+    @Test
     void reservationAssignmentRollsBackWhenFinalWriteFails() {
         Path databasePath = temporaryDirectory.resolve("reservation-rollback.accdb");
         Repositories repositories = repositories(databasePath);

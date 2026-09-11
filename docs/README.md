@@ -16,6 +16,7 @@
 其他位置：
 
 - 安装、运行、Git、PR 和演示账号：仓库根 [README](../README.md)。
+- 选课与学籍负责人接入公共教师表：[教师功能接入说明](TEACHER_INTEGRATION_GUIDE.md)。
 - 表和字段：[`database/schema/`](../database/schema/)，每个模块只维护自己的数据字典。
 - 具体功能需求和验收条件：对应 GitHub Epic。
 - 已发生的详细过程：Git 提交、PR 和 Issue，不再复制到多份日志。

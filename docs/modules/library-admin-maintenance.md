@@ -17,8 +17,9 @@
    登记后的 barcode、bookId 和 status 不能通过通用编辑修改。
 3. **借阅查询**：查询全馆当前借阅、借阅历史或逾期未还，展示稳定 `userId`、书名、馆藏条码和时间。
 
-已知不合法操作直接禁用：`AVAILABLE` 不能再次归架，`LOANED` 和 `WITHDRAWN` 不能注销，
-只有 `WITHDRAWN` 可以恢复，且 `WITHDRAWN` 不能直接编辑；条码登记后不可编辑。服务器仍对所有状态进行权威校验。
+已知不合法操作直接禁用：`AVAILABLE` 不能再次归架，`RESERVED/LOANED/WITHDRAWN` 不能注销，
+预约待取单册不能编辑，只有 `WITHDRAWN` 可以恢复，且 `WITHDRAWN` 不能直接编辑；条码登记后不可编辑。
+服务器仍对所有状态进行权威校验。
 
 ## 管理契约
 
@@ -45,6 +46,7 @@
 - `UPDATE_BOOK_COPY` 只接收 `copyId / location / callNumber`，不能绕过状态机；
 - 注销是 `BookCopy -> WITHDRAWN` 的软删除，不物理删除书目或借阅历史；借出中的单册禁止注销；
 - 管理员可以将误注销的单册恢复为 `AVAILABLE`，恢复前仍须确认不存在当前借阅记录；
+- `RESERVED` 在界面显示为“预约待取”，不能直接编辑、归架、注销或恢复；预约取消、过期或本人取书负责流转；
 - `WITHDRAWN` 不计馆藏和可借数，但仍可用于解释历史借阅；
 - 当前、历史、逾期查询由 BorrowRecord 推导，不另存借阅数量或逾期布尔状态；
 - 所有写操作和借还共用同一个 Service 临界区，避免管理操作与流通操作交错破坏状态。

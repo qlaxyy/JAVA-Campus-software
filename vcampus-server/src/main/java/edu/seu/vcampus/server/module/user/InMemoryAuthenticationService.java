@@ -8,11 +8,10 @@ import edu.seu.vcampus.server.security.AccountProvisioning;
 import edu.seu.vcampus.server.security.ProvisionedAccount;
 import edu.seu.vcampus.server.security.UserDirectory;
 import edu.seu.vcampus.server.security.UserIdentity;
+import edu.seu.vcampus.server.security.TeacherDirectory;
 import edu.seu.vcampus.common.user.PasswordProof;
 import edu.seu.vcampus.common.user.Role;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Arrays;
@@ -46,6 +45,7 @@ public final class InMemoryAuthenticationService
     private final Duration idleTimeout;
     private final Duration absoluteTimeout;
     private final UserAuditRepository auditLogs;
+    private final TeacherRegistryService teacherRegistry;
     private final LoginAttemptLimiter loginAttempts;
     private final ConcurrentMap<String, StoredSession> sessions = new ConcurrentHashMap<>();
 
@@ -74,6 +74,12 @@ public final class InMemoryAuthenticationService
         this.auditLogs = users instanceof AccessUserRepository accessRepository
                 ? new AccessUserAuditRepository(accessRepository.database())
                 : new InMemoryUserAuditRepository();
+        this.teacherRegistry = new TeacherRegistryService(
+                users,
+                users instanceof AccessUserRepository accessRepository
+                        ? new AccessTeacherRepository(accessRepository.database())
+                        : new InMemoryTeacherRepository(),
+                clock);
     }
 
     UserRepository users() {
@@ -82,6 +88,15 @@ public final class InMemoryAuthenticationService
 
     UserAuditRepository auditLogs() {
         return auditLogs;
+    }
+
+    TeacherRegistryService teachers() {
+        return teacherRegistry;
+    }
+
+    /** Returns the read-only teacher directory exposed to other server modules. */
+    public TeacherDirectory teacherDirectory() {
+        return teacherRegistry;
     }
 
     /**
@@ -106,12 +121,17 @@ public final class InMemoryAuthenticationService
         UserAccount user = users.findByUsername(username).orElse(null);
         if (user == null
                 || !user.enabled()
-                || !proofMatches(user.passwordProof(), request.getPasswordProof())) {
+                || !user.passwordMatches(request.getPasswordProof())) {
             loginAttempts.recordFailure(username, now);
             return Optional.empty();
         }
 
         loginAttempts.recordSuccess(username);
+
+        if (user.passwordNeedsUpgrade()) {
+            user = user.withPasswordProof(request.getPasswordProof());
+            users.save(user);
+        }
 
         SessionInfo session = new SessionInfo(
                 createToken(),
@@ -145,7 +165,7 @@ public final class InMemoryAuthenticationService
         }
         UserAccount user = users.findById(userId).orElse(null);
         if (user == null
-                || !proofMatches(user.passwordProof(), currentPasswordProof)) {
+                || !user.passwordMatches(currentPasswordProof)) {
             return false;
         }
         users.save(user.withPasswordProof(newPasswordProof));
@@ -287,12 +307,6 @@ public final class InMemoryAuthenticationService
         byte[] token = new byte[TOKEN_BYTES];
         secureRandom.nextBytes(token);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(token);
-    }
-
-    private static boolean proofMatches(String expected, String actual) {
-        return MessageDigest.isEqual(
-                expected.getBytes(StandardCharsets.US_ASCII),
-                actual.getBytes(StandardCharsets.US_ASCII));
     }
 
     private static boolean isPasswordProof(String value) {

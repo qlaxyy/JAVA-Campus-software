@@ -283,20 +283,7 @@ public final class CourseServerModule
              * 但 planService / peCourseService
              * 看不到这条记录。
              */
-            /*
-             * =========================
-             * 全校课程目录 Repository
-             * =========================
-             */
-        CourseCatalogRepository seedCatalogRepository =
-            new InMemoryCourseCatalogRepository();
 
-        CourseCatalogRepository catalogRepository =
-            database == null
-                ? seedCatalogRepository
-                : new AccessCourseCatalogRepository(
-                database,
-                seedCatalogRepository);
         /*
          * =========================
          * 当前选课记录 Repository
@@ -330,7 +317,6 @@ public final class CourseServerModule
                 database);
         this.offeringAdministrationService =
             new CourseOfferingAdministrationService(
-                batchService,
                 planRepository,
                 substitutionRepository,
                 peCourseRepository,
@@ -338,6 +324,10 @@ public final class CourseServerModule
                 enrollmentRepository,
                 offeringSettingsRepository,
                 courseSettingsRepository);
+        CourseCatalogRepository catalogRepository =
+            new LiveCourseCatalogRepository(
+                batchService,
+                this.offeringAdministrationService);
         this.teacherService =
             new CourseTeacherService(
                 this.offeringAdministrationService,
@@ -564,13 +554,7 @@ public final class CourseServerModule
             Objects.requireNonNull(
                 generalCourseService,
                 "generalCourseService must not be null");
-        /*
-         * 测试构造器暂时使用独立的
-         * InMemory 全校课程目录。
-         */
-        this.searchService =
-            new CourseSearchService(
-                new InMemoryCourseCatalogRepository());
+
         this.selectionService =
             Objects.requireNonNull(
                 selectionService,
@@ -605,13 +589,18 @@ public final class CourseServerModule
 
         this.offeringAdministrationService =
             new CourseOfferingAdministrationService(
-                this.batchService,
                 adminPlanRepository,
                 adminSubstitutionRepository,
                 adminPeRepository,
                 adminGeneralRepository,
                 adminEnrollmentRepository,
-                new InMemoryCourseOfferingSettingsRepository(),new InMemoryCourseSettingsRepository());
+                new InMemoryCourseOfferingSettingsRepository(),
+                new InMemoryCourseSettingsRepository());
+        this.searchService =
+            new CourseSearchService(
+                new LiveCourseCatalogRepository(
+                    this.batchService,
+                    this.offeringAdministrationService));
         this.statisticsService =
             new CourseAdminStatisticsService(
                 this.batchService,
@@ -1644,7 +1633,7 @@ public final class CourseServerModule
         CourseUpdateResult result =
             offeringAdministrationService
                 .updateCourse(
-                    updateRequest.getBatchId(),
+
                     updateRequest.getCourseId(),
                     updateRequest.getCourseCode(),
                     updateRequest.getCourseName(),
@@ -1664,7 +1653,6 @@ public final class CourseServerModule
         adminAuditService
             .recordUpdateCourse(
                 session.getUsername(),
-                updateRequest.getBatchId(),
                 updateRequest.getCourseId(),
                 updateRequest.getCourseCode(),
                 updateRequest.getCourseName(),
@@ -1829,6 +1817,11 @@ public final class CourseServerModule
     /**
      * 教务查询指定批次的全部教学班。
      */
+    /**
+     * 教务查询全部课程和教学班。
+     *
+     * 课程和教学班不按照选课批次区分。
+     */
     private Response adminListOfferings(
         Request request,
         ServerContext context) {
@@ -1856,8 +1849,13 @@ public final class CourseServerModule
                 "没有选课管理权限。");
         }
 
-        if (!(request.getData()
-            instanceof BatchRequest batchRequest)) {
+        /*
+         * 暂时兼容尚未修改的旧客户端。
+         * BatchRequest 中的批次不会参与查询。
+         */
+        if (request.getData() != null
+            && !(request.getData()
+            instanceof BatchRequest)) {
 
             return Response.failure(
                 request.getRequestId(),
@@ -1865,22 +1863,12 @@ public final class CourseServerModule
                 "教学班查询请求无效。");
         }
 
-        if (batchService.findBatch(
-            batchRequest.getBatchId()) == null) {
-
-            return Response.failure(
-                request.getRequestId(),
-                ErrorCodes.COMMON_INVALID_REQUEST,
-                "选课批次不存在。");
-        }
-
         return Response.success(
             request,
-            "教学班列表加载成功。",
-            new ArrayList<>(offeringAdministrationService
-                .listCourses(
-                    batchRequest.getBatchId()))
-               );
+            "课程和教学班列表加载成功。",
+            new ArrayList<>(
+                offeringAdministrationService
+                    .listCourses()));
     }
     /**
      * 教务查询指定批次的选课统计。
@@ -1982,7 +1970,7 @@ public final class CourseServerModule
         CourseOfferingUpdateResult result =
             offeringAdministrationService
                 .updateOffering(
-                    adminRequest.getBatchId(),
+
                     adminRequest.getOfferingId(),
                     adminRequest.getCapacity(),
                     adminRequest.isOpen());
@@ -1996,7 +1984,7 @@ public final class CourseServerModule
         }
         adminAuditService.recordUpdateOffering(
             session.getUsername(),
-            adminRequest.getBatchId(),
+
             adminRequest.getOfferingId(),
             adminRequest.getCapacity(),
             adminRequest.isOpen(),
@@ -2049,7 +2037,7 @@ public final class CourseServerModule
         CourseSelectionResult result =
             selectionService.forceSelectCourse(
                 adminRequest.getStudentId(),
-                adminRequest.getBatchId(),
+
                 adminRequest.getOfferingId());
 
         if (!result.success()) {
@@ -2062,7 +2050,7 @@ public final class CourseServerModule
         adminAuditService.recordForceSelect(
             session.getUsername(),
             adminRequest.getStudentId(),
-            adminRequest.getBatchId(),
+
             adminRequest.getOfferingId(),
             adminRequest.getReason());
         return Response.success(

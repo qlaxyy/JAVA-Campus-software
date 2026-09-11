@@ -1,12 +1,12 @@
 package edu.seu.vcampus.client.module.course;
 
 import edu.seu.vcampus.client.application.ClientContext;
-import edu.seu.vcampus.common.course.BatchRequest;
+
 import edu.seu.vcampus.common.course.CourseActions;
 import edu.seu.vcampus.common.course.CourseInfo;
 import edu.seu.vcampus.common.course.OfferingInfo;
 import edu.seu.vcampus.common.course.ScheduleInfo;
-import edu.seu.vcampus.common.course.SelectionBatchInfo;
+
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.course.AdminUpdateOfferingRequest;
 import javax.swing.JCheckBox;
@@ -46,8 +46,7 @@ final class CourseAdminOfferingPanel
 
     private final ClientContext context;
 
-    private final JComboBox<BatchChoice> batchBox =
-        new JComboBox<>();
+
 
     private final JTextField keywordField =
         new JTextField(18);
@@ -68,7 +67,6 @@ final class CourseAdminOfferingPanel
     private final List<OfferingRow> allRows =
         new ArrayList<>();
 
-    private boolean updatingBatches;
 
     private final DefaultTableModel tableModel =
         new DefaultTableModel(
@@ -108,7 +106,7 @@ final class CourseAdminOfferingPanel
 
         initialiseView();
 
-        loadBatches();
+        loadOfferings();
     }
 
     private void initialiseView() {
@@ -153,7 +151,7 @@ final class CourseAdminOfferingPanel
 
         topPanel.add(
             CourseTheme.subtitle(
-                "按选课批次查看课程教学班、容量和当前状态"));
+                "查看课程教学班、容量和当前状态"));
 
         topPanel.add(
             Box.createVerticalStrut(
@@ -197,14 +195,7 @@ final class CourseAdminOfferingPanel
             statusLabel,
             BorderLayout.SOUTH);
 
-        batchBox.addActionListener(
-            event -> {
 
-                if (!updatingBatches) {
-
-                    loadOfferings();
-                }
-            });
 
         keywordField.addActionListener(
             event ->
@@ -244,17 +235,8 @@ final class CourseAdminOfferingPanel
                     4,
                     8)));
 
-        batchBox.setPreferredSize(
-            new Dimension(
-                300,
-                34));
 
-        panel.add(
-            new JLabel(
-                "选课批次："));
 
-        panel.add(
-            batchBox);
 
         panel.add(
             new JLabel(
@@ -357,151 +339,13 @@ final class CourseAdminOfferingPanel
             .setPreferredWidth(110);
     }
 
-    /**
-     * 加载选课批次。
-     */
-    private void loadBatches() {
-
-        batchBox.setEnabled(false);
-        reloadButton.setEnabled(false);
-
-        statusLabel.setText(
-            "正在加载选课批次...");
-
-        SwingWorker<Response, Void> worker =
-            new SwingWorker<>() {
-
-                @Override
-                protected Response doInBackground()
-                    throws Exception {
-
-                    return context.send(
-                        CourseActions.LIST_BATCHES,
-                        null);
-                }
-
-                @Override
-                protected void done() {
-
-                    try {
-
-                        Response response =
-                            get();
-
-                        if (!response.isSuccess()) {
-
-                            showError(
-                                response.getMessage());
-
-                            return;
-                        }
-
-                        if (!(response.getData()
-                            instanceof List<?> values)) {
-
-                            showError(
-                                "服务器返回的批次数据格式错误。");
-
-                            return;
-                        }
-
-                        updatingBatches =
-                            true;
-
-                        batchBox.removeAllItems();
-
-                        for (Object value : values) {
-
-                            if (!(value
-                                instanceof SelectionBatchInfo batch)) {
-
-                                showError(
-                                    "服务器返回的批次数据格式错误。");
-
-                                return;
-                            }
-
-                            batchBox.addItem(
-                                new BatchChoice(
-                                    batch.getBatchId(),
-                                    batch.getBatchName()
-                                        + "（"
-                                        + batch.getStatus()
-                                        + "）"));
-                        }
-
-                        if (batchBox.getItemCount()
-                            > 0) {
-
-                            batchBox.setSelectedIndex(
-                                0);
-                        }
-
-                        updatingBatches =
-                            false;
-
-                        boolean hasBatches =
-                            batchBox.getItemCount() > 0;
-
-                        batchBox.setEnabled(
-                            hasBatches);
-
-                        reloadButton.setEnabled(
-                            hasBatches);
-
-                        if (hasBatches) {
-
-                            loadOfferings();
-
-                        } else {
-
-                            statusLabel.setText(
-                                "当前没有选课批次。");
-                        }
-
-                    } catch (InterruptedException exception) {
-
-                        Thread.currentThread()
-                            .interrupt();
-
-                        showError(
-                            "加载选课批次被中断。");
-
-                    } catch (ExecutionException exception) {
-
-                        Throwable cause =
-                            exception.getCause();
-
-                        showError(
-                            "无法加载选课批次："
-                                + (cause == null
-                                ? exception.getMessage()
-                                : cause.getMessage()));
-
-                    } finally {
-
-                        updatingBatches =
-                            false;
-                    }
-                }
-            };
-
-        worker.execute();
-    }
 
     /**
      * 加载当前批次教学班。
      */
     private void loadOfferings() {
 
-        BatchChoice batch =
-            (BatchChoice)
-                batchBox.getSelectedItem();
 
-        if (batch == null) {
-
-            return;
-        }
 
         reloadButton.setEnabled(false);
         searchButton.setEnabled(false);
@@ -519,8 +363,7 @@ final class CourseAdminOfferingPanel
                     return context.send(
                         CourseActions
                             .ADMIN_LIST_OFFERINGS,
-                        new BatchRequest(
-                            batch.batchId()));
+                        null);
                 }
 
                 @Override
@@ -780,14 +623,7 @@ final class CourseAdminOfferingPanel
             return;
         }
 
-        BatchChoice batch =
-            (BatchChoice)
-                batchBox.getSelectedItem();
 
-        if (batch == null) {
-
-            return;
-        }
 
         int selectedModelRow =
             table.convertRowIndexToModel(
@@ -943,7 +779,7 @@ final class CourseAdminOfferingPanel
                 .intValue();
 
         submitOfferingUpdate(
-            batch.batchId(),
+
             offeringId,
             capacity,
             openCheckBox.isSelected(),
@@ -954,7 +790,7 @@ final class CourseAdminOfferingPanel
      * 提交教学班修改。
      */
     private void submitOfferingUpdate(
-        long batchId,
+
         long offeringId,
         int capacity,
         boolean open,
@@ -977,7 +813,7 @@ final class CourseAdminOfferingPanel
                         CourseActions
                             .ADMIN_UPDATE_OFFERING,
                         new AdminUpdateOfferingRequest(
-                            batchId,
+
                             offeringId,
                             capacity,
                             open,
@@ -1046,16 +882,7 @@ final class CourseAdminOfferingPanel
             message);
     }
 
-    private record BatchChoice(
-        long batchId,
-        String text) {
 
-        @Override
-        public String toString() {
-
-            return text;
-        }
-    }
 
     private record OfferingRow(
         long offeringId,

@@ -13,12 +13,18 @@ import java.util.Optional;
 
 /**
  * Access 课程基本信息设置仓库。
+ *
+ * 课程设置按照 courseId 全局保存，
+ * 与选课批次无关。
  */
 final class AccessCourseSettingsRepository
     implements CourseSettingsRepository {
 
     private static final String TABLE =
         "tblCourseSettings";
+
+    private static final String LEGACY_BATCH_COLUMN =
+        "sourceBatchId";
 
     private final AccessDatabase database;
 
@@ -32,21 +38,13 @@ final class AccessCourseSettingsRepository
         initialiseSchema();
     }
 
-    /**
-     * 查询课程基本信息设置。
-     *
-     * 课程信息按照 courseId 全局存储，
-     * 不按照选课批次隔离。
-     */
     @Override
     public Optional<CourseSettings> find(
-        long batchId,
         long courseId) {
 
         String sql =
-            "SELECT sourceBatchId, courseId, "
-                + "courseCode, courseName, "
-                + "credits, courseType "
+            "SELECT courseId, courseCode, "
+                + "courseName, credits, courseType "
                 + "FROM tblCourseSettings "
                 + "WHERE courseId = ?";
 
@@ -71,8 +69,6 @@ final class AccessCourseSettingsRepository
                 return Optional.of(
                     new CourseSettings(
                         result.getLong(
-                            "sourceBatchId"),
-                        result.getLong(
                             "courseId"),
                         result.getString(
                             "courseCode"),
@@ -92,15 +88,15 @@ final class AccessCourseSettingsRepository
         }
     }
 
-    /**
-     * 新增或更新课程基本信息设置。
-     */
     @Override
     public synchronized void save(
         CourseSettings settings) {
 
+        Objects.requireNonNull(
+            settings,
+            "settings must not be null");
+
         if (find(
-            settings.batchId(),
             settings.courseId())
             .isPresent()) {
 
@@ -114,50 +110,70 @@ final class AccessCourseSettingsRepository
         }
     }
 
-    /**
-     * 新增课程设置。
-     */
     private void insert(
         CourseSettings settings) {
 
-        String sql =
-            "INSERT INTO tblCourseSettings "
-                + "(sourceBatchId, courseId, "
-                + "courseCode, courseName, "
-                + "credits, courseType) "
-                + "VALUES (?, ?, ?, ?, ?, ?)";
-
         try (Connection connection =
-                 database.openConnection();
-             PreparedStatement statement =
-                 connection.prepareStatement(
-                     sql)) {
+                 database.openConnection()) {
 
-            statement.setLong(
-                1,
-                settings.batchId());
+            boolean legacySchema =
+                columnExists(
+                    connection,
+                    TABLE,
+                    LEGACY_BATCH_COLUMN);
 
-            statement.setLong(
-                2,
-                settings.courseId());
+            String sql =
+                legacySchema
+                    ? "INSERT INTO tblCourseSettings "
+                    + "(sourceBatchId, courseId, "
+                    + "courseCode, courseName, "
+                    + "credits, courseType) "
+                    + "VALUES (?, ?, ?, ?, ?, ?)"
+                    : "INSERT INTO tblCourseSettings "
+                    + "(courseId, courseCode, "
+                    + "courseName, credits, courseType) "
+                    + "VALUES (?, ?, ?, ?, ?)";
 
-            statement.setString(
-                3,
-                settings.courseCode());
+            try (PreparedStatement statement =
+                     connection.prepareStatement(
+                         sql)) {
 
-            statement.setString(
-                4,
-                settings.courseName());
+                int index =
+                    1;
 
-            statement.setDouble(
-                5,
-                settings.credits());
+                if (legacySchema) {
 
-            statement.setString(
-                6,
-                settings.courseType());
+                    /*
+                     * 仅兼容旧数据库的 NOT NULL 字段。
+                     * 该值不参与任何业务判断。
+                     */
+                    statement.setLong(
+                        index++,
+                        0L);
+                }
 
-            statement.executeUpdate();
+                statement.setLong(
+                    index++,
+                    settings.courseId());
+
+                statement.setString(
+                    index++,
+                    settings.courseCode());
+
+                statement.setString(
+                    index++,
+                    settings.courseName());
+
+                statement.setDouble(
+                    index++,
+                    settings.credits());
+
+                statement.setString(
+                    index,
+                    settings.courseType());
+
+                statement.executeUpdate();
+            }
 
         } catch (SQLException exception) {
 
@@ -167,16 +183,12 @@ final class AccessCourseSettingsRepository
         }
     }
 
-    /**
-     * 更新已有课程设置。
-     */
     private void update(
         CourseSettings settings) {
 
         String sql =
             "UPDATE tblCourseSettings "
-                + "SET sourceBatchId = ?, "
-                + "courseCode = ?, "
+                + "SET courseCode = ?, "
                 + "courseName = ?, "
                 + "credits = ?, "
                 + "courseType = ? "
@@ -188,28 +200,24 @@ final class AccessCourseSettingsRepository
                  connection.prepareStatement(
                      sql)) {
 
-            statement.setLong(
-                1,
-                settings.batchId());
-
             statement.setString(
-                2,
+                1,
                 settings.courseCode());
 
             statement.setString(
-                3,
+                2,
                 settings.courseName());
 
             statement.setDouble(
-                4,
+                3,
                 settings.credits());
 
             statement.setString(
-                5,
+                4,
                 settings.courseType());
 
             statement.setLong(
-                6,
+                5,
                 settings.courseId());
 
             statement.executeUpdate();
@@ -222,9 +230,6 @@ final class AccessCourseSettingsRepository
         }
     }
 
-    /**
-     * 初始化数据库表。
-     */
     private void initialiseSchema() {
 
         try (Connection connection =
@@ -242,7 +247,6 @@ final class AccessCourseSettingsRepository
 
                 statement.executeUpdate(
                     "CREATE TABLE tblCourseSettings ("
-                        + "sourceBatchId LONG NOT NULL, "
                         + "courseId LONG NOT NULL, "
                         + "courseCode TEXT(30) NOT NULL, "
                         + "courseName TEXT(100) NOT NULL, "
@@ -264,9 +268,6 @@ final class AccessCourseSettingsRepository
         }
     }
 
-    /**
-     * 判断数据表是否存在。
-     */
     private boolean tableExists(
         Connection connection,
         String expected)
@@ -287,6 +288,39 @@ final class AccessCourseSettingsRepository
                 if (expected.equalsIgnoreCase(
                     tables.getString(
                         "TABLE_NAME"))) {
+
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private boolean columnExists(
+        Connection connection,
+        String expectedTable,
+        String expectedColumn)
+        throws SQLException {
+
+        DatabaseMetaData metadata =
+            connection.getMetaData();
+
+        try (ResultSet columns =
+                 metadata.getColumns(
+                     null,
+                     null,
+                     "%",
+                     "%")) {
+
+            while (columns.next()) {
+
+                if (expectedTable.equalsIgnoreCase(
+                    columns.getString(
+                        "TABLE_NAME"))
+                    && expectedColumn.equalsIgnoreCase(
+                    columns.getString(
+                        "COLUMN_NAME"))) {
 
                     return true;
                 }

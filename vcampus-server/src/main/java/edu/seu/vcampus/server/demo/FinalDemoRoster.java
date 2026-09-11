@@ -87,6 +87,16 @@ public final class FinalDemoRoster {
             doctor("doctor-wang", "U-DOCTOR-009", "dept-general", "医师"),
             doctor("doctor-zhao", "U-DOCTOR-010", "dept-respiratory", "医师"));
 
+    private static final List<TeachingAssignmentSeed> TEACHING_ASSIGNMENTS = List.of(
+            teachingAssignment(1001L, "U-TEACHER-003"),
+            teachingAssignment(2001L, "U-TEACHER-007"),
+            teachingAssignment(3001L, "U-TEACHER-001"),
+            teachingAssignment(4001L, "U-TEACHER-002"),
+            teachingAssignment(6001L, "U-TEACHER-008"),
+            teachingAssignment(14001L, "U-TEACHER-005"),
+            teachingAssignment(15001L, "U-TEACHER-006"),
+            teachingAssignment(15002L, "U-TEACHER-004"));
+
     private FinalDemoRoster() {
     }
 
@@ -100,6 +110,10 @@ public final class FinalDemoRoster {
 
     public static List<DoctorSeed> doctors() {
         return DOCTORS;
+    }
+
+    public static List<TeachingAssignmentSeed> teachingAssignments() {
+        return TEACHING_ASSIGNMENTS;
     }
 
     public static List<AccountSeed> students() {
@@ -132,6 +146,10 @@ public final class FinalDemoRoster {
         return new DoctorSeed(doctorId, userId, departmentId, title);
     }
 
+    private static TeachingAssignmentSeed teachingAssignment(long offeringId, String teacherUserId) {
+        return new TeachingAssignmentSeed(offeringId, teacherUserId);
+    }
+
     public record AccountSeed(
             String userId,
             String campusCardNumber,
@@ -145,5 +163,8 @@ public final class FinalDemoRoster {
 
     public record DoctorSeed(
             String doctorId, String userId, String departmentId, String title) {
+    }
+
+    public record TeachingAssignmentSeed(long offeringId, String teacherUserId) {
     }
 }

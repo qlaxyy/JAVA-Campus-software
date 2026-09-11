@@ -252,7 +252,7 @@ final class InMemoryCoursePlanRepository
             3.0,
             "必修",
             false,
-            List.of(offering)
+            List.of()
         );
     }
 
@@ -341,7 +341,7 @@ final class InMemoryCoursePlanRepository
             3.0,
             "限选",
             false,
-            List.of(offering)
+            List.of()
         );
     }
 
@@ -385,7 +385,7 @@ final class InMemoryCoursePlanRepository
             2.5,
             "任选",
             false,
-            List.of(offering)
+            List.of()
         );
     }
 }

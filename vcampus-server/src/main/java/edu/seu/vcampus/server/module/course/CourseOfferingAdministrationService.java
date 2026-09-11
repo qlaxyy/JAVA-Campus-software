@@ -616,3 +616,29 @@ record CourseOfferingUpdateResult(
             message);
     }
 }
+
+/**
+ * 教学班新增结果。
+ */
+record CourseOfferingCreateResult(
+    boolean success,
+    String message,
+    long offeringId) {
+
+    static CourseOfferingCreateResult success(
+        String message,
+        long offeringId) {
+        return new CourseOfferingCreateResult(
+            true,
+            message,
+            offeringId);
+    }
+
+    static CourseOfferingCreateResult failure(
+        String message) {
+        return new CourseOfferingCreateResult(
+            false,
+            message,
+            0L);
+    }
+}

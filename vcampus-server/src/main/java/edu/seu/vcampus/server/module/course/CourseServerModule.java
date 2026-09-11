@@ -1,5 +1,6 @@
 package edu.seu.vcampus.server.module.course;
 import edu.seu.vcampus.common.course.AdminUpdateOfferingRequest;
+import edu.seu.vcampus.common.course.AdminCreateOfferingRequest;
 import edu.seu.vcampus.common.course.BatchRequest;
 import edu.seu.vcampus.common.course.CourseActions;
 import edu.seu.vcampus.common.course.DropCourseRequest;
@@ -915,6 +916,12 @@ public final class CourseServerModule
                     request,
                     context));
         router.register(
+            CourseActions.ADMIN_CREATE_OFFERING,
+            request ->
+                adminCreateOffering(
+                    request,
+                    context));
+        router.register(
             CourseActions.ADMIN_UPDATE_OFFERING,
             request ->
                 adminUpdateOffering(
@@ -1006,6 +1013,70 @@ public final class CourseServerModule
                     request,
                     context));
 
+    }
+
+    /**
+     * 教务为已有课程新建教学班。
+     */
+    private Response adminCreateOffering(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session = context.sessions()
+            .findSession(request.getToken())
+            .orElse(null);
+
+        if (session == null) {
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+        if (!session.canAdminister(ModuleNames.COURSE)) {
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "没有选课管理权限。");
+        }
+        if (!(request.getData()
+            instanceof AdminCreateOfferingRequest
+            createRequest)) {
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "教学班新增请求无效。");
+        }
+
+        CourseOfferingCreateResult result =
+            offeringAdministrationService.createOffering(
+                createRequest.getBatchId(),
+                createRequest.getCourseId(),
+                createRequest.getClassNo(),
+                createRequest.getLocationName(),
+                createRequest.getCampusName(),
+                createRequest.getTeachingLanguage(),
+                createRequest.getCapacity(),
+                createRequest.getSchedule());
+
+        if (!result.success()) {
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                result.message());
+        }
+
+        adminAuditService.recordCreateOffering(
+            session.getUsername(),
+            createRequest.getBatchId(),
+            result.offeringId(),
+            createRequest.getCourseId(),
+            createRequest.getClassNo(),
+            createRequest.getReason());
+
+        return Response.success(
+            request,
+            result.message(),
+            result.offeringId());
     }
     /**
      * 教师查询本人教学班的成绩比例。

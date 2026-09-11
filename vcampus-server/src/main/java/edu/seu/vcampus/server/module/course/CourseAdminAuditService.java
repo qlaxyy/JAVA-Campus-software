@@ -223,6 +223,33 @@ final class CourseAdminAuditService {
             details);
     }
     /**
+     * 记录新增教学班。
+     */
+    synchronized void recordCreateOffering(
+        String operatorUsername,
+        long batchId,
+        long offeringId,
+        long courseId,
+        String classNo,
+        String reason) {
+
+        String details = optionalText(reason)
+            + "；课程ID="
+            + courseId
+            + "；班号="
+            + requiredText(classNo, "classNo");
+
+        append(
+            operatorUsername,
+            "-",
+            CourseAdminOperationType.CREATE_OFFERING,
+            batchId,
+            offeringId,
+            null,
+            details);
+    }
+
+    /**
      * 记录课程基本信息修改。
      */
     synchronized void recordUpdateCourse(
@@ -393,6 +420,7 @@ enum CourseAdminOperationType {
 
     FORCE_SELECT,
     FORCE_DROP,
+    CREATE_OFFERING,
     UPDATE_OFFERING,
     UPDATE_COURSE,
     UPDATE_BATCH,

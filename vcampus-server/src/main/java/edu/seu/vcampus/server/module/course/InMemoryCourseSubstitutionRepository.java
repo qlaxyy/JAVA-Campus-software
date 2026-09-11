@@ -114,10 +114,7 @@ final class InMemoryCourseSubstitutionRepository
             "任选",
             "数学学院",
             false,
-            List.of(
-                firstOffering,
-                secondOffering
-            )
+            List.of()
         );
     }
 }

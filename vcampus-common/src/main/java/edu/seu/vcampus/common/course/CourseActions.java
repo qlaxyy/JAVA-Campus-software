@@ -7,6 +7,11 @@ import edu.seu.vcampus.common.protocol.ModuleNames;
  * 选课模块公开 Action。
  */
 public final class CourseActions {
+    /** 教务为已有课程新建教学班。 */
+    public static final String ADMIN_CREATE_OFFERING =
+        ActionNames.of(
+            ModuleNames.COURSE,
+            "ADMIN_CREATE_OFFERING");
     public static final String ADMIN_UPDATE_OFFERING =
         ActionNames.of(
             ModuleNames.COURSE,

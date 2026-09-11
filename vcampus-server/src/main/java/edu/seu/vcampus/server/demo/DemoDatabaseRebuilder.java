@@ -118,7 +118,7 @@ public final class DemoDatabaseRebuilder {
     }
 
     private static void normalizeCourseData(Path databasePath) {
-        long[] offerings = {1001L, 2001L, 3001L, 9001L, 14001L, 15002L, 14003L, 15001L};
+        var assignments = FinalDemoRoster.teachingAssignments();
         AccessDatabase database = new AccessDatabase(databasePath);
         try (Connection connection = database.openConnection()) {
             connection.setAutoCommit(false);
@@ -131,20 +131,15 @@ public final class DemoDatabaseRebuilder {
                     statement.executeUpdate("UPDATE tblCatalogOffering SET selectedCount = 0");
                 }
                 try (PreparedStatement assignment = connection.prepareStatement(
-                        "INSERT INTO tblOfferingTeacher (offeringId, teacherUserId, teacherName) VALUES (?, ?, ?)");
-                     PreparedStatement catalogName = connection.prepareStatement(
-                        "UPDATE tblCatalogTeacher SET teacherName = ? WHERE offeringId = ?")) {
-                    for (int index = 0; index < offerings.length; index++) {
-                        String teacherUserId = "U-TEACHER-" + String.format("%03d", index + 1);
-                        String name = FinalDemoRoster.displayName(teacherUserId);
-                        assignment.setLong(1, offerings[index]);
-                        assignment.setString(2, teacherUserId);
+                        "INSERT INTO tblOfferingTeacher (offeringId, teacherUserId, teacherName) VALUES (?, ?, ?)")) {
+                    for (FinalDemoRoster.TeachingAssignmentSeed seed : assignments) {
+                        String name = FinalDemoRoster.displayName(seed.teacherUserId());
+                        assignment.setLong(1, seed.offeringId());
+                        assignment.setString(2, seed.teacherUserId());
                         assignment.setString(3, name);
                         assignment.addBatch();
-                        catalogName.setString(1, name); catalogName.setLong(2, offerings[index]); catalogName.addBatch();
                     }
                     assignment.executeBatch();
-                    catalogName.executeBatch();
                 }
                 try (PreparedStatement enrollment = connection.prepareStatement(
                         "INSERT INTO tblEnrollment (userId, studentId, selectedBatchId, offeringId, "
@@ -155,7 +150,7 @@ public final class DemoDatabaseRebuilder {
                                 + "VALUES (?, ?, ?, ?, ?)")) {
                     for (int index = 0; index < FinalDemoRoster.students().size(); index++) {
                         FinalDemoRoster.AccountSeed student = FinalDemoRoster.students().get(index);
-                        long offeringId = offerings[index % offerings.length];
+                        long offeringId = assignments.get(index % assignments.size()).offeringId();
                         enrollment.setString(1, student.userId());
                         enrollment.setString(2, student.campusCardNumber());
                         enrollment.setLong(3, offeringId);
@@ -211,7 +206,11 @@ public final class DemoDatabaseRebuilder {
             requireCount(connection, "SELECT COUNT(*) FROM tblStudentProfile", 15, "student profiles");
             requireCount(connection, "SELECT COUNT(*) FROM tblHospitalDoctor WHERE active = TRUE", 10, "doctors");
             requireCount(connection, "SELECT COUNT(*) FROM tblCampusCard", 39, "campus cards");
+            requireCount(connection, "SELECT COUNT(*) FROM tblCourse", 18, "course catalogue entries");
+            requireCount(connection, "SELECT COUNT(*) FROM tblCourseOffering", 8, "open teaching classes");
             requireCount(connection, "SELECT COUNT(*) FROM tblOfferingTeacher WHERE teacherUserId IS NOT NULL", 8, "teaching assignments");
+            requireCount(connection, "SELECT COUNT(*) FROM tblCourseOffering o LEFT JOIN tblOfferingTeacher a "
+                    + "ON o.offeringId = a.offeringId WHERE a.offeringId IS NULL", 0, "teaching classes without teachers");
             requireCount(connection, "SELECT COUNT(*) FROM tblEnrollment WHERE enrollmentStatus = 'SELECTED'", 15, "demo enrollments");
             requireCount(connection, "SELECT COUNT(*) FROM tblBook", 5, "book titles");
             requireCount(connection, "SELECT COUNT(*) FROM tblBookCopy", 20, "book copies");

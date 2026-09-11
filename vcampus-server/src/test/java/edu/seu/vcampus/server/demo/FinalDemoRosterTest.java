@@ -23,5 +23,16 @@ class FinalDemoRosterTest {
                 FinalDemoRoster.students().stream()
                         .map(FinalDemoRoster.AccountSeed::displayName)
                         .toList());
+
+        assertEquals(List.of(
+                        1001L, 2001L, 3001L, 4001L,
+                        6001L, 14001L, 15001L, 15002L),
+                FinalDemoRoster.teachingAssignments().stream()
+                        .map(FinalDemoRoster.TeachingAssignmentSeed::offeringId)
+                        .toList());
+        assertEquals(8, FinalDemoRoster.teachingAssignments().stream()
+                .map(FinalDemoRoster.TeachingAssignmentSeed::teacherUserId)
+                .distinct()
+                .count());
     }
 }

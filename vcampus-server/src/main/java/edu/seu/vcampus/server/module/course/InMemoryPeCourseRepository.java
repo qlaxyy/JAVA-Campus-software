@@ -125,9 +125,7 @@ final class InMemoryPeCourseRepository
                 1.0,
                 "任选",
                 false,
-                List.of(
-                    offering
-                )
+                List.of()
             );
 
         PeOfferingRule rule =
@@ -143,9 +141,7 @@ final class InMemoryPeCourseRepository
         return new PeCourseRecord(
             course,
             "瑜伽",
-            List.of(
-                rule
-            )
+            List.of()
         );
     }
 
@@ -195,9 +191,7 @@ final class InMemoryPeCourseRepository
                 "任选",
                 "体育系",
                 false,
-                List.of(
-                    offering
-                )
+                List.of()
             );
 
         PeOfferingRule rule =
@@ -213,9 +207,7 @@ final class InMemoryPeCourseRepository
         return new PeCourseRecord(
             course,
             "羽毛球",
-            List.of(
-                rule
-            )
+            List.of()
         );
     }
 
@@ -260,9 +252,7 @@ final class InMemoryPeCourseRepository
                 1.0,
                 "任选",
                 false,
-                List.of(
-                    offering
-                )
+                List.of()
             );
 
         PeOfferingRule rule =
@@ -278,9 +268,7 @@ final class InMemoryPeCourseRepository
         return new PeCourseRecord(
             course,
             "保健班",
-            List.of(
-                rule
-            )
+            List.of()
         );
     }
 }

@@ -9,6 +9,7 @@ import edu.seu.vcampus.common.course.ScheduleInfo;
 
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.course.AdminUpdateOfferingRequest;
+import edu.seu.vcampus.common.course.AdminCreateOfferingRequest;
 import javax.swing.JCheckBox;
 import javax.swing.JOptionPane;
 import javax.swing.JSpinner;
@@ -58,6 +59,9 @@ final class CourseAdminOfferingPanel
     private final JButton reloadButton =
         CourseTheme.primaryButton(
             "刷新");
+    private final JButton createButton =
+        CourseTheme.primaryButton(
+            "新增教学班");
     private final JButton editButton =
         CourseTheme.primaryButton(
             "修改选中教学班");
@@ -209,6 +213,10 @@ final class CourseAdminOfferingPanel
             event ->
                 loadOfferings());
 
+        createButton.addActionListener(
+            event ->
+                createOffering());
+
         editButton.addActionListener(
             event ->
                 editSelectedOffering());
@@ -250,6 +258,8 @@ final class CourseAdminOfferingPanel
 
         panel.add(
             reloadButton);
+        panel.add(
+            createButton);
         panel.add(
             editButton);
         return panel;
@@ -431,6 +441,7 @@ final class CourseAdminOfferingPanel
         }
 
         allRows.clear();
+        allCourses.clear();
 
         for (Object value : values) {
 
@@ -440,6 +451,12 @@ final class CourseAdminOfferingPanel
                 throw new IllegalStateException(
                     "服务器返回的教学班数据格式错误。");
             }
+
+            allCourses.add(
+                new CourseChoice(
+                    course.getCourseId(),
+                    course.getCourseCode(),
+                    course.getCourseName()));
 
             for (OfferingInfo offering
                 : course.getOfferings()) {
@@ -603,6 +620,194 @@ final class CourseAdminOfferingPanel
             || value.isBlank()
             ? "未安排"
             : value;
+    }
+
+    /**
+     * 打开新增教学班窗口。
+     */
+    private void createOffering() {
+
+        BatchChoice batch =
+            (BatchChoice) batchBox.getSelectedItem();
+
+        if (batch == null || allCourses.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                this,
+                "当前没有可用的选课批次或课程。",
+                "无法新增",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        JComboBox<CourseChoice> courseBox =
+            new JComboBox<>(
+                allCourses.toArray(
+                    CourseChoice[]::new));
+        JTextField classNoField = new JTextField("01");
+        JTextField locationField = new JTextField("教一-101");
+        JTextField campusField = new JTextField("九龙湖校区");
+        JTextField languageField = new JTextField("中文");
+        JSpinner capacitySpinner = new JSpinner(
+            new SpinnerNumberModel(30, 1, 10000, 1));
+        JComboBox<String> dayBox = new JComboBox<>(
+            new String[]{
+                "周一", "周二", "周三", "周四",
+                "周五", "周六", "周日"
+            });
+        JSpinner startPeriodSpinner = new JSpinner(
+            new SpinnerNumberModel(1, 1, 20, 1));
+        JSpinner endPeriodSpinner = new JSpinner(
+            new SpinnerNumberModel(2, 1, 20, 1));
+        JSpinner startWeekSpinner = new JSpinner(
+            new SpinnerNumberModel(1, 1, 30, 1));
+        JSpinner endWeekSpinner = new JSpinner(
+            new SpinnerNumberModel(16, 1, 30, 1));
+        JTextField reasonField = new JTextField("教学安排");
+
+        JPanel form = new JPanel(
+            new GridLayout(0, 2, 10, 10));
+        form.add(new JLabel("课程："));
+        form.add(courseBox);
+        form.add(new JLabel("教学班班号："));
+        form.add(classNoField);
+        form.add(new JLabel("容量："));
+        form.add(capacitySpinner);
+        form.add(new JLabel("校区："));
+        form.add(campusField);
+        form.add(new JLabel("地点："));
+        form.add(locationField);
+        form.add(new JLabel("授课语言："));
+        form.add(languageField);
+        form.add(new JLabel("星期："));
+        form.add(dayBox);
+        form.add(new JLabel("开始节次："));
+        form.add(startPeriodSpinner);
+        form.add(new JLabel("结束节次："));
+        form.add(endPeriodSpinner);
+        form.add(new JLabel("开始周："));
+        form.add(startWeekSpinner);
+        form.add(new JLabel("结束周："));
+        form.add(endWeekSpinner);
+        form.add(new JLabel("新增原因："));
+        form.add(reasonField);
+
+        int result = JOptionPane.showConfirmDialog(
+            this,
+            form,
+            "新增教学班",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.PLAIN_MESSAGE);
+
+        if (result != JOptionPane.OK_OPTION) {
+            return;
+        }
+
+        CourseChoice course =
+            (CourseChoice) courseBox.getSelectedItem();
+        if (course == null) {
+            return;
+        }
+
+        int startPeriod = ((Number)
+            startPeriodSpinner.getValue()).intValue();
+        int endPeriod = ((Number)
+            endPeriodSpinner.getValue()).intValue();
+        int startWeek = ((Number)
+            startWeekSpinner.getValue()).intValue();
+        int endWeek = ((Number)
+            endWeekSpinner.getValue()).intValue();
+
+        if (classNoField.getText().isBlank()
+            || locationField.getText().isBlank()
+            || campusField.getText().isBlank()
+            || languageField.getText().isBlank()
+            || reasonField.getText().isBlank()) {
+            JOptionPane.showMessageDialog(
+                this,
+                "请完整填写教学班信息。",
+                "输入不完整",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (endPeriod < startPeriod
+            || endWeek < startWeek) {
+            JOptionPane.showMessageDialog(
+                this,
+                "结束节次和结束周不能早于开始值。",
+                "时间设置错误",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        AdminCreateOfferingRequest request =
+            new AdminCreateOfferingRequest(
+                batch.batchId(),
+                course.courseId(),
+                classNoField.getText(),
+                locationField.getText(),
+                campusField.getText(),
+                languageField.getText(),
+                ((Number) capacitySpinner.getValue())
+                    .intValue(),
+                new ScheduleInfo(
+                    dayBox.getSelectedIndex() + 1,
+                    startPeriod,
+                    endPeriod,
+                    startWeek,
+                    endWeek,
+                    "EVERY"),
+                reasonField.getText());
+
+        submitOfferingCreate(request);
+    }
+
+    private void submitOfferingCreate(
+        AdminCreateOfferingRequest request) {
+
+        createButton.setEnabled(false);
+        statusLabel.setText("正在新增教学班...");
+
+        SwingWorker<Response, Void> worker =
+            new SwingWorker<>() {
+                @Override
+                protected Response doInBackground()
+                    throws Exception {
+                    return context.send(
+                        CourseActions.ADMIN_CREATE_OFFERING,
+                        request);
+                }
+
+                @Override
+                protected void done() {
+                    createButton.setEnabled(true);
+                    try {
+                        Response response = get();
+                        JOptionPane.showMessageDialog(
+                            CourseAdminOfferingPanel.this,
+                            response.getMessage(),
+                            response.isSuccess()
+                                ? "新增成功"
+                                : "新增失败",
+                            response.isSuccess()
+                                ? JOptionPane.INFORMATION_MESSAGE
+                                : JOptionPane.WARNING_MESSAGE);
+                        if (response.isSuccess()) {
+                            loadOfferings();
+                        }
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                        showError("新增教学班被中断。");
+                    } catch (ExecutionException exception) {
+                        Throwable cause = exception.getCause();
+                        showError(
+                            "无法新增教学班："
+                                + (cause == null
+                                ? exception.getMessage()
+                                : cause.getMessage()));
+                    }
+                }
+            };
+        worker.execute();
     }
     /**
      * 打开教学班修改窗口。
@@ -883,6 +1088,17 @@ final class CourseAdminOfferingPanel
     }
 
 
+
+    private record CourseChoice(
+        long courseId,
+        String courseCode,
+        String courseName) {
+
+        @Override
+        public String toString() {
+            return courseCode + "  " + courseName;
+        }
+    }
 
     private record OfferingRow(
         long offeringId,

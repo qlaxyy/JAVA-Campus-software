@@ -167,9 +167,7 @@ final class InMemoryGeneralCourseRepository
                 2.0,
                 "任选",
                 false,
-                List.of(
-                    offering
-                )
+                List.of()
             );
 
         return new GeneralCourseRecord(
@@ -218,9 +216,7 @@ final class InMemoryGeneralCourseRepository
                 2.0,
                 "任选",
                 false,
-                List.of(
-                    offering
-                )
+                List.of()
             );
 
         return new GeneralCourseRecord(
@@ -272,9 +268,7 @@ final class InMemoryGeneralCourseRepository
                 2.0,
                 "任选",
                 false,
-                List.of(
-                    offering
-                )
+                List.of()
             );
 
         return new GeneralCourseRecord(

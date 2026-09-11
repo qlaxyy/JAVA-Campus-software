@@ -14,16 +14,15 @@ final class InMemoryCourseTeacherAssignmentRepository
         ConcurrentHashMap.newKeySet();
 
     InMemoryCourseTeacherAssignmentRepository() {
-
-        long[] offeringIds = {
-            1001L, 2001L, 3001L, 9001L,
-            14001L, 15002L, 14003L, 15001L
-        };
-        for (int index = 0; index < offeringIds.length; index++) {
-            assignments.add(new Assignment(
-                offeringIds[index],
-                "U-TEACHER-" + String.format("%03d", index + 1)));
-        }
+        assignments.addAll(List.of(
+            new Assignment(1001L, "U-TEACHER-003"),
+            new Assignment(2001L, "U-TEACHER-007"),
+            new Assignment(3001L, "U-TEACHER-001"),
+            new Assignment(4001L, "U-TEACHER-002"),
+            new Assignment(6001L, "U-TEACHER-008"),
+            new Assignment(14001L, "U-TEACHER-005"),
+            new Assignment(15001L, "U-TEACHER-006"),
+            new Assignment(15002L, "U-TEACHER-004")));
     }
 
     @Override

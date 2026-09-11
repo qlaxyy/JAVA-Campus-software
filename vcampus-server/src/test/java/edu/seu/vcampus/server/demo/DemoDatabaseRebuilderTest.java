@@ -1,5 +1,6 @@
 package edu.seu.vcampus.server.demo;
 
+import edu.seu.vcampus.server.module.ServerModules;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -25,6 +26,10 @@ class DemoDatabaseRebuilderTest {
         assertNotNull(result.backupPath());
         assertTrue(Files.exists(result.backupPath()));
         assertEquals(previousDatabase.length, Files.size(result.backupPath()));
+        DemoDatabaseRebuilder.validate(database);
+
+        // A normal server startup must not restore obsolete hospital seed links.
+        ServerModules.createPersistentRouter(database);
         DemoDatabaseRebuilder.validate(database);
     }
 }

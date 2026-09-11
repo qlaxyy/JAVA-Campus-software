@@ -42,7 +42,7 @@ class AccessHospitalRepositoryTest {
         AccessHospitalRepository first = repository(path);
 
         assertEquals(15, first.findActiveDepartments().size());
-        assertEquals(14, first.findSlots(
+        assertEquals(16, first.findSlots(
                 LocalDate.of(2026, 9, 4), LocalDate.of(2026, 9, 11)).size());
         assertEquals("doctor-chen",
                 first.findActiveDoctorByUserId("U-DOCTOR-001")
@@ -131,7 +131,7 @@ class AccessHospitalRepositoryTest {
 
         AccessHospitalRepository afterPublish = repository(path);
         assertEquals(10, afterPublish.findActiveDoctors().size());
-        assertEquals(15, afterPublish.findAllSlots().size());
+        assertEquals(17, afterPublish.findAllSlots().size());
         assertEquals(true, afterPublish.findSlotById(draft.scheduleId())
                 .orElseThrow().published());
     }

@@ -41,7 +41,7 @@ public final class DemoDatabaseRebuilder {
             Path temporary = parent.resolve("vCampus-rebuild-" + UUID.randomUUID() + ".accdb");
             try {
                 ServerModules.createPersistentRouter(temporary);
-                normalizeDoctors(temporary);
+                normalizeHospitalData(temporary);
                 normalizeCourseData(temporary);
                 appendInitializationAudit(temporary);
                 validate(temporary);
@@ -54,11 +54,20 @@ public final class DemoDatabaseRebuilder {
         }
     }
 
-    private static void normalizeDoctors(Path databasePath) {
+    private static void normalizeHospitalData(Path databasePath) {
         AccessDatabase database = new AccessDatabase(databasePath);
         try (Connection connection = database.openConnection()) {
             connection.setAutoCommit(false);
             try {
+                // Preserve the two eye-clinic demonstration slots while replacing
+                // their removed legacy doctor with the final eye doctor. Keeping
+                // the schedule ids makes normal startup seeding idempotent.
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "UPDATE tblHospitalSchedule SET doctorId = ? WHERE doctorId = ?")) {
+                    statement.setString(1, "doctor-zhang");
+                    statement.setString(2, "doctor-sun");
+                    statement.executeUpdate();
+                }
                 for (FinalDemoRoster.DoctorSeed doctor : FinalDemoRoster.doctors()) {
                     try (PreparedStatement update = connection.prepareStatement(
                             "UPDATE tblHospitalDoctor SET userId = ?, departmentId = ?, doctorName = ?, "
@@ -85,6 +94,7 @@ public final class DemoDatabaseRebuilder {
                     deleteSchedules.setString(1, "doctor-sun"); deleteSchedules.executeUpdate();
                     deleteDoctor.setString(1, "doctor-sun"); deleteDoctor.executeUpdate();
                 }
+                normalizeHospitalPatients(connection);
                 connection.commit();
             } catch (SQLException | RuntimeException exception) {
                 connection.rollback();
@@ -92,6 +102,44 @@ public final class DemoDatabaseRebuilder {
             }
         } catch (SQLException exception) {
             throw new IllegalStateException("Cannot normalize final hospital data.", exception);
+        }
+    }
+
+    private static void normalizeHospitalPatients(Connection connection) throws SQLException {
+        // The original hospital demonstration data used synthetic patients.
+        // Map all of them to the final student roster so every medical record
+        // refers to an account that can actually log in during the demo.
+        for (int index = 1; index <= 4; index++) {
+            replaceHospitalPatientUserId(
+                    connection,
+                    "U-DEMO-PATIENT-" + String.format("%03d", index),
+                    "U-STUDENT-" + String.format("%03d", index + 1));
+        }
+        for (int index = 101; index <= 110; index++) {
+            replaceHospitalPatientUserId(
+                    connection,
+                    "U-DEMO-PATIENT-" + index,
+                    "U-STUDENT-" + String.format("%03d", index - 95));
+        }
+    }
+
+    private static void replaceHospitalPatientUserId(
+            Connection connection, String previousUserId, String finalUserId) throws SQLException {
+        String[] tables = {
+                "tblHospitalPatientProfile",
+                "tblHospitalEpisode",
+                "tblHospitalAppointment",
+                "tblHospitalBill",
+                "tblHospitalConsultation",
+                "tblHospitalExaminationOrder"
+        };
+        for (String table : tables) {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE " + table + " SET patientUserId = ? WHERE patientUserId = ?")) {
+                statement.setString(1, finalUserId);
+                statement.setString(2, previousUserId);
+                statement.executeUpdate();
+            }
         }
     }
 
@@ -224,6 +272,23 @@ public final class DemoDatabaseRebuilder {
                     + "ON s.userId = u.userId WHERE u.userId IS NULL", 0, "orphan students");
             requireCount(connection, "SELECT COUNT(*) FROM tblHospitalDoctor d LEFT JOIN tblUser u "
                     + "ON d.userId = u.userId WHERE u.userId IS NULL", 0, "orphan doctors");
+            requireCount(connection, "SELECT COUNT(*) FROM tblHospitalSchedule s LEFT JOIN tblHospitalDoctor d "
+                    + "ON s.doctorId = d.doctorId WHERE d.doctorId IS NULL", 0, "orphan hospital schedules");
+            requireCount(connection, "SELECT COUNT(*) FROM tblHospitalSchedule s INNER JOIN tblHospitalDoctor d "
+                    + "ON s.doctorId = d.doctorId WHERE s.departmentId <> d.departmentId OR d.active = FALSE",
+                    0, "invalid hospital schedule assignments");
+            requireCount(connection, "SELECT COUNT(*) FROM tblHospitalPatientProfile p LEFT JOIN tblUser u "
+                    + "ON p.patientUserId = u.userId WHERE u.userId IS NULL", 0, "orphan patient profiles");
+            requireCount(connection, "SELECT COUNT(*) FROM tblHospitalEpisode e LEFT JOIN tblUser u "
+                    + "ON e.patientUserId = u.userId WHERE u.userId IS NULL", 0, "orphan hospital episodes");
+            requireCount(connection, "SELECT COUNT(*) FROM tblHospitalAppointment a LEFT JOIN tblUser u "
+                    + "ON a.patientUserId = u.userId WHERE u.userId IS NULL", 0, "orphan hospital appointments");
+            requireCount(connection, "SELECT COUNT(*) FROM tblHospitalBill b LEFT JOIN tblUser u "
+                    + "ON b.patientUserId = u.userId WHERE u.userId IS NULL", 0, "orphan hospital bills");
+            requireCount(connection, "SELECT COUNT(*) FROM tblHospitalConsultation c LEFT JOIN tblUser u "
+                    + "ON c.patientUserId = u.userId WHERE u.userId IS NULL", 0, "orphan hospital consultations");
+            requireCount(connection, "SELECT COUNT(*) FROM tblHospitalExaminationOrder e LEFT JOIN tblUser u "
+                    + "ON e.patientUserId = u.userId WHERE u.userId IS NULL", 0, "orphan examination orders");
             requireCount(connection, "SELECT COUNT(*) FROM tblOfferingTeacher a LEFT JOIN tblTeacherProfile t "
                     + "ON a.teacherUserId = t.teacherUserId WHERE t.teacherUserId IS NULL OR t.active = FALSE", 0, "invalid teaching assignments");
             requireCount(connection, "SELECT COUNT(*) FROM tblEnrollment e LEFT JOIN tblUser u "

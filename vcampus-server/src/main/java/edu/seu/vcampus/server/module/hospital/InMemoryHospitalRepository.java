@@ -121,9 +121,9 @@ final class InMemoryHospitalRepository implements HospitalRepository {
                         "无长期用药（演示）",
                         "校园联系人 000-0000（演示）",
                         profileUpdatedAt));
-        patientProfiles.put("U-DEMO-PATIENT-001",
+        patientProfiles.put("U-STUDENT-002",
                 new HospitalPatientProfile(
-                        "U-DEMO-PATIENT-001",
+                        "U-STUDENT-002",
                         "A型（演示）",
                         "青霉素过敏（虚构）",
                         "季节性鼻炎（虚构）",
@@ -174,14 +174,14 @@ final class InMemoryHospitalRepository implements HospitalRepository {
                         "doctor-zhao", "赵医生", "主治医师",
                         today.plusDays(6), 13, 30, 1_500, 8, 1, true),
                 slot("slot-eye-1", "dept-eye", "眼科门诊",
-                        "doctor-sun", "孙医生", "主任医师",
+                        "doctor-zhang", "林川", "主治医师",
                         today.plusDays(5), 8, 30, 2_200, 10, 6, true),
                 slot("slot-eye-closed", "dept-eye", "眼科门诊",
-                        "doctor-sun", "孙医生", "主任医师",
+                        "doctor-zhang", "林川", "主治医师",
                         today.plusDays(3), 8, 30, 2_200, 10, 1, false)));
         LocalDateTime seededAt = LocalDateTime.now(clock).minusDays(1);
-        seedBookings("slot-general-1", 4, 1_200, 1, seededAt);
-        seedBookings("slot-general-2", 10, 1_200, 101, seededAt);
+        seedBookings("slot-general-1", 4, 1_200, 2, seededAt);
+        seedBookings("slot-general-2", 10, 1_200, 6, seededAt);
     }
 
     @Override
@@ -805,7 +805,7 @@ final class InMemoryHospitalRepository implements HospitalRepository {
             String billId = "seed-bill-" + suffix;
             HospitalAppointment appointment = new HospitalAppointment(
                     appointmentId,
-                    "U-DEMO-PATIENT-" + String.format("%03d", patientNumber),
+                    "U-STUDENT-" + String.format("%03d", patientNumber),
                     scheduleId,
                     queueNumber,
                     createdAt.plusMinutes(queueNumber),

@@ -76,15 +76,18 @@
 
 当前已选人数不保存为字段，由 `tblEnrollment` 动态统计。
 
----
-
 ### `tblOfferingTeacher`
 
-| 字段                  | Access 类型      | 必填 | 默认值  | 说明     |
-| ------------------- | -------------- | -- | ---- | ------ |
-| `offeringTeacherId` | Long Integer   | 是  | 自动编号 | 主键     |
-| `offeringId`        | Long Integer   | 是  | 无    | 对应教学班  |
-| `teacherName`       | Short Text(50) | 是  | 无    | 任课教师姓名 |
+| 字段 | Access 类型 | 必填 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `offeringTeacherId` | Long Integer | 是 | 自动编号 | 主键 |
+| `offeringId` | Long Integer | 是 | 无 | 对应教学班 |
+| `teacherUserId` | Short Text(64) | 否 | 无 | 公共教师档案的稳定 userId |
+| `teacherName` | Short Text(50) | 否 | 无 | 兼容旧数据及页面显示，不作为关联字段 |
+
+新建任课关系必须保存 `teacherUserId`。旧数据中的 `teacherUserId` 可以暂时为空。
+
+同一 `(offeringId, teacherUserId)` 不允许重复。由于 Access 对可空字段唯一索引的兼容问题，目前由 `CourseTeacherAssignmentRepository.assign()` 执行业务唯一性检查。
 
 ---
 
@@ -228,7 +231,7 @@
 * `tblEnrollment.offeringId` → `tblCourseOffering.offeringId`
 * `tblEnrollment.studentId` → 学生模块学生主键
 * `tblGrade.enrollmentId` → `tblEnrollment.enrollmentId`
-
+* `tblOfferingTeacher.teacherUserId` → 用户模块公共教师档案的 `userId`
 ### 4.2 唯一索引
 
 * `tblCourse.courseCode`
@@ -238,7 +241,7 @@
 * `tblCampus.campusCode`
 * `tblTeachingLocation(campusId, locationName)`
 * `tblTrainingPlanCourse(planId, courseId)`
-
+* `tblOfferingTeacher(offeringId, teacherUserId)`：由服务器 Repository 保证业务唯一
 ### 4.3 普通索引
 
 * `tblCourseOffering.courseId`

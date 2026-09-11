@@ -13,7 +13,8 @@ import java.util.Objects;
  * 教师端课程业务。
  */
 final class CourseTeacherService {
-
+    private final CourseTeacherAssignmentRepository
+        assignmentRepository;
     private final CourseOfferingAdministrationService
         offeringAdministrationService;
 
@@ -24,7 +25,9 @@ final class CourseTeacherService {
         CourseOfferingAdministrationService
             offeringAdministrationService,
         CourseEnrollmentRepository
-            enrollmentRepository) {
+            enrollmentRepository,
+        CourseTeacherAssignmentRepository
+            assignmentRepository) {
 
         this.offeringAdministrationService =
             Objects.requireNonNull(
@@ -33,8 +36,15 @@ final class CourseTeacherService {
         this.enrollmentRepository =
             Objects.requireNonNull(
                 enrollmentRepository);
+
+        this.assignmentRepository =
+            Objects.requireNonNull(
+                assignmentRepository);
     }
 
+    /**
+     * 判断教师是否负责指定教学班。
+     */
     /**
      * 判断教师是否负责指定教学班。
      */
@@ -42,10 +52,9 @@ final class CourseTeacherService {
         String userId,
         long offeringId) {
 
-        return TemporaryCourseTeacherAssignmentDirectory
-            .isAssignedToOffering(
-                userId,
-                offeringId);
+        return assignmentRepository.isAssigned(
+            userId,
+            offeringId);
     }
 
     /**
@@ -164,5 +173,80 @@ final class CourseTeacherService {
             userId,
             record.offeringId());
     }
+    /**
+     * 查询教学班绑定的教师 userId。
+     */
+    List<String> listTeacherUserIds(
+        long offeringId) {
 
+        return assignmentRepository
+            .findTeacherUserIds(
+                offeringId);
+    }
+
+    /**
+     * 给教学班分配教师。
+     */
+    boolean assignTeacher(
+        long offeringId,
+        String teacherUserId,
+        String teacherName) {
+
+        return assignmentRepository.assign(
+            offeringId,
+            teacherUserId,
+            teacherName);
+    }
+
+    /**
+     * 移除教学班任课教师。
+     */
+    boolean removeTeacher(
+        long offeringId,
+        String teacherUserId) {
+
+        return assignmentRepository.remove(
+            offeringId,
+            teacherUserId);
+    }
+    /**
+     * 判断学生是否属于教师负责的任一教学班。
+     */
+    boolean canViewStudent(
+        String teacherUserId,
+        String studentId) {
+
+        if (teacherUserId == null
+            || teacherUserId.isBlank()
+            || studentId == null
+            || studentId.isBlank()) {
+
+            return false;
+        }
+
+        String normalizedStudentId =
+            studentId.trim();
+
+        for (long offeringId
+            : assignmentRepository.findOfferingIds(
+            teacherUserId.trim())) {
+
+            boolean found =
+                enrollmentRepository
+                    .findSelectedEnrollmentsByOffering(
+                        offeringId)
+                    .stream()
+                    .anyMatch(record ->
+                        record.studentId()
+                            .equalsIgnoreCase(
+                                normalizedStudentId));
+
+            if (found) {
+
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

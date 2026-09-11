@@ -1,34 +1,152 @@
 package edu.seu.vcampus.server.module.course;
 
-import java.util.Map;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
-/** Deterministic assignment relation for isolated tests. */
-final class InMemoryCourseTeacherAssignmentRepository implements CourseTeacherAssignmentRepository {
-    private static final Map<String, Set<Long>> ASSIGNMENTS = Map.of(
-            "U-TEACHER-001", Set.of(1001L),
-            "U-TEACHER-002", Set.of(2001L),
-            "U-TEACHER-003", Set.of(3001L),
-            "U-TEACHER-004", Set.of(9001L),
-            "U-TEACHER-005", Set.of(14001L),
-            "U-TEACHER-006", Set.of(15002L),
-            "U-TEACHER-007", Set.of(14003L),
-            "U-TEACHER-008", Set.of(15001L));
+/**
+ * 教师任课关系的内存实现。
+ */
+final class InMemoryCourseTeacherAssignmentRepository
+    implements CourseTeacherAssignmentRepository {
 
-    public boolean isAssigned(String teacherUserId, long offeringId) {
-        return teacherUserId != null
-                && ASSIGNMENTS.getOrDefault(teacherUserId.trim(), Set.of()).contains(offeringId);
+    private final Set<Assignment> assignments =
+        ConcurrentHashMap.newKeySet();
+
+    InMemoryCourseTeacherAssignmentRepository() {
+
+        long[] offeringIds = {
+            1001L, 2001L, 3001L, 9001L,
+            14001L, 15002L, 14003L, 15001L
+        };
+        for (int index = 0; index < offeringIds.length; index++) {
+            assignments.add(new Assignment(
+                offeringIds[index],
+                "U-TEACHER-" + String.format("%03d", index + 1)));
+        }
     }
 
     @Override
-    public List<String> findTeacherUserIds(long offeringId) {
-        return ASSIGNMENTS.entrySet().stream()
-                .filter(entry -> entry.getValue().contains(offeringId))
-                .map(Map.Entry::getKey)
-                .sorted()
-                .toList();
+    public boolean isAssigned(
+        String teacherUserId,
+        long offeringId) {
+
+        String normalizedUserId =
+            normalizeUserId(
+                teacherUserId);
+
+        if (normalizedUserId == null
+            || offeringId <= 0) {
+
+            return false;
+        }
+
+        return assignments.contains(
+            new Assignment(
+                offeringId,
+                normalizedUserId));
     }
 
-    static Map<String, Set<Long>> seeds() { return ASSIGNMENTS; }
+    @Override
+    public List<Long> findOfferingIds(
+        String teacherUserId) {
+
+        String normalizedUserId =
+            normalizeUserId(
+                teacherUserId);
+
+        if (normalizedUserId == null) {
+
+            return List.of();
+        }
+
+        return assignments.stream()
+            .filter(assignment ->
+                assignment.teacherUserId()
+                    .equals(
+                        normalizedUserId))
+            .map(
+                Assignment::offeringId)
+            .sorted()
+            .toList();
+    }
+
+    @Override
+    public List<String> findTeacherUserIds(
+        long offeringId) {
+
+        if (offeringId <= 0) {
+
+            return List.of();
+        }
+
+        return assignments.stream()
+            .filter(assignment ->
+                assignment.offeringId()
+                    == offeringId)
+            .map(
+                Assignment::teacherUserId)
+            .sorted()
+            .toList();
+    }
+
+    @Override
+    public boolean assign(
+        long offeringId,
+        String teacherUserId,
+        String teacherName) {
+
+        String normalizedUserId =
+            normalizeUserId(
+                teacherUserId);
+
+        if (normalizedUserId == null
+            || offeringId <= 0) {
+
+            return false;
+        }
+
+        return assignments.add(
+            new Assignment(
+                offeringId,
+                normalizedUserId));
+    }
+
+    @Override
+    public boolean remove(
+        long offeringId,
+        String teacherUserId) {
+
+        String normalizedUserId =
+            normalizeUserId(
+                teacherUserId);
+
+        if (normalizedUserId == null
+            || offeringId <= 0) {
+
+            return false;
+        }
+
+        return assignments.remove(
+            new Assignment(
+                offeringId,
+                normalizedUserId));
+    }
+
+    private String normalizeUserId(
+        String teacherUserId) {
+
+        if (teacherUserId == null
+            || teacherUserId.isBlank()) {
+
+            return null;
+        }
+
+        return teacherUserId.trim();
+    }
+
+    private record Assignment(
+        long offeringId,
+        String teacherUserId) {
+    }
 }

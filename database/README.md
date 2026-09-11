@@ -47,7 +47,7 @@ java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar
 |---|---|---|
 | 用户 | `tblUser`、`tblUserAdminScope`、`tblTeacherProfile`、`tblUserAuditLog` | 拥有账号、当前姓名、管理权和公共教师资格 |
 | 学籍 | `tblStudentProfile`、`tblStudentStatusChange` | 15 份学生档案，以 `userId` 关联账号，姓名实时查用户目录 |
-| 选课 | `tblCourse*`、`tblEnrollment`、`tblGrade`、`tblCourseTeacherAssignment` | 课程与开课目录保留；任课、选课与成绩持久化 |
+| 选课 | `tblCourse*`、`tblOfferingTeacher`、`tblEnrollment`、`tblGrade` | 课程与开课目录保留；任课、选课与成绩持久化 |
 | 医院 | `tblHospital*` | 科室保留；10 名医生、排班和医疗业务以 `userId` 关联 |
 | 图书馆 | `tblBook*`、`tblBorrowRecord`、`tblReservation` | 5 种书、20 册馆藏以及借还预约演示数据 |
 | 商店 | `tblShop*`、`tblCampusCard` | 商品、照片、库存、余额、购物车和订单全部在服务器 Access 中 |

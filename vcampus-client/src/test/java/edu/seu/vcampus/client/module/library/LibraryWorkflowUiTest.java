@@ -99,13 +99,13 @@ class LibraryWorkflowUiTest {
             assertFalse(borrow.isEnabled());
             assertFalse(giveBack.isEnabled());
             onEdt(() -> barcode.setText("SEU-B001-001"));
-            awaitUi(() -> borrow.isEnabled() && giveBack.isEnabled());
+            awaitUi(() -> borrow.isEnabled() && !giveBack.isEnabled());
             onEdt(borrow::doClick);
             JLabel outcome = named(terminal, JLabel.class, "library.selfService.outcome");
             JLabel reservationCheck = named(
                     terminal, JLabel.class, "library.selfService.reservationCheck");
             awaitUi(() -> outcome.getText().contains("借书成功"));
-            assertTrue(reservationCheck.getText().contains("这是为当前用户保留的单册"));
+            assertTrue(reservationCheck.getText().contains("本人预约保留"));
 
             JTable current = named(records, JTable.class, "library.currentBorrows");
             onEdt(() -> named(terminalMode, JButton.class,
@@ -123,7 +123,7 @@ class LibraryWorkflowUiTest {
                 named(modes, JButton.class, "library.mode.terminal").doClick();
                 barcode.setText("SEU-B001-001");
             });
-            awaitUi(giveBack::isEnabled);
+            awaitUi(() -> giveBack.isEnabled() && !borrow.isEnabled());
             onEdt(giveBack::doClick);
             awaitUi(() -> outcome.getText().contains("归还成功") && outcome.getText().contains("等待管理员上架"));
             onEdt(() -> {
@@ -158,6 +158,33 @@ class LibraryWorkflowUiTest {
                     assertFalse(table.getModel().isCellEditable(0, column));
                 }
             }
+        }
+    }
+
+    @Test
+    void leavingCampusServiceModuleResetsLibraryModeSelection() throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext context = login(server, "20260001");
+            AtomicReference<LibraryModePanel> root = new AtomicReference<>();
+            onEdt(() -> root.set((LibraryModePanel)
+                    new LibraryClientModule().createView(context)));
+            LibraryModePanel modes = root.get();
+            JPanel selection = named(modes, JPanel.class, "library.modeSelection");
+            JPanel online = named(modes, JPanel.class, "library.online");
+            JPanel terminal = named(modes, JPanel.class, "library.terminal");
+
+            onEdt(() -> named(modes, JButton.class, "library.mode.online").doClick());
+            assertTrue(online.isVisible());
+            onEdt(modes::onModuleExit);
+            assertTrue(selection.isVisible());
+            assertFalse(online.isVisible());
+
+            onEdt(() -> named(modes, JButton.class, "library.mode.terminal").doClick());
+            assertTrue(terminal.isVisible());
+            onEdt(modes::onModuleExit);
+            assertTrue(selection.isVisible());
+            assertFalse(terminal.isVisible());
         }
     }
 

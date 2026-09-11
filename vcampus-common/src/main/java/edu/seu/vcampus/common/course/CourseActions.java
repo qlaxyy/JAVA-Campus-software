@@ -155,7 +155,41 @@ public final class CourseActions {
         ActionNames.of(
             ModuleNames.COURSE,
             "TEACHER_LIST_GRADES");
+    /**
+     * 教务查询公共有效教师名单。
+     */
+    public static final String
+        ADMIN_LIST_ACTIVE_TEACHERS =
+        ActionNames.of(
+            ModuleNames.COURSE,
+            "ADMIN_LIST_ACTIVE_TEACHERS");
 
+    /**
+     * 教务查询指定教学班的任课教师。
+     */
+    public static final String
+        ADMIN_LIST_OFFERING_TEACHERS =
+        ActionNames.of(
+            ModuleNames.COURSE,
+            "ADMIN_LIST_OFFERING_TEACHERS");
+
+    /**
+     * 教务为教学班分配教师。
+     */
+    public static final String
+        ADMIN_ASSIGN_TEACHER =
+        ActionNames.of(
+            ModuleNames.COURSE,
+            "ADMIN_ASSIGN_TEACHER");
+
+    /**
+     * 教务移除教学班任课教师。
+     */
+    public static final String
+        ADMIN_REMOVE_TEACHER =
+        ActionNames.of(
+            ModuleNames.COURSE,
+            "ADMIN_REMOVE_TEACHER");
     /**
      * 教师录入或修改自己负责教学班的成绩。
      */

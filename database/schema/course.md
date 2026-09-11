@@ -13,8 +13,7 @@
 | `tblCourse`             | 课程基本信息      | `courseId`          | 课程编号唯一            |
 | `tblCourseOffering`     | 每学期开设的具体教学班 | `offeringId`        | 同一课程可开多个教学班       |
 | `tblCourseSchedule`     | 教学班上课时间     | `scheduleId`        | 支持周次、单双周和时间冲突检测   |
-| `tblOfferingTeacher`    | 教学班任课教师     | `offeringTeacherId` | 一个教学班可有多个教师       |
-| `tblCourseTeacherAssignment` | 教师账号与教学班关系 | `assignmentId` | `(teacherUserId, offeringId)` 唯一 |
+| `tblOfferingTeacher`    | 教师账号与教学班关系 | `offeringTeacherId` | `(offeringId, teacherUserId)` 业务唯一 |
 | `tblSelectionBatch`     | 选课批次        | `batchId`           | 记录预选、重修、退改补及开放时间  |
 | `tblTrainingPlanCourse` | 培养方案课程      | `planCourseId`      | 记录课程建议修读学期        |
 | `tblCourseSubstitution` | 方案外课程替代关系   | `substitutionId`    | 一门方案外课程只替代一门方案内课程 |
@@ -77,25 +76,20 @@
 
 当前已选人数不保存为字段，由 `tblEnrollment` 动态统计。
 
----
-
 ### `tblOfferingTeacher`
 
-| 字段                  | Access 类型      | 必填 | 默认值  | 说明     |
-| ------------------- | -------------- | -- | ---- | ------ |
-| `offeringTeacherId` | Long Integer   | 是  | 自动编号 | 主键     |
-| `offeringId`        | Long Integer   | 是  | 无    | 对应教学班  |
-| `teacherName`       | Short Text(50) | 是  | 无    | 任课教师姓名 |
+| 字段 | Access 类型 | 必填 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `offeringTeacherId` | Long Integer | 是 | 自动编号 | 主键 |
+| `offeringId` | Long Integer | 是 | 无 | 对应教学班 |
+| `teacherUserId` | Short Text(64) | 否 | 无 | 公共教师档案的稳定 userId |
+| `teacherName` | Short Text(50) | 否 | 无 | 兼容旧数据及页面显示，不作为关联字段 |
 
-`teacherName` 仅为兼容现有课程 DTO 的显示快照。教师鉴权不再使用硬编码姓名或临时映射，而是读取 `tblCourseTeacherAssignment.teacherUserId`；当前姓名应通过公共教师/用户目录填充。
+新建任课关系必须保存 `teacherUserId`。旧数据中的 `teacherUserId` 可以暂时为空。
 
-### `tblCourseTeacherAssignment`
+同一 `(offeringId, teacherUserId)` 不允许重复。由于 Access 对可空字段唯一索引的兼容问题，目前由 `CourseTeacherAssignmentRepository.assign()` 执行业务唯一性检查。
 
-| 字段 | Access 类型 | 必填 | 说明 |
-|---|---|---|---|
-| `assignmentId` | AutoNumber | 是 | 主键 |
-| `teacherUserId` | Short Text(36) | 是 | 公共教师表中的稳定 `userId` |
-| `offeringId` | Long Integer | 是 | 选课模块教学班 |
+`teacherName` 仅为兼容现有课程 DTO 的显示快照。教师鉴权不再使用硬编码姓名或临时映射，而是读取 `tblOfferingTeacher.teacherUserId`；当前姓名应通过公共教师/用户目录填充。
 
 最终种子库为 8 名教师各分配至少一个教学班，并为 15 名学生建立选课记录，其中 8 条带成绩；`selectedCount` 在重建时根据有效选课记录重新计算。
 
@@ -241,7 +235,7 @@
 * `tblEnrollment.offeringId` → `tblCourseOffering.offeringId`
 * `tblEnrollment.studentId` → 学生模块学生主键
 * `tblGrade.enrollmentId` → `tblEnrollment.enrollmentId`
-
+* `tblOfferingTeacher.teacherUserId` → 用户模块公共教师档案的 `userId`
 ### 4.2 唯一索引
 
 * `tblCourse.courseCode`
@@ -251,7 +245,7 @@
 * `tblCampus.campusCode`
 * `tblTeachingLocation(campusId, locationName)`
 * `tblTrainingPlanCourse(planId, courseId)`
-
+* `tblOfferingTeacher(offeringId, teacherUserId)`：由服务器 Repository 保证业务唯一
 ### 4.3 普通索引
 
 * `tblCourseOffering.courseId`

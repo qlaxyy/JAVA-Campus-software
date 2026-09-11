@@ -61,11 +61,13 @@ public final class ServerModules {
             ShopServerModule shopModule,
             HospitalServerModule hospitalModule) {
         ActionRouter router = new ActionRouter();
-        ServerContext context = new ServerContext(
+        ServerContext context =
+            new ServerContext(
                 authentication,
                 authentication,
                 authentication,
-                authentication.teacherDirectory());
+                authentication.teacherDirectory(),
+                courseModule.teacherStudentAccess());
         router.register(Actions.PING, request ->
                 Response.success(request, "Server is reachable.", "PONG"));
         modules(authentication, studentModule, courseModule, libraryModule, shopModule, hospitalModule)

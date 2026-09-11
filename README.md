@@ -66,11 +66,15 @@ java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar --rebuild-demo
 ### 图书馆完整演示
 
 图书馆业务演示数据只在整套图书馆表第一次创建时写入。若 `database/vCampus.accdb` 已经启动过，
-请使用一个从未存在过的数据库文件名启动演示服务器，例如：
+请使用一个从未存在过的数据库文件名启动演示服务器。每轮完整演示换一个编号，例如第一次使用：
 
 ```powershell
-java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar 8888 database\library-demo.accdb
+java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar 8888 database\library-demo-01.accdb
 ```
+
+再次从头演示时改用 `library-demo-02.accdb` 等新文件；验证持久化时则继续使用上一轮的同一个文件，
+重启服务器后检查预约、借阅和单册状态是否保持不变。返回校园服务或重新进入图书馆只会重置界面导航，
+不会重置这些业务数据。
 
 然后按以下顺序演示：
 
@@ -80,7 +84,9 @@ java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar 8888 database\
    `数据结构（Java语言描述） / SEU-B003-001` 的“待取”状态。
 2. 在“馆藏查询”搜索《红楼梦》，选中一个馆藏地并预约。馆藏有可借单册时会立即保留 24 小时；
    回到“我的图书馆”可查看分配条码和截止时间。
-3. 返回图书馆模式选择页，进入“模拟自助终端”，输入刚分配的条码完成借书；再次输入同一条码完成归还。
+3. 返回图书馆模式选择页，进入“模拟自助终端”，输入刚分配的条码。等待预检显示书名、
+   “预约待取”和可借提示后，只有“借书登记”可用；借书成功后再次输入同一条码，预检确认
+   这是当前用户借阅的单册，此时只有“归还登记”可用。
 4. 退出并使用图书馆管理员 `20260003 / 123456` 登录，进入
    “图书馆 → 线上图书馆 → 图书管理”，找到该单册，确认其状态为“待上架”并执行“确认上架”。
 5. 在管理员借阅查询以及学生“我的图书馆”中核对借阅、归还和预约状态。重启服务器后再次查询，

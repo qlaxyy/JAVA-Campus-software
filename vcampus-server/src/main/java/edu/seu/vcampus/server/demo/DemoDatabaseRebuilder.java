@@ -126,19 +126,25 @@ public final class DemoDatabaseRebuilder {
                 try (Statement statement = connection.createStatement()) {
                     statement.executeUpdate("DELETE FROM tblGrade");
                     statement.executeUpdate("DELETE FROM tblEnrollment");
+                    statement.executeUpdate("DELETE FROM tblOfferingTeacher");
                     statement.executeUpdate("UPDATE tblCourseOffering SET selectedCount = 0");
                     statement.executeUpdate("UPDATE tblCatalogOffering SET selectedCount = 0");
                 }
-                try (PreparedStatement planName = connection.prepareStatement(
-                        "UPDATE tblOfferingTeacher SET teacherName = ? WHERE offeringId = ?");
+                try (PreparedStatement assignment = connection.prepareStatement(
+                        "INSERT INTO tblOfferingTeacher (offeringId, teacherUserId, teacherName) VALUES (?, ?, ?)");
                      PreparedStatement catalogName = connection.prepareStatement(
                         "UPDATE tblCatalogTeacher SET teacherName = ? WHERE offeringId = ?")) {
                     for (int index = 0; index < offerings.length; index++) {
-                        String name = FinalDemoRoster.displayName("U-TEACHER-" + String.format("%03d", index + 1));
-                        planName.setString(1, name); planName.setLong(2, offerings[index]); planName.addBatch();
+                        String teacherUserId = "U-TEACHER-" + String.format("%03d", index + 1);
+                        String name = FinalDemoRoster.displayName(teacherUserId);
+                        assignment.setLong(1, offerings[index]);
+                        assignment.setString(2, teacherUserId);
+                        assignment.setString(3, name);
+                        assignment.addBatch();
                         catalogName.setString(1, name); catalogName.setLong(2, offerings[index]); catalogName.addBatch();
                     }
-                    planName.executeBatch(); catalogName.executeBatch();
+                    assignment.executeBatch();
+                    catalogName.executeBatch();
                 }
                 try (PreparedStatement enrollment = connection.prepareStatement(
                         "INSERT INTO tblEnrollment (userId, studentId, selectedBatchId, offeringId, "
@@ -205,7 +211,7 @@ public final class DemoDatabaseRebuilder {
             requireCount(connection, "SELECT COUNT(*) FROM tblStudentProfile", 15, "student profiles");
             requireCount(connection, "SELECT COUNT(*) FROM tblHospitalDoctor WHERE active = TRUE", 10, "doctors");
             requireCount(connection, "SELECT COUNT(*) FROM tblCampusCard", 39, "campus cards");
-            requireCount(connection, "SELECT COUNT(*) FROM tblCourseTeacherAssignment", 8, "teaching assignments");
+            requireCount(connection, "SELECT COUNT(*) FROM tblOfferingTeacher WHERE teacherUserId IS NOT NULL", 8, "teaching assignments");
             requireCount(connection, "SELECT COUNT(*) FROM tblEnrollment WHERE enrollmentStatus = 'SELECTED'", 15, "demo enrollments");
             requireCount(connection, "SELECT COUNT(*) FROM tblBook", 5, "book titles");
             requireCount(connection, "SELECT COUNT(*) FROM tblBookCopy", 20, "book copies");
@@ -219,7 +225,7 @@ public final class DemoDatabaseRebuilder {
                     + "ON s.userId = u.userId WHERE u.userId IS NULL", 0, "orphan students");
             requireCount(connection, "SELECT COUNT(*) FROM tblHospitalDoctor d LEFT JOIN tblUser u "
                     + "ON d.userId = u.userId WHERE u.userId IS NULL", 0, "orphan doctors");
-            requireCount(connection, "SELECT COUNT(*) FROM tblCourseTeacherAssignment a LEFT JOIN tblTeacherProfile t "
+            requireCount(connection, "SELECT COUNT(*) FROM tblOfferingTeacher a LEFT JOIN tblTeacherProfile t "
                     + "ON a.teacherUserId = t.teacherUserId WHERE t.teacherUserId IS NULL OR t.active = FALSE", 0, "invalid teaching assignments");
             requireCount(connection, "SELECT COUNT(*) FROM tblEnrollment e LEFT JOIN tblUser u "
                     + "ON e.userId = u.userId WHERE u.userId IS NULL", 0, "orphan enrollments");

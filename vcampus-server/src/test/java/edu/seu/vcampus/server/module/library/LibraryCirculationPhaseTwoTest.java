@@ -5,6 +5,8 @@ import edu.seu.vcampus.common.library.BookCopyIdRequest;
 import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BorrowRecordDTO;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
+import edu.seu.vcampus.common.library.CopyInspectionDTO;
+import edu.seu.vcampus.common.library.CopyInspectionRequest;
 import edu.seu.vcampus.common.library.CopyReturnRequest;
 import edu.seu.vcampus.common.library.LibraryActions;
 import edu.seu.vcampus.common.library.SetBookStatusRequest;
@@ -73,6 +75,46 @@ class LibraryCirculationPhaseTwoTest {
     }
 
     @Test
+    void terminalInspectionEnablesOnlyActionsAllowedForCurrentUser() {
+        CopyInspectionDTO available = service.inspectCopy(
+                "U-001", new CopyInspectionRequest("  SEU-B001-001  "));
+        assertEquals("Java编程思想", available.getBookTitle());
+        assertEquals("SEU-B001-001", available.getBarcode());
+        assertEquals("AVAILABLE", available.getCopyStatus());
+        assertTrue(available.isBorrowAllowed());
+        assertFalse(available.isReturnAllowed());
+        assertFalse(available.isReservedForCurrentUser());
+
+        service.borrowCopy("U-001", new CopyBorrowRequest("SEU-B001-001"));
+        CopyInspectionDTO owner = service.inspectCopy(
+                "U-001", new CopyInspectionRequest("SEU-B001-001"));
+        CopyInspectionDTO other = service.inspectCopy(
+                "U-OTHER", new CopyInspectionRequest("SEU-B001-001"));
+        assertFalse(owner.isBorrowAllowed());
+        assertTrue(owner.isReturnAllowed());
+        assertTrue(owner.getStatusMessage().contains("可以归还"));
+        assertFalse(other.isBorrowAllowed());
+        assertFalse(other.isReturnAllowed());
+
+        service.returnCopy("U-001", new CopyReturnRequest("SEU-B001-001"));
+        CopyInspectionDTO waiting = service.inspectCopy(
+                "U-001", new CopyInspectionRequest("SEU-B001-001"));
+        assertEquals("WAITING_SHELVING", waiting.getCopyStatus());
+        assertFalse(waiting.isBorrowAllowed());
+        assertFalse(waiting.isReturnAllowed());
+        assertTrue(waiting.getStatusMessage().contains("等待管理员确认上架"));
+
+        service.shelveBookCopy(ADMIN, new BookCopyIdRequest("CP-B001-001"));
+        service.withdrawBookCopy(ADMIN, new BookCopyIdRequest("CP-B001-001"));
+        CopyInspectionDTO withdrawn = service.inspectCopy(
+                "U-001", new CopyInspectionRequest("SEU-B001-001"));
+        assertEquals("WITHDRAWN", withdrawn.getCopyStatus());
+        assertFalse(withdrawn.isBorrowAllowed());
+        assertFalse(withdrawn.isReturnAllowed());
+        assertTrue(withdrawn.getStatusMessage().contains("已经注销"));
+    }
+
+    @Test
     void borrowRejectsUnknownInactiveAndUnavailableCopies() {
         failure(ErrorCodes.LIBRARY_COPY_NOT_FOUND,
                 () -> service.borrowCopy("U-001", new CopyBorrowRequest("UNKNOWN")));
@@ -90,6 +132,11 @@ class LibraryCirculationPhaseTwoTest {
         service.setBookStatus(ADMIN, new SetBookStatusRequest("B003", "INACTIVE"));
         failure(ErrorCodes.LIBRARY_COPY_NOT_AVAILABLE,
                 () -> service.borrowCopy("U-001", new CopyBorrowRequest("SEU-B003-001")));
+        CopyInspectionDTO inactive = service.inspectCopy(
+                "U-001", new CopyInspectionRequest("SEU-B003-001"));
+        assertFalse(inactive.isBorrowAllowed());
+        assertFalse(inactive.isReturnAllowed());
+        assertTrue(inactive.getStatusMessage().contains("停止借阅"));
         assertTrue(records.findByUserId("U-001").isEmpty());
     }
 
@@ -98,6 +145,10 @@ class LibraryCirculationPhaseTwoTest {
         service.borrowCopy("U-001", new CopyBorrowRequest("SEU-B001-001"));
         failure(ErrorCodes.LIBRARY_ALREADY_BORROWED,
                 () -> service.borrowCopy("U-001", new CopyBorrowRequest("SEU-B001-002")));
+        CopyInspectionDTO duplicate = service.inspectCopy(
+                "U-001", new CopyInspectionRequest("SEU-B001-002"));
+        assertFalse(duplicate.isBorrowAllowed());
+        assertTrue(duplicate.getStatusMessage().contains("同一书目"));
 
         for (String bookId : List.of("B002", "B003", "B004", "B005")) {
             BookCopy copy = copies.findByBookId(bookId).getFirst();
@@ -109,6 +160,10 @@ class LibraryCirculationPhaseTwoTest {
         assertEquals(5, records.findBorrowedByUserId("U-001").size());
         failure(ErrorCodes.LIBRARY_BORROW_LIMIT_REACHED,
                 () -> service.borrowCopy("U-001", new CopyBorrowRequest("SEU-B001-002")));
+        CopyInspectionDTO limit = service.inspectCopy(
+                "U-001", new CopyInspectionRequest("SEU-B001-002"));
+        assertFalse(limit.isBorrowAllowed());
+        assertTrue(limit.getStatusMessage().contains("5 本"));
 
         BookCopy overdueCopy = copies.findById("CP-B005-002").orElseThrow();
         copies.update(overdueCopy.withStatus(BookCopyStatus.LOANED));
@@ -116,6 +171,10 @@ class LibraryCirculationPhaseTwoTest {
                 NOW.minusDays(31), NOW.minusDays(1), BorrowStatus.BORROWED));
         failure(ErrorCodes.LIBRARY_OVERDUE_BORROW_EXISTS,
                 () -> service.borrowCopy("U-OVERDUE", new CopyBorrowRequest("SEU-B001-002")));
+        CopyInspectionDTO overdue = service.inspectCopy(
+                "U-OVERDUE", new CopyInspectionRequest("SEU-B001-002"));
+        assertFalse(overdue.isBorrowAllowed());
+        assertTrue(overdue.getStatusMessage().contains("逾期"));
     }
 
     @Test

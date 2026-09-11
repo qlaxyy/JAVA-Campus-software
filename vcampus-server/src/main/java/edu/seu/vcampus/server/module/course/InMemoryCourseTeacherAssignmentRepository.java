@@ -15,13 +15,15 @@ final class InMemoryCourseTeacherAssignmentRepository
 
     InMemoryCourseTeacherAssignmentRepository() {
 
-        /*
-         * 保留原有演示任课关系。
-         */
-        assignments.add(
-            new Assignment(
-                1001L,
-                "U-COURSE-TEACHER-001"));
+        long[] offeringIds = {
+            1001L, 2001L, 3001L, 9001L,
+            14001L, 15002L, 14003L, 15001L
+        };
+        for (int index = 0; index < offeringIds.length; index++) {
+            assignments.add(new Assignment(
+                offeringIds[index],
+                "U-TEACHER-" + String.format("%03d", index + 1)));
+        }
     }
 
     @Override

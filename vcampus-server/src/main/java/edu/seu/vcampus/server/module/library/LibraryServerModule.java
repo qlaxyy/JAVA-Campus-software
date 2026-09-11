@@ -7,6 +7,8 @@ import edu.seu.vcampus.common.library.BookCopyIdRequest;
 import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BookSearchResult;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
+import edu.seu.vcampus.common.library.CopyInspectionDTO;
+import edu.seu.vcampus.common.library.CopyInspectionRequest;
 import edu.seu.vcampus.common.library.CopyReturnRequest;
 import edu.seu.vcampus.common.library.CreateReservationRequest;
 import edu.seu.vcampus.common.library.LibraryActions;
@@ -86,6 +88,8 @@ public final class LibraryServerModule implements ServerModule {
                 request -> borrowCopy(request, context));
         router.register(LibraryActions.RETURN_COPY,
                 request -> returnCopy(request, context));
+        router.register(LibraryActions.INSPECT_COPY,
+                request -> inspectCopy(request, context));
         router.register(LibraryActions.GET_BORROW_RECORDS,
                 request -> getBorrowRecords(request, context));
         router.register(LibraryActions.CREATE_RESERVATION,
@@ -169,6 +173,25 @@ public final class LibraryServerModule implements ServerModule {
         try {
             service.returnCopy(session.orElseThrow().getUserId(), data);
             return Response.success(request, "归还成功，单册等待管理员上架", null);
+        } catch (LibraryBusinessException exception) {
+            return businessFailure(request, exception);
+        } catch (IllegalArgumentException exception) {
+            return invalidArgument(request, exception);
+        }
+    }
+
+    private Response inspectCopy(Request request, ServerContext context) {
+        Optional<SessionInfo> session = session(request, context);
+        if (session.isEmpty()) {
+            return authenticationRequired(request);
+        }
+        if (!(request.getData() instanceof CopyInspectionRequest data)) {
+            return invalidRequest(request, "条码预检请求格式不正确");
+        }
+        try {
+            CopyInspectionDTO inspection = service.inspectCopy(
+                    session.orElseThrow().getUserId(), data);
+            return Response.success(request, "条码预检完成", inspection);
         } catch (LibraryBusinessException exception) {
             return businessFailure(request, exception);
         } catch (IllegalArgumentException exception) {

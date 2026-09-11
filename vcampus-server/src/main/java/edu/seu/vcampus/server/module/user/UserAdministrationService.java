@@ -111,7 +111,8 @@ final class UserAdministrationService {
         UserAccount updated = current.withProfile(
                 request.getDisplayName(), request.getAdminScopes());
         repository.save(updated);
-        if (!current.adminScopes().equals(updated.adminScopes())) {
+        if (!current.adminScopes().equals(updated.adminScopes())
+                || !current.displayName().equals(updated.displayName())) {
             authentication.invalidateUserSessions(updated.userId());
         }
         return updated.toView();

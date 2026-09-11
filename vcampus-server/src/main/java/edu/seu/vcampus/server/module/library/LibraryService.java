@@ -13,6 +13,8 @@ import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BookSearchResult;
 import edu.seu.vcampus.common.library.BorrowRecordDTO;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
+import edu.seu.vcampus.common.library.CopyInspectionDTO;
+import edu.seu.vcampus.common.library.CopyInspectionRequest;
 import edu.seu.vcampus.common.library.CopyReturnRequest;
 import edu.seu.vcampus.common.library.CreateReservationRequest;
 import edu.seu.vcampus.common.library.ListBookCopiesRequest;
@@ -535,41 +537,17 @@ final class LibraryService {
     private void borrowCopyAtomically(String userId, String barcode, LocalDateTime borrowTime) {
         BookCopy copy = bookCopyRepository.findByBarcode(barcode)
                 .orElseThrow(() -> failure(ErrorCodes.LIBRARY_COPY_NOT_FOUND,
-                        "The scanned copy barcode does not exist."));
+                        "馆藏条码不存在，请重新扫描或输入"));
         BookDTO book = bookRepository.findIncludingInactive(copy.bookId())
                 .orElseThrow(() -> failure(ErrorCodes.LIBRARY_BOOK_NOT_FOUND,
-                        "The catalog record for this copy does not exist."));
-        if (!"ACTIVE".equals(book.getStatus())) {
-            throw failure(ErrorCodes.LIBRARY_COPY_NOT_AVAILABLE,
-                    "This title is not open for borrowing.");
-        }
+                        "该单册对应的书目信息不存在"));
         Reservation assignedReservation = reservationForAssignedCopy(copy.copyId()).orElse(null);
-        if (copy.status() == BookCopyStatus.RESERVED
-                && (assignedReservation == null
-                || !assignedReservation.userId().equals(userId))) {
-            throw failure(ErrorCodes.LIBRARY_COPY_RESERVED_FOR_OTHER,
-                    "该单册已为其他读者预约保留");
-        }
-        if (copy.status() != BookCopyStatus.AVAILABLE
-                && copy.status() != BookCopyStatus.RESERVED) {
-            throw failure(ErrorCodes.LIBRARY_COPY_NOT_AVAILABLE,
-                    "This physical copy is not available for borrowing.");
-        }
-
         List<BorrowRecord> currentBorrows =
                 borrowRecordRepository.findBorrowedByUserId(userId);
-        if (currentBorrows.stream().anyMatch(record -> record.isOverdueAt(borrowTime))) {
-            throw failure(ErrorCodes.LIBRARY_OVERDUE_BORROW_EXISTS,
-                    "Return overdue books before borrowing another book.");
-        }
-        if (currentBorrows.size() >= MAX_ACTIVE_BORROWS) {
-            throw failure(ErrorCodes.LIBRARY_BORROW_LIMIT_REACHED,
-                    "At most five books may be borrowed at the same time.");
-        }
-        if (currentBorrows.stream().map(this::requireCopyForRecord)
-                .anyMatch(activeCopy -> activeCopy.bookId().equals(copy.bookId()))) {
-            throw failure(ErrorCodes.LIBRARY_ALREADY_BORROWED,
-                    "Another copy of this title is already borrowed and not returned.");
+        BorrowDecision decision = borrowDecision(
+                userId, copy, book, assignedReservation, currentBorrows, borrowTime);
+        if (!decision.allowed()) {
+            throw failure(decision.errorCode(), decision.message());
         }
 
         BorrowRecord record = new BorrowRecord(recordIdSupplier.get(), userId,
@@ -592,6 +570,101 @@ final class LibraryService {
                 releaseAssignedCopy(activeReservation, borrowTime, true);
             }
         }
+    }
+
+    CopyInspectionDTO inspectCopy(String userId, CopyInspectionRequest request) {
+        String validatedUserId = requireText(userId, "userId");
+        Objects.requireNonNull(request, "request must not be null");
+        String barcode = requireText(request.getBarcode(), "barcode");
+        synchronized (circulationLock) {
+            return inTransaction(() -> inspectCopyAtomically(
+                    validatedUserId, barcode, now()));
+        }
+    }
+
+    private CopyInspectionDTO inspectCopyAtomically(
+            String userId, String barcode, LocalDateTime inspectionTime) {
+        expireReservations(inspectionTime);
+        BookCopy copy = bookCopyRepository.findByBarcode(barcode)
+                .orElseThrow(() -> failure(ErrorCodes.LIBRARY_COPY_NOT_FOUND,
+                        "馆藏条码不存在，请重新扫描或输入"));
+        BookDTO book = bookRepository.findIncludingInactive(copy.bookId())
+                .orElseThrow(() -> failure(ErrorCodes.LIBRARY_BOOK_NOT_FOUND,
+                        "该单册对应的书目信息不存在"));
+        Reservation assignedReservation = reservationForAssignedCopy(copy.copyId())
+                .orElse(null);
+        List<BorrowRecord> currentBorrows =
+                borrowRecordRepository.findBorrowedByUserId(userId);
+        BorrowDecision decision = borrowDecision(
+                userId, copy, book, assignedReservation, currentBorrows, inspectionTime);
+        Optional<BorrowRecord> activeBorrow =
+                borrowRecordRepository.findBorrowedByCopyId(copy.copyId());
+        boolean returnAllowed = copy.status() == BookCopyStatus.LOANED
+                && activeBorrow.filter(record -> record.userId().equals(userId)).isPresent();
+        boolean reservedForCurrentUser = assignedReservation != null
+                && assignedReservation.userId().equals(userId);
+        String message = inspectionMessage(
+                copy, activeBorrow, decision, returnAllowed);
+        return new CopyInspectionDTO(book.getTitle(), copy.barcode(),
+                copy.status().name(), decision.allowed(), returnAllowed,
+                reservedForCurrentUser, message);
+    }
+
+    private BorrowDecision borrowDecision(String userId, BookCopy copy, BookDTO book,
+            Reservation assignedReservation, List<BorrowRecord> currentBorrows,
+            LocalDateTime currentTime) {
+        if (!"ACTIVE".equals(book.getStatus())) {
+            return BorrowDecision.denied(ErrorCodes.LIBRARY_COPY_NOT_AVAILABLE,
+                    "该书目已停止借阅");
+        }
+        if (copy.status() == BookCopyStatus.RESERVED
+                && (assignedReservation == null
+                || !assignedReservation.userId().equals(userId))) {
+            return BorrowDecision.denied(ErrorCodes.LIBRARY_COPY_RESERVED_FOR_OTHER,
+                    assignedReservation == null
+                            ? "单册预约状态异常，请联系图书馆管理员"
+                            : "该单册已为其他读者预约保留");
+        }
+        if (copy.status() != BookCopyStatus.AVAILABLE
+                && copy.status() != BookCopyStatus.RESERVED) {
+            return BorrowDecision.denied(ErrorCodes.LIBRARY_COPY_NOT_AVAILABLE,
+                    switch (copy.status()) {
+                        case LOANED -> "该单册已经借出";
+                        case WAITING_SHELVING -> "该单册已归还，正在等待管理员确认上架";
+                        case WITHDRAWN -> "该单册已经注销";
+                        default -> "该单册当前不可借阅";
+                    });
+        }
+        if (currentBorrows.stream().anyMatch(record -> record.isOverdueAt(currentTime))) {
+            return BorrowDecision.denied(ErrorCodes.LIBRARY_OVERDUE_BORROW_EXISTS,
+                    "你有逾期未还图书，请先归还后再借阅");
+        }
+        if (currentBorrows.size() >= MAX_ACTIVE_BORROWS) {
+            return BorrowDecision.denied(ErrorCodes.LIBRARY_BORROW_LIMIT_REACHED,
+                    "你已达到同时借阅 5 本的上限");
+        }
+        if (currentBorrows.stream().map(this::requireCopyForRecord)
+                .anyMatch(activeCopy -> activeCopy.bookId().equals(copy.bookId()))) {
+            return BorrowDecision.denied(ErrorCodes.LIBRARY_ALREADY_BORROWED,
+                    "你已经借阅同一书目的其他单册，归还前不能重复借阅");
+        }
+        return BorrowDecision.allowed(copy.status() == BookCopyStatus.RESERVED
+                ? "这是为你预约保留的单册，可以借阅"
+                : "该单册当前可借阅");
+    }
+
+    private String inspectionMessage(BookCopy copy, Optional<BorrowRecord> activeBorrow,
+            BorrowDecision decision, boolean returnAllowed) {
+        if (returnAllowed) {
+            return "这是你当前借阅的单册，可以归还";
+        }
+        if (decision.allowed()) {
+            return decision.message();
+        }
+        if (copy.status() == BookCopyStatus.LOANED && activeBorrow.isEmpty()) {
+            return "单册状态与借阅记录不一致，请联系图书馆管理员";
+        }
+        return decision.message();
     }
 
     List<BorrowRecordDTO> getBorrowRecords(String userId) {
@@ -897,5 +970,16 @@ final class LibraryService {
 
     private LibraryBusinessException failure(String code, String message) {
         return new LibraryBusinessException(code, message);
+    }
+
+    private record BorrowDecision(boolean allowed, String errorCode, String message) {
+
+        private static BorrowDecision allowed(String message) {
+            return new BorrowDecision(true, null, message);
+        }
+
+        private static BorrowDecision denied(String errorCode, String message) {
+            return new BorrowDecision(false, errorCode, message);
+        }
     }
 }

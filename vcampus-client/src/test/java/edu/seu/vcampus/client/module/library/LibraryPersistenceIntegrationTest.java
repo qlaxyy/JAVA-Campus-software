@@ -41,7 +41,7 @@ class LibraryPersistenceIntegrationTest {
         int availableBefore;
 
         try (CampusServer first = persistentServer(database)) {
-            ClientContext reader = login(first, "20260001");
+            ClientContext reader = login(first, "20260006");
             availableBefore = search(reader, "9787020002207").getAvailableCount();
             Response borrowed = reader.send(
                     LibraryActions.BORROW_COPY, new CopyBorrowRequest(barcode));
@@ -49,7 +49,7 @@ class LibraryPersistenceIntegrationTest {
         }
 
         try (CampusServer second = persistentServer(database)) {
-            ClientContext reader = login(second, "20260001");
+            ClientContext reader = login(second, "20260006");
             BorrowRecordDTO current = recordWithBarcode(records(reader), barcode);
             assertEquals("BORROWED", current.getStatus());
             assertEquals(barcode, current.getBarcode());
@@ -61,14 +61,14 @@ class LibraryPersistenceIntegrationTest {
         }
 
         try (CampusServer third = persistentServer(database)) {
-            ClientContext reader = login(third, "20260001");
+            ClientContext reader = login(third, "20260006");
             assertEquals("RETURNED",
                     recordWithBarcode(records(reader), barcode).getStatus());
             assertEquals(availableBefore - 1,
                     search(reader, "9787020002207").getAvailableCount(),
                     "a returned copy is unavailable until a librarian shelves it");
 
-            ClientContext librarian = login(third, "20260005");
+            ClientContext librarian = login(third, "20260003");
             BookCopyDTO copy = copies(librarian, "B004").stream()
                     .filter(value -> barcode.equals(value.getBarcode()))
                     .findFirst().orElseThrow();
@@ -90,7 +90,7 @@ class LibraryPersistenceIntegrationTest {
         String reservationId;
 
         try (CampusServer first = persistentServer(database)) {
-            ClientContext reader = login(first, "20260001");
+            ClientContext reader = login(first, "20260006");
             List<BorrowRecordDTO> records = records(reader);
             assertEquals("BORROWED",
                     recordWithBarcode(records, "SEU-B001-001").getStatus());
@@ -103,7 +103,7 @@ class LibraryPersistenceIntegrationTest {
             reservationId = ready.getReservationId();
             assertEquals("SEU-B003-001", ready.getAssignedBarcode());
 
-            ClientContext librarian = login(first, "20260005");
+            ClientContext librarian = login(first, "20260003");
             assertEquals("LOANED", copyWithBarcode(
                     copies(librarian, "B001"), "SEU-B001-001").getStatus());
             assertEquals("AVAILABLE", copyWithBarcode(
@@ -113,12 +113,12 @@ class LibraryPersistenceIntegrationTest {
         }
 
         try (CampusServer second = persistentServer(database)) {
-            ClientContext reader = login(second, "20260001");
+            ClientContext reader = login(second, "20260006");
             ReservationDTO ready = reservationWithId(reservations(reader), reservationId);
             assertEquals("READY_FOR_PICKUP", ready.getStatus());
             assertEquals("SEU-B003-001", ready.getAssignedBarcode());
 
-            ClientContext librarian = login(second, "20260005");
+            ClientContext librarian = login(second, "20260003");
             assertEquals("RESERVED", copyWithBarcode(
                     copies(librarian, "B003"), "SEU-B003-001").getStatus());
 
@@ -129,14 +129,14 @@ class LibraryPersistenceIntegrationTest {
         }
 
         try (CampusServer third = persistentServer(database)) {
-            ClientContext reader = login(third, "20260001");
+            ClientContext reader = login(third, "20260006");
             assertEquals("CANCELED",
                     reservationWithId(reservations(reader), reservationId).getStatus(),
                     "an existing database must not recreate the ready reservation");
             assertEquals(2, records(reader).size(),
                     "an existing database must not duplicate demonstration borrows");
 
-            ClientContext librarian = login(third, "20260005");
+            ClientContext librarian = login(third, "20260003");
             assertEquals("AVAILABLE", copyWithBarcode(
                     copies(librarian, "B003"), "SEU-B003-001").getStatus());
         }

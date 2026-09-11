@@ -7,7 +7,7 @@ public final class StudentProfileDto implements Serializable {
 
     // 核心身份与学籍字段（只读）
     private Long id;                  // 物理主键，对应选课模块 tblEnrollment.studentId
-    private String studentId;         // 业务学号，如 student001
+    private String studentId;         // 业务学号；最终演示暂与一卡通号相同，如 20260006
     private String name;              // 姓名
     private String gender;            // 性别 (男/女 或 MALE/FEMALE)
     private String ethnicity;         // 民族

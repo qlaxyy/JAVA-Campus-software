@@ -42,10 +42,10 @@ class AccessHospitalRepositoryTest {
         AccessHospitalRepository first = repository(path);
 
         assertEquals(15, first.findActiveDepartments().size());
-        assertEquals(16, first.findSlots(
+        assertEquals(14, first.findSlots(
                 LocalDate.of(2026, 9, 4), LocalDate.of(2026, 9, 11)).size());
         assertEquals("doctor-chen",
-                first.findActiveDoctorByUserId("U-TEACHER-001")
+                first.findActiveDoctorByUserId("U-DOCTOR-001")
                         .orElseThrow().doctorId());
 
         AccessHospitalRepository reopened = repository(path);
@@ -130,8 +130,8 @@ class AccessHospitalRepositoryTest {
                 draft.capacity(), draft.bookedCount(), true));
 
         AccessHospitalRepository afterPublish = repository(path);
-        assertEquals(11, afterPublish.findActiveDoctors().size());
-        assertEquals(17, afterPublish.findAllSlots().size());
+        assertEquals(10, afterPublish.findActiveDoctors().size());
+        assertEquals(15, afterPublish.findAllSlots().size());
         assertEquals(true, afterPublish.findSlotById(draft.scheduleId())
                 .orElseThrow().published());
     }
@@ -335,7 +335,7 @@ class AccessHospitalRepositoryTest {
                 "token-bill-patient", "U-ACCESS-BILL-PATIENT", "bill-patient",
                 "费用测试患者", Role.USER);
         SessionInfo doctor = new SessionInfo(
-                "token-bill-doctor", "U-TEACHER-001", "teacher001",
+                "token-bill-doctor", "U-DOCTOR-001", "teacher001",
                 "陈医生", Role.USER);
         HospitalService first = new HospitalService(repository(path), CLOCK);
         String appointmentId = first.bookAppointment(
@@ -381,7 +381,7 @@ class AccessHospitalRepositoryTest {
                 Role.USER);
         SessionInfo doctor = new SessionInfo(
                 "token-clinical-doctor",
-                "U-TEACHER-001",
+                "U-DOCTOR-001",
                 "teacher001",
                 "陈医生",
                 Role.USER);

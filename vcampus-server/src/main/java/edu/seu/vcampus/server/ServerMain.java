@@ -3,6 +3,8 @@ package edu.seu.vcampus.server;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
 import edu.seu.vcampus.server.module.ServerModules;
 import edu.seu.vcampus.server.module.user.LocalSuperAdminRecovery;
+import edu.seu.vcampus.server.demo.DemoDatabaseRebuilder;
+import edu.seu.vcampus.server.infrastructure.database.DatabaseProcessLock;
 
 import java.io.Console;
 import java.net.Inet4Address;
@@ -38,19 +40,30 @@ public final class ServerMain {
             resetSuperAdministratorPassword(args);
             return;
         }
+        if (args.length > 0 && "--rebuild-demo-database".equals(args[0])) {
+            Path databasePath = args.length > 1 ? Path.of(args[1]) : DEFAULT_DATABASE_PATH;
+            DemoDatabaseRebuilder.Result result = DemoDatabaseRebuilder.rebuild(databasePath);
+            if (result.backupPath() != null) {
+                System.out.printf("旧数据库已备份到 %s%n", result.backupPath());
+            }
+            System.out.printf("演示数据库重建完成：%s（%d 个账号）%n",
+                    result.databasePath(), result.accountCount());
+            return;
+        }
         int port = args.length > 0 ? Integer.parseInt(args[0]) : DEFAULT_PORT;
         Path databasePath = args.length > 1 ? Path.of(args[1]) : DEFAULT_DATABASE_PATH;
-        CampusServer server = new CampusServer(
-                port, ServerModules.createPersistentRouter(databasePath));
-        Runtime.getRuntime().addShutdownHook(new Thread(server::close, "vcampus-shutdown"));
-
-        server.start();
-        System.out.printf("Virtual Campus server started on port %d.%n", server.getPort());
-        System.out.println("The server is listening on all available network interfaces.");
-        printClientConnectionAddresses(server.getPort());
-        System.out.printf("Persistent server data is stored in %s.%n",
-                databasePath.toAbsolutePath().normalize());
-        server.awaitTermination();
+        try (DatabaseProcessLock ignored = DatabaseProcessLock.acquire(databasePath)) {
+            CampusServer server = new CampusServer(
+                    port, ServerModules.createPersistentRouter(databasePath));
+            Runtime.getRuntime().addShutdownHook(new Thread(server::close, "vcampus-shutdown"));
+            server.start();
+            System.out.printf("Virtual Campus server started on port %d.%n", server.getPort());
+            System.out.println("The server is listening on all available network interfaces.");
+            printClientConnectionAddresses(server.getPort());
+            System.out.printf("Persistent server data is stored in %s.%n",
+                    databasePath.toAbsolutePath().normalize());
+            server.awaitTermination();
+        }
     }
 
     private static void resetSuperAdministratorPassword(String[] args) {

@@ -21,6 +21,10 @@ public final class LibraryActions {
     public static final String RETURN_COPY =
             ActionNames.of(ModuleNames.LIBRARY, "RETURN_COPY");
 
+    /** Inspects one barcode and reports the authenticated user's allowed terminal actions. */
+    public static final String INSPECT_COPY =
+            ActionNames.of(ModuleNames.LIBRARY, "INSPECT_COPY");
+
     /** Gets current and historical records for the authenticated user; request data is null. */
     public static final String GET_BORROW_RECORDS =
             ActionNames.of(ModuleNames.LIBRARY, "GET_BORROW_RECORDS");

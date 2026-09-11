@@ -65,7 +65,7 @@ tblOfferingTeacher
 | `COURSE.TEACHER_LIST_GRADES` | `TeacherListStudentsRequest(batchId, offeringId)` | 查看教学班成绩 |
 | `COURSE.TEACHER_UPDATE_GRADE` | `AdminUpdateGradeRequest(...)` | 修改本人教学班学生成绩 |
 
-当前代码中的任课关系仍是演示用临时映射，只绑定 `U-COURSE-TEACHER-001` 与教学班 `1001`，需要由选课负责人替换为数据库实现。
+任课关系已经由 `tblOfferingTeacher` 持久化，使用 `teacherUserId` 关联公共教师目录。最终演示数据为 8 名教师各预置至少一个教学班；选课模块后续维护任课关系时继续使用同一张表，`teacherName` 仅作为兼容旧 DTO 的显示快照。
 
 ## 4. 学籍模块负责的内容
 
@@ -78,7 +78,7 @@ tblOfferingTeacher
 
 教师只能查看规定范围内的学生资料，不能修改学生学籍，也不能查看或审批学籍异动。
 
-目前“教师只能查看自己教学班学生”的联合鉴权尚未完整接通，需要选课与学籍负责人共同完成。
+“教师只能查看自己教学班学生”的联合鉴权已经接通：学籍服务器会同时校验教师资格、任课关系与学生有效选课记录。
 
 ## 5. 分工总结
 

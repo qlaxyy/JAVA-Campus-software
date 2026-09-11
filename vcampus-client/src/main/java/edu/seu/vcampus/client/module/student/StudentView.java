@@ -161,7 +161,7 @@ public class StudentView extends JPanel {
         JPanel bannerRightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 5));
         bannerRightPanel.setOpaque(false);
         txtSearchId.setPreferredSize(new Dimension(110, 32));
-        txtSearchId.setText("student001");
+        txtSearchId.setText("20260006");
         txtSearchId.setFont(FONT_BODY);
 
         btnSearch.setPreferredSize(new Dimension(95, 32));

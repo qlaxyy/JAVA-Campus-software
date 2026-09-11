@@ -40,7 +40,7 @@ class PatientHealthRecordPanelTest {
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(context.login(
-                    "20260001", "123456".toCharArray()).isSuccess());
+                    "20260006", "123456".toCharArray()).isSuccess());
             AppointmentBookingView booking = assertInstanceOf(
                     AppointmentBookingView.class,
                     context.send(
@@ -49,7 +49,7 @@ class PatientHealthRecordPanelTest {
                             .getData());
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
-                    "20260002", "123456".toCharArray()).isSuccess());
+                    "20260029", "123456".toCharArray()).isSuccess());
             assertTrue(context.send(
                     HospitalActions.SUBMIT_CONSULTATION,
                     new SubmitConsultationRequest(
@@ -62,7 +62,7 @@ class PatientHealthRecordPanelTest {
                     .isSuccess());
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
-                    "20260001", "123456".toCharArray()).isSuccess());
+                    "20260006", "123456".toCharArray()).isSuccess());
 
             PatientHealthRecordPanel[] panel = new PatientHealthRecordPanel[1];
             AtomicReference<ConsultationRecordView> followUpSource = new AtomicReference<>();
@@ -137,7 +137,7 @@ class PatientHealthRecordPanelTest {
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(context.login(
-                    "20260001", "123456".toCharArray()).isSuccess());
+                    "20260006", "123456".toCharArray()).isSuccess());
             AppointmentBookingView booking = assertInstanceOf(
                     AppointmentBookingView.class,
                     context.send(
@@ -146,7 +146,7 @@ class PatientHealthRecordPanelTest {
                             .getData());
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
-                    "20260002", "123456".toCharArray()).isSuccess());
+                    "20260029", "123456".toCharArray()).isSuccess());
             ExaminationOrderView order = assertInstanceOf(
                     ExaminationOrderView.class,
                     context.send(
@@ -160,7 +160,7 @@ class PatientHealthRecordPanelTest {
                             .getData());
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
-                    "20260001", "123456".toCharArray()).isSuccess());
+                    "20260006", "123456".toCharArray()).isSuccess());
 
             PatientHealthRecordPanel[] panel = new PatientHealthRecordPanel[1];
             SwingUtilities.invokeAndWait(() -> {

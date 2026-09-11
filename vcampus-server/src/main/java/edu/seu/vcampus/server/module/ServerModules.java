@@ -29,26 +29,36 @@ public final class ServerModules {
      * @return fully initialized router
      */
     public static ActionRouter createRouter() {
+        InMemoryAuthenticationService authentication = new InMemoryAuthenticationService();
         return createRouter(
-                new InMemoryAuthenticationService(),
+                authentication,
+                new StudentServerModule(),
                 new CourseServerModule(),
                 new LibraryServerModule(),
+                new ShopServerModule(),
                 new HospitalServerModule());
     }
 
     /** Builds the production router with supported module data persisted in Access. */
     public static ActionRouter createPersistentRouter(Path databasePath) {
+        InMemoryAuthenticationService authentication =
+                UserAuthenticationBootstrap.createAccessBacked(databasePath);
         return createRouter(
-                UserAuthenticationBootstrap.createAccessBacked(databasePath),
-                CourseServerModule.createAccessBacked(databasePath),
+                authentication,
+                StudentServerModule.createAccessBacked(databasePath, authentication),
+                CourseServerModule.createAccessBacked(
+                        databasePath, authentication, authentication.teacherDirectory()),
                 LibraryServerModule.createAccessBacked(databasePath),
-                HospitalServerModule.createAccessBacked(databasePath));
+                ShopServerModule.createAccessBacked(databasePath),
+                HospitalServerModule.createAccessBacked(databasePath, authentication));
     }
 
     private static ActionRouter createRouter(
             InMemoryAuthenticationService authentication,
+            StudentServerModule studentModule,
             CourseServerModule courseModule,
             LibraryServerModule libraryModule,
+            ShopServerModule shopModule,
             HospitalServerModule hospitalModule) {
         ActionRouter router = new ActionRouter();
         ServerContext context = new ServerContext(
@@ -58,7 +68,7 @@ public final class ServerModules {
                 authentication.teacherDirectory());
         router.register(Actions.PING, request ->
                 Response.success(request, "Server is reachable.", "PONG"));
-        modules(authentication, courseModule, libraryModule, hospitalModule)
+        modules(authentication, studentModule, courseModule, libraryModule, shopModule, hospitalModule)
                 .forEach(module -> module.registerHandlers(router, context));
         return router;
     }
@@ -71,22 +81,26 @@ public final class ServerModules {
     public static List<ServerModule> modules() {
         return modules(
                 new InMemoryAuthenticationService(),
+                new StudentServerModule(),
                 new CourseServerModule(),
                 new LibraryServerModule(),
+                new ShopServerModule(),
                 new HospitalServerModule());
     }
 
     private static List<ServerModule> modules(
             InMemoryAuthenticationService authentication,
+            StudentServerModule studentModule,
             CourseServerModule courseModule,
             LibraryServerModule libraryModule,
+            ShopServerModule shopModule,
             HospitalServerModule hospitalModule) {
         return List.of(
                 new UserServerModule(authentication),
-                new StudentServerModule(),
+                studentModule,
                 courseModule,
                 libraryModule,
-                new ShopServerModule(),
+                shopModule,
                 hospitalModule);
     }
 }

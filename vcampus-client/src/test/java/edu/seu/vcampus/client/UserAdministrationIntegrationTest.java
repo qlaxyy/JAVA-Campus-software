@@ -36,7 +36,7 @@ class UserAdministrationIntegrationTest {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
             ClientContext student = client(server);
-            assertTrue(student.login("20260001", password()).isSuccess());
+            assertTrue(student.login("20260006", password()).isSuccess());
             Response response = student.send(UserActions.ADMIN_LIST_ACCOUNTS, null);
             assertFalse(response.isSuccess());
             assertEquals(ErrorCodes.AUTH_FORBIDDEN, response.getCode());
@@ -48,7 +48,7 @@ class UserAdministrationIntegrationTest {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
             ClientContext student = client(server);
-            assertTrue(student.login("20260001", password()).isSuccess());
+            assertTrue(student.login("20260006", password()).isSuccess());
 
             Response response = student.send(UserActions.ADMIN_LIST_AUDIT_LOGS, null);
 
@@ -67,7 +67,7 @@ class UserAdministrationIntegrationTest {
             Response initial = administrator.send(UserActions.ADMIN_LIST_ACCOUNTS, null);
             UserAccountListResponse accounts = assertInstanceOf(
                     UserAccountListResponse.class, initial.getData());
-            assertEquals(9, accounts.getAccounts().size());
+            assertEquals(39, accounts.getAccounts().size());
 
             CreateUserAccountRequest request = new CreateUserAccountRequest(
                     "20261001", "新建用户", proof("20261001"), Set.of(AdminScope.COURSE));
@@ -160,7 +160,7 @@ class UserAdministrationIntegrationTest {
                     UserActions.ADMIN_BATCH_CREATE_ACCOUNTS,
                     new BatchCreateUserAccountsRequest(List.of(
                             createRequest("20261004", "新生三"),
-                            createRequest("20260001", "重复账号"))));
+                            createRequest("20260006", "重复账号"))));
 
             assertFalse(imported.isSuccess());
             assertEquals(ErrorCodes.USER_USERNAME_EXISTS, imported.getCode());
@@ -177,7 +177,7 @@ class UserAdministrationIntegrationTest {
             AtomicInteger authenticationLost = new AtomicInteger();
             student.setAuthenticationLostHandler(authenticationLost::incrementAndGet);
             assertTrue(administrator.login("20260000", password()).isSuccess());
-            assertTrue(student.login("20260001", password()).isSuccess());
+            assertTrue(student.login("20260006", password()).isSuccess());
             String studentId = student.currentSession().orElseThrow().getUserId();
 
             Response disabled = administrator.send(
@@ -189,7 +189,7 @@ class UserAdministrationIntegrationTest {
             assertEquals(ErrorCodes.AUTH_REQUIRED, oldSession.getCode());
             assertTrue(student.currentSession().isEmpty());
             assertEquals(1, authenticationLost.get());
-            assertFalse(client(server).login("20260001", password()).isSuccess());
+            assertFalse(client(server).login("20260006", password()).isSuccess());
         }
     }
 
@@ -251,7 +251,7 @@ class UserAdministrationIntegrationTest {
             ClientContext administrator = client(server);
             ClientContext target = client(server);
             assertTrue(administrator.login("20260000", password()).isSuccess());
-            assertTrue(target.login("20260004", password()).isSuccess());
+            assertTrue(target.login("20260002", password()).isSuccess());
             String targetId = target.currentSession().orElseThrow().getUserId();
 
             Response updated = administrator.send(
@@ -262,7 +262,7 @@ class UserAdministrationIntegrationTest {
             assertTrue(updated.isSuccess());
             assertEquals(ErrorCodes.AUTH_REQUIRED,
                     target.send(UserActions.CURRENT_SESSION, null).getCode());
-            assertTrue(target.login("20260004", password()).isSuccess());
+            assertTrue(target.login("20260002", password()).isSuccess());
             assertEquals(Set.of(AdminScope.HOSPITAL),
                     target.currentSession().orElseThrow().getAdminScopes());
         }
@@ -275,19 +275,19 @@ class UserAdministrationIntegrationTest {
             ClientContext administrator = client(server);
             ClientContext student = client(server);
             assertTrue(administrator.login("20260000", password()).isSuccess());
-            assertTrue(student.login("20260001", password()).isSuccess());
+            assertTrue(student.login("20260006", password()).isSuccess());
             String studentId = student.currentSession().orElseThrow().getUserId();
 
             Response reset = administrator.send(
                     UserActions.ADMIN_RESET_PASSWORD,
-                    new ResetUserPasswordRequest(studentId, proof("20260001", "654321")));
+                    new ResetUserPasswordRequest(studentId, proof("20260006", "654321")));
 
             assertTrue(reset.isSuccess());
             assertEquals(ErrorCodes.AUTH_REQUIRED,
                     student.send(UserActions.CURRENT_SESSION, null).getCode());
-            assertFalse(client(server).login("20260001", password()).isSuccess());
+            assertFalse(client(server).login("20260006", password()).isSuccess());
             assertTrue(client(server).login(
-                    "20260001", "654321".toCharArray()).isSuccess());
+                    "20260006", "654321".toCharArray()).isSuccess());
         }
     }
 

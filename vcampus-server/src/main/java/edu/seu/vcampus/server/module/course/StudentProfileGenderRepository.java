@@ -1,7 +1,7 @@
 package edu.seu.vcampus.server.module.course;
 
 import edu.seu.vcampus.common.student.StudentProfileDto;
-import edu.seu.vcampus.server.module.student.StudentMemoryRepository;
+import edu.seu.vcampus.server.module.student.StudentRepository;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -12,23 +12,11 @@ import java.util.Optional;
 final class StudentProfileGenderRepository
     implements StudentGenderRepository {
 
-    /**
-     * 账号模块中的演示学生学号。
-     */
-    private static final String DEMO_ACCOUNT_STUDENT_ID =
-        "20260001";
-
-    /**
-     * 学籍模块中的演示学生学号。
-     */
-    private static final String DEMO_PROFILE_STUDENT_ID =
-        "student001";
-
-    private final StudentMemoryRepository
+    private final StudentRepository
         studentRepository;
 
     StudentProfileGenderRepository(
-        StudentMemoryRepository studentRepository) {
+        StudentRepository studentRepository) {
 
         this.studentRepository =
             Objects.requireNonNull(
@@ -73,23 +61,12 @@ final class StudentProfileGenderRepository
         String studentId) {
 
         Optional<StudentProfileDto> profile =
-            studentRepository.findById(
+            studentRepository.findByStudentId(
                 studentId);
 
         if (profile.isPresent()) {
 
             return profile.get();
-        }
-
-        if (DEMO_ACCOUNT_STUDENT_ID.equals(
-            studentId)) {
-
-            return studentRepository
-                .findById(
-                    DEMO_PROFILE_STUDENT_ID)
-                .orElseThrow(() ->
-                    new IllegalStateException(
-                        "未找到演示学生学籍信息。"));
         }
 
         throw new IllegalStateException(

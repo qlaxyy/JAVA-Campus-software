@@ -7,13 +7,13 @@ import java.util.Optional;
 
 public final class StudentService {
 
-    private final StudentMemoryRepository repository;
+    private final StudentRepository repository;
 
     public StudentService() {
         this.repository = new StudentMemoryRepository();
     }
 
-    public StudentService(StudentMemoryRepository repository) {
+    public StudentService(StudentRepository repository) {
         this.repository = repository;
     }
 

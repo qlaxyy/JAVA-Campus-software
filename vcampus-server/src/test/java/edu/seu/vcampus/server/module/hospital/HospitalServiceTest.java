@@ -79,7 +79,7 @@ class HospitalServiceTest {
         HospitalModeAccessView student = service.getModeAccess(
                 session("U-STUDENT-001", Role.USER));
         HospitalModeAccessView doctor = service.getModeAccess(
-                session("U-TEACHER-001", Role.USER));
+                session("U-DOCTOR-001", Role.USER));
         HospitalModeAccessView administrator = service.getModeAccess(
                 session("U-HOSPITAL-ADMIN-001", Role.USER, Set.of(AdminScope.HOSPITAL)));
 
@@ -114,7 +114,7 @@ class HospitalServiceTest {
                 SearchSlotsRequest.firstVisit("dept-general", "doctor-chen"))
                 .getSlots().stream()
                 .anyMatch(slot -> slot.getScheduleId().equals(draft.getScheduleId())));
-        assertFalse(service.getDoctorWorkspace(session("U-TEACHER-001", Role.USER))
+        assertFalse(service.getDoctorWorkspace(session("U-DOCTOR-001", Role.USER))
                 .getSchedules().stream()
                 .anyMatch(slot -> slot.getScheduleId().equals(draft.getScheduleId())));
 
@@ -127,7 +127,7 @@ class HospitalServiceTest {
                 SearchSlotsRequest.firstVisit("dept-general", "doctor-chen"))
                 .getSlots().stream()
                 .anyMatch(slot -> slot.getScheduleId().equals(draft.getScheduleId())));
-        assertTrue(service.getDoctorWorkspace(session("U-TEACHER-001", Role.USER))
+        assertTrue(service.getDoctorWorkspace(session("U-DOCTOR-001", Role.USER))
                 .getSchedules().stream()
                 .anyMatch(slot -> slot.getScheduleId().equals(draft.getScheduleId())));
 
@@ -272,7 +272,7 @@ class HospitalServiceTest {
 
     @Test
     void doctorCanUsePatientModeButCannotBookOwnSchedule() {
-        SessionInfo doctorAsPatient = session("U-TEACHER-001", Role.USER);
+        SessionInfo doctorAsPatient = session("U-DOCTOR-001", Role.USER);
 
         assertBusinessFailure(
                 ErrorCodes.HOSPITAL_SELF_BOOKING_FORBIDDEN,
@@ -290,7 +290,7 @@ class HospitalServiceTest {
     void legacySelfVisitResultReviewSelectsAnotherDoctorSchedule() {
         InMemoryHospitalRepository repository = new InMemoryHospitalRepository(FIXED_CLOCK);
         HospitalService legacyService = new HospitalService(repository, FIXED_CLOCK);
-        SessionInfo doctorAsPatient = session("U-TEACHER-001", Role.USER);
+        SessionInfo doctorAsPatient = session("U-DOCTOR-001", Role.USER);
         LocalDateTime now = LocalDateTime.now(FIXED_CLOCK);
         HospitalAppointment legacyAppointment = new HospitalAppointment(
                 "appointment-legacy-self",
@@ -458,7 +458,7 @@ class HospitalServiceTest {
     void createsPatientTreatmentBillAndAllowsOnlyItsOwnerToPay() {
         SessionInfo patient = session("U-BILL-PATIENT-001", Role.USER);
         SessionInfo otherPatient = session("U-BILL-PATIENT-OTHER", Role.USER);
-        SessionInfo doctor = session("U-TEACHER-001", Role.USER);
+        SessionInfo doctor = session("U-DOCTOR-001", Role.USER);
         AppointmentBookingView booking = service.bookAppointment(
                 patient,
                 BookAppointmentRequest.firstVisit("slot-general-1"));
@@ -496,7 +496,7 @@ class HospitalServiceTest {
     @Test
     void createsUnpaidExaminationBillWhenDoctorOpensExamination() {
         SessionInfo patient = session("U-BILL-EXAM-PATIENT", Role.USER);
-        SessionInfo doctor = session("U-TEACHER-001", Role.USER);
+        SessionInfo doctor = session("U-DOCTOR-001", Role.USER);
         AppointmentBookingView booking = service.bookAppointment(
                 patient,
                 BookAppointmentRequest.firstVisit("slot-general-1"));
@@ -550,10 +550,10 @@ class HospitalServiceTest {
                 BookAppointmentRequest.firstVisit("slot-general-1"));
 
         DoctorWorkspaceView workspace = service.getDoctorWorkspace(
-                session("U-TEACHER-001", Role.USER));
+                session("U-DOCTOR-001", Role.USER));
 
         assertEquals("doctor-chen", workspace.getDoctorId());
-        assertEquals("陈医生", workspace.getDoctorName());
+        assertEquals("陈安", workspace.getDoctorName());
         assertEquals("全科门诊", workspace.getDepartmentName());
         assertEquals(3, workspace.getSchedules().size());
         assertEquals("slot-general-1", workspace.getSchedules().getFirst().getScheduleId());
@@ -598,7 +598,7 @@ class HospitalServiceTest {
                 Clock.offset(FIXED_CLOCK, Duration.ofDays(2)));
 
         DoctorWorkspaceView workspace = afterSchedule.getDoctorWorkspace(
-                session("U-TEACHER-001", Role.USER));
+                session("U-DOCTOR-001", Role.USER));
 
         assertTrue(workspace.getSchedules().stream()
                 .filter(schedule -> schedule.getScheduleId().equals("slot-general-1"))
@@ -618,7 +618,7 @@ class HospitalServiceTest {
                 new CancelAppointmentRequest(booking.getAppointmentId()));
 
         DoctorWorkspaceView workspace = service.getDoctorWorkspace(
-                session("U-TEACHER-001", Role.USER));
+                session("U-DOCTOR-001", Role.USER));
 
         assertEquals(4, workspace.getSchedules().getFirst()
                 .getPendingAppointments().size());
@@ -630,7 +630,7 @@ class HospitalServiceTest {
     @Test
     void doctorCompletesConsultationAndPatientReadsSignedRecord() {
         SessionInfo patient = session("U-STUDENT-001", Role.USER);
-        SessionInfo doctor = session("U-TEACHER-001", Role.USER);
+        SessionInfo doctor = session("U-DOCTOR-001", Role.USER);
         AppointmentBookingView booking = service.bookAppointment(
                 patient,
                 BookAppointmentRequest.firstVisit("slot-general-1"));
@@ -694,7 +694,7 @@ class HospitalServiceTest {
         InMemoryHospitalRepository repository = new InMemoryHospitalRepository(FIXED_CLOCK);
         HospitalService followUpService = new HospitalService(repository, FIXED_CLOCK);
         SessionInfo patient = session("U-FOLLOW-UP-PATIENT", Role.USER);
-        SessionInfo doctor = session("U-TEACHER-001", Role.USER);
+        SessionInfo doctor = session("U-DOCTOR-001", Role.USER);
 
         AppointmentBookingView firstVisit = followUpService.bookAppointment(
                 patient,
@@ -736,7 +736,7 @@ class HospitalServiceTest {
 
         DoctorConsultationContextView followUpContext = followUpService
                 .getDoctorConsultationContext(
-                        session("U-TEACHER-002", Role.USER),
+                        session("U-DOCTOR-002", Role.USER),
                         new DoctorConsultationContextRequest(
                                 followUp.getAppointmentId()));
         assertEquals(firstVisit.getAppointmentId(),
@@ -750,7 +750,7 @@ class HospitalServiceTest {
     void followUpRejectsForeignSourceAndScheduleFromAnotherDepartment() {
         SessionInfo owner = session("U-FOLLOW-UP-OWNER", Role.USER);
         SessionInfo otherPatient = session("U-FOLLOW-UP-OTHER", Role.USER);
-        SessionInfo doctor = session("U-TEACHER-001", Role.USER);
+        SessionInfo doctor = session("U-DOCTOR-001", Role.USER);
         AppointmentBookingView firstVisit = service.bookAppointment(
                 owner,
                 BookAppointmentRequest.firstVisit("slot-general-1"));
@@ -792,7 +792,7 @@ class HospitalServiceTest {
         assertEquals("花粉过敏",
                 service.getMyHealthRecord(patient).getHealthProfile().getAllergies());
         assertEquals("花粉过敏", service.getDoctorConsultationContext(
-                        session("U-TEACHER-001", Role.USER),
+                        session("U-DOCTOR-001", Role.USER),
                         new DoctorConsultationContextRequest(booking.getAppointmentId()))
                 .getHealthProfile().getAllergies());
         assertEquals("未填写",
@@ -808,7 +808,7 @@ class HospitalServiceTest {
     @Test
     void examinationResultReviewCompletesOneContinuousClinicalEpisode() {
         SessionInfo patient = session("U-STUDENT-001", Role.USER);
-        SessionInfo doctor = session("U-TEACHER-001", Role.USER);
+        SessionInfo doctor = session("U-DOCTOR-001", Role.USER);
         AppointmentBookingView firstVisit = service.bookAppointment(
                 patient,
                 BookAppointmentRequest.firstVisit("slot-general-1"));
@@ -915,7 +915,7 @@ class HospitalServiceTest {
                 new InMemoryHospitalRepository(FIXED_CLOCK);
         HospitalService initialService = new HospitalService(repository, FIXED_CLOCK);
         SessionInfo patient = session("U-RESULT-REVIEW-NO-SHOW", Role.USER);
-        SessionInfo doctor = session("U-TEACHER-001", Role.USER);
+        SessionInfo doctor = session("U-DOCTOR-001", Role.USER);
         AppointmentBookingView firstVisit = initialService.bookAppointment(
                 patient,
                 BookAppointmentRequest.firstVisit("slot-general-1"));
@@ -958,7 +958,7 @@ class HospitalServiceTest {
         InMemoryHospitalRepository repository = new InMemoryHospitalRepository(FIXED_CLOCK);
         HospitalService repeatedService = new HospitalService(repository, FIXED_CLOCK);
         SessionInfo patient = session("U-REPEATED-EXAM-PATIENT", Role.USER);
-        SessionInfo doctor = session("U-TEACHER-001", Role.USER);
+        SessionInfo doctor = session("U-DOCTOR-001", Role.USER);
 
         AppointmentBookingView firstVisit = repeatedService.bookAppointment(
                 patient, BookAppointmentRequest.firstVisit("slot-general-1"));
@@ -1036,7 +1036,7 @@ class HospitalServiceTest {
         AppointmentBookingView firstVisit = setupService.bookAppointment(
                 patient, BookAppointmentRequest.firstVisit("slot-general-1"));
         ExaminationOrderView order = setupService.submitExaminationPlan(
-                session("U-TEACHER-001", Role.USER),
+                session("U-DOCTOR-001", Role.USER),
                 new SubmitExaminationPlanRequest(
                         firstVisit.getAppointmentId(), "待查", "血常规", "", ""));
         setupService.publishDemoExaminationReport(
@@ -1119,7 +1119,7 @@ class HospitalServiceTest {
         AppointmentBookingView booking = service.bookAppointment(
                 session("U-CROSS-DOCTOR-PATIENT", Role.USER),
                 BookAppointmentRequest.firstVisit("slot-general-1"));
-        SessionInfo otherDoctor = session("U-TEACHER-002", Role.USER);
+        SessionInfo otherDoctor = session("U-DOCTOR-002", Role.USER);
 
         assertBusinessFailure(
                 ErrorCodes.HOSPITAL_APPOINTMENT_NOT_FOUND,
@@ -1157,7 +1157,7 @@ class HospitalServiceTest {
     @Test
     void consultationRequiresDiagnosisAndTreatment() {
         SessionInfo patient = session("U-INVALID-CONSULTATION", Role.USER);
-        SessionInfo doctor = session("U-TEACHER-001", Role.USER);
+        SessionInfo doctor = session("U-DOCTOR-001", Role.USER);
         AppointmentBookingView booking = service.bookAppointment(
                 patient,
                 BookAppointmentRequest.firstVisit("slot-general-1"));
@@ -1178,7 +1178,7 @@ class HospitalServiceTest {
                 new InMemoryHospitalRepository(FIXED_CLOCK);
         HospitalService bookingService = new HospitalService(repository, FIXED_CLOCK);
         SessionInfo patient = session("U-PATIENT-NO-SHOW", Role.USER);
-        SessionInfo doctor = session("U-TEACHER-001", Role.USER);
+        SessionInfo doctor = session("U-DOCTOR-001", Role.USER);
         AppointmentBookingView booking = bookingService.bookAppointment(
                 patient,
                 BookAppointmentRequest.firstVisit("slot-general-1"));
@@ -1194,7 +1194,7 @@ class HospitalServiceTest {
                         repository,
                         Clock.offset(FIXED_CLOCK, Duration.ofDays(2)))
                         .markAppointmentNoShow(
-                                session("U-TEACHER-002", Role.USER), request));
+                                session("U-DOCTOR-002", Role.USER), request));
 
         HospitalService laterService = new HospitalService(
                 repository,

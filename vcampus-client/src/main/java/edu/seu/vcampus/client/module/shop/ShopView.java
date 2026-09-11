@@ -34,7 +34,7 @@ public final class ShopView extends JPanel {
     static final String CARD_MANAGE = "manage";
 
     private final ClientContext context;
-    private final ShopCartStore cart = new ShopCartStore();
+    private final ShopCartStore cart;
     private final CardLayout cards = new CardLayout();
     private final ShopModePanel modePanel;
     private final JPanel shoppingShell = new JPanel(new BorderLayout(0, 8));
@@ -56,6 +56,7 @@ public final class ShopView extends JPanel {
      */
     public ShopView(ClientContext context) {
         this.context = context;
+        this.cart = new ShopCartStore(context);
         setLayout(cards);
         setBackground(ShopPalette.PAGE);
 
@@ -92,6 +93,7 @@ public final class ShopView extends JPanel {
         showCard(CARD_SHOP);
         updateShoppingHeader();
         refreshCard();
+        cart.reload();
         if (catalogPanel != null) {
             catalogPanel.reload();
         }

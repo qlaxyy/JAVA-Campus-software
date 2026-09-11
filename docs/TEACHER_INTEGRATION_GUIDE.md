@@ -65,7 +65,7 @@ tblOfferingTeacher
 | `COURSE.TEACHER_LIST_GRADES` | `TeacherListStudentsRequest(batchId, offeringId)` | 查看教学班成绩 |
 | `COURSE.TEACHER_UPDATE_GRADE` | `AdminUpdateGradeRequest(...)` | 修改本人教学班学生成绩 |
 
-当前代码中的任课关系仍是演示用临时映射，只绑定 `U-COURSE-TEACHER-001` 与教学班 `1001`，需要由选课负责人替换为数据库实现。
+任课关系已经由 `tblCourseTeacherAssignment` 持久化，使用 `teacherUserId` 关联公共教师目录。最终演示数据为 8 名教师各预置至少一个教学班；选课模块后续维护任课关系时继续使用同一张表，不保存教师姓名副本。
 
 ## 4. 学籍模块负责的内容
 

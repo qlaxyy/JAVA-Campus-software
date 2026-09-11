@@ -19,9 +19,9 @@ class LibraryAdminIntegrationTest {
     void librarianMaintainsCatalogCopiesStatusesAndAllLibraryBorrows() throws Exception {
         try (CampusServer server = new CampusServer(0, 4)) {
             server.start();
-            ClientContext librarian = login(server, "20260005");
-            ClientContext reader = login(server, "20260001");
-            ClientContext shopAdmin = login(server, "20260006");
+            ClientContext librarian = login(server, "20260003");
+            ClientContext reader = login(server, "20260006");
+            ClientContext shopAdmin = login(server, "20260004");
 
             AddBookRequest addBook = new AddBookRequest("9787111000000", "阶段三测试", "测试作者",
                     "C001", "东南大学出版社", 2026, "中文");

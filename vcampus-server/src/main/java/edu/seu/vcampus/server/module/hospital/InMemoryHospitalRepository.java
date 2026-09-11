@@ -79,39 +79,37 @@ final class InMemoryHospitalRepository implements HospitalRepository {
         doctors = new ArrayList<>(List.of(
                 new HospitalDoctor(
                         "doctor-chen",
-                        "U-TEACHER-001",
+                        "U-DOCTOR-001",
                         "dept-general",
-                        "陈医生",
+                        "陈安",
                         "主治医师",
                         true),
                 new HospitalDoctor(
-                        "doctor-liu", "U-TEACHER-002", "dept-general",
-                        "刘医生", "副主任医师", true),
+                        "doctor-liu", "U-DOCTOR-002", "dept-respiratory",
+                        "刘宁", "副主任医师", true),
                 new HospitalDoctor(
-                        "doctor-zhou", null, "dept-respiratory", "周医生", "主治医师", true),
+                        "doctor-zhou", "U-DOCTOR-003", "dept-gastroenterology", "周岚", "主治医师", true),
                 new HospitalDoctor(
-                        "doctor-qian", null, "dept-gastroenterology", "钱医生", "副主任医师", true),
+                        "doctor-qian", "U-DOCTOR-004", "dept-joint-surgery", "何远", "副主任医师", true),
                 new HospitalDoctor(
-                        "doctor-lin", null, "dept-joint-surgery", "林医生", "副主任医师", true),
+                        "doctor-lin", "U-DOCTOR-005", "dept-sports-medicine", "王清", "主治医师", true),
                 new HospitalDoctor(
-                        "doctor-he", null, "dept-joint-surgery", "何医生", "主治医师", true),
+                        "doctor-he", "U-DOCTOR-006", "dept-psychology", "赵健", "医师", true),
                 new HospitalDoctor(
-                        "doctor-wu", null, "dept-sports-medicine", "吴医生", "主治医师", true),
+                        "doctor-wu", "U-DOCTOR-007", "dept-dental", "孙悦", "主治医师", true),
                 new HospitalDoctor(
-                        "doctor-zhang", null, "dept-psychology", "张医生", "主治医师", true),
+                        "doctor-zhang", "U-DOCTOR-008", "dept-eye", "林川", "主治医师", true),
                 new HospitalDoctor(
-                        "doctor-wang", null, "dept-psychology", "王医生", "副主任医师", true),
+                        "doctor-wang", "U-DOCTOR-009", "dept-general", "钱宁", "医师", true),
                 new HospitalDoctor(
-                        "doctor-zhao", null, "dept-dental", "赵医生", "主治医师", true),
-                new HospitalDoctor(
-                        "doctor-sun", null, "dept-eye", "孙医生", "主任医师", true)));
-        doctorProfiles.put("U-TEACHER-001",
+                        "doctor-zhao", "U-DOCTOR-010", "dept-respiratory", "吴凡", "医师", true)));
+        doctorProfiles.put("U-DOCTOR-001",
                 new DoctorProfile(
-                        "U-TEACHER-001", "dept-general", "陈医生",
+                        "U-DOCTOR-001", "dept-general", "陈安",
                         "主治医师", true));
-        doctorProfiles.put("U-TEACHER-002",
+        doctorProfiles.put("U-DOCTOR-002",
                 new DoctorProfile(
-                        "U-TEACHER-002", "dept-general", "刘医生",
+                        "U-DOCTOR-002", "dept-respiratory", "刘宁",
                         "副主任医师", true));
         LocalDateTime profileUpdatedAt = LocalDateTime.now(clock).minusDays(2);
         patientProfiles.put("U-STUDENT-001",

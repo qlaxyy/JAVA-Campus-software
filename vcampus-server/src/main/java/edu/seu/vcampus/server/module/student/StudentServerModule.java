@@ -5,10 +5,13 @@ import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.student.*;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.infrastructure.ActionRouter;
+import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
 import edu.seu.vcampus.server.module.ServerContext;
 import edu.seu.vcampus.server.module.ServerModule;
+import edu.seu.vcampus.server.security.UserDirectory;
 
 import java.io.Serializable;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -32,6 +35,13 @@ public final class StudentServerModule implements ServerModule {
      */
     public StudentServerModule(StudentService studentService) {
         this.studentService = Objects.requireNonNull(studentService, "studentService must not be null");
+    }
+
+    /** Creates a student module backed by the shared server Access database. */
+    public static StudentServerModule createAccessBacked(
+            Path databasePath, UserDirectory users) {
+        return new StudentServerModule(new StudentService(
+                new AccessStudentRepository(new AccessDatabase(databasePath), users)));
     }
 
     @Override
@@ -81,7 +91,7 @@ public final class StudentServerModule implements ServerModule {
         }
 
         boolean isStudentAdmin = session.canAdminister("student");
-        boolean isSelf = session.getUserId().equalsIgnoreCase(req.getStudentId());
+        boolean isSelf = session.getUsername().equalsIgnoreCase(req.getStudentId());
 
         if (!isStudentAdmin && !isSelf) {
             return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：当前账号无权修改该学生档案");
@@ -111,7 +121,7 @@ public final class StudentServerModule implements ServerModule {
         }
 
         boolean isStudentAdmin = session.canAdminister("student");
-        boolean isSelf = session.getUserId().equalsIgnoreCase(req.getStudentId());
+        boolean isSelf = session.getUsername().equalsIgnoreCase(req.getStudentId());
 
         if (!isStudentAdmin && !isSelf) {
             return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：学生仅能提交本人的异动申请");
@@ -137,7 +147,7 @@ public final class StudentServerModule implements ServerModule {
         SessionInfo session = sessionOpt.get();
 
         boolean isStudentAdmin = session.canAdminister("student");
-        String currentUserId = session.getUserId();
+        String currentStudentNumber = session.getUsername();
 
         String queryStudentId = null;
         if (request.getData() instanceof String s && !s.isBlank()) {
@@ -155,13 +165,13 @@ public final class StudentServerModule implements ServerModule {
                 .findByUserId(session.getUserId())
                 .isPresent();
         if (isTeacher || !session.canAdminister("student")) {
-            if (queryStudentId != null && !queryStudentId.equalsIgnoreCase(currentUserId)) {
+            if (queryStudentId != null && !queryStudentId.equalsIgnoreCase(currentStudentNumber)) {
                 return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：无权调阅他人学籍异动");
             }
         }
 
         // 普通学生强制仅查本人
-        List<StatusChangeDto> list = studentService.listStatusChanges(currentUserId);
+        List<StatusChangeDto> list = studentService.listStatusChanges(currentStudentNumber);
         return Response.success(request, "获取个人异动成功", (Serializable) list);
     }
 

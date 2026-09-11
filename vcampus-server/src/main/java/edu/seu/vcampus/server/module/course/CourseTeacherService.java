@@ -1,8 +1,12 @@
 package edu.seu.vcampus.server.module.course;
 
 import edu.seu.vcampus.common.course.CourseInfo;
+import edu.seu.vcampus.common.course.CourseSearchItem;
+import edu.seu.vcampus.common.course.CourseSearchResult;
+import edu.seu.vcampus.common.course.EnrollmentInfo;
 import edu.seu.vcampus.common.course.OfferingInfo;
 import edu.seu.vcampus.common.course.TeacherStudentInfo;
+import edu.seu.vcampus.server.security.TeacherDirectory;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -19,12 +23,16 @@ final class CourseTeacherService {
 
     private final CourseEnrollmentRepository
         enrollmentRepository;
+    private final CourseTeacherAssignmentRepository assignmentRepository;
+    private final TeacherDirectory teacherDirectory;
 
     CourseTeacherService(
         CourseOfferingAdministrationService
             offeringAdministrationService,
         CourseEnrollmentRepository
-            enrollmentRepository) {
+            enrollmentRepository,
+        CourseTeacherAssignmentRepository assignmentRepository,
+        TeacherDirectory teacherDirectory) {
 
         this.offeringAdministrationService =
             Objects.requireNonNull(
@@ -33,6 +41,8 @@ final class CourseTeacherService {
         this.enrollmentRepository =
             Objects.requireNonNull(
                 enrollmentRepository);
+        this.assignmentRepository = Objects.requireNonNull(assignmentRepository);
+        this.teacherDirectory = teacherDirectory;
     }
 
     /**
@@ -42,10 +52,7 @@ final class CourseTeacherService {
         String userId,
         long offeringId) {
 
-        return TemporaryCourseTeacherAssignmentDirectory
-            .isAssignedToOffering(
-                userId,
-                offeringId);
+        return assignmentRepository.isAssigned(userId, offeringId);
     }
 
     /**
@@ -58,10 +65,8 @@ final class CourseTeacherService {
         List<CourseInfo> result =
             new ArrayList<>();
 
-        for (CourseInfo course
-            : offeringAdministrationService
-            .listCourses(
-                batchId)) {
+        for (CourseInfo course : withCurrentTeacherNames(
+                offeringAdministrationService.listCourses(batchId))) {
 
             List<OfferingInfo>
                 assignedOfferings =
@@ -92,6 +97,62 @@ final class CourseTeacherService {
 
         return List.copyOf(
             result);
+    }
+
+    /** Replaces stored display snapshots with names from the public teacher directory. */
+    List<CourseInfo> withCurrentTeacherNames(List<CourseInfo> courses) {
+        return courses.stream().map(course -> new CourseInfo(
+                course.getCourseId(),
+                course.getCourseCode(),
+                course.getCourseName(),
+                course.getCredits(),
+                course.getCourseType(),
+                course.isSelected(),
+                course.getOfferings().stream().map(this::withCurrentTeacherNames).toList()))
+                .toList();
+    }
+
+    CourseSearchResult withCurrentSearchTeacherNames(CourseSearchResult result) {
+        List<CourseSearchItem> items = result.getItems().stream().map(item -> new CourseSearchItem(
+                item.getCourseId(), item.getCourseCode(), item.getCourseName(),
+                item.getCredits(), item.getCourseType(), item.getDepartmentName(),
+                item.getOfferingId(), item.getClassNo(), currentTeacherNames(
+                        item.getOfferingId(), item.getTeacherNames()),
+                item.getSchedules(), item.getLocationName(), item.getCampusName(),
+                item.getTeachingLanguage(), item.getSelectedCount(), item.getCapacity(),
+                item.getRemainingCount())).toList();
+        return new CourseSearchResult(items, result.getPage(), result.getPageSize(),
+                result.getTotalCount(), result.getTotalPages());
+    }
+
+    List<EnrollmentInfo> withCurrentEnrollmentTeacherNames(List<EnrollmentInfo> items) {
+        return items.stream().map(item -> new EnrollmentInfo(
+                item.getEnrollmentId(), item.getOfferingId(), item.getCourseCode(),
+                item.getCourseName(), item.getClassNo(), currentTeacherNames(
+                        item.getOfferingId(), item.getTeacherNames()),
+                item.getSchedules(), item.getLocationName(), item.getCredits(),
+                item.getCourseType(), item.isCanDrop(), item.getDropUnavailableReason()))
+                .toList();
+    }
+
+    private OfferingInfo withCurrentTeacherNames(OfferingInfo offering) {
+        return new OfferingInfo(
+                offering.getOfferingId(), offering.getClassNo(),
+                currentTeacherNames(offering.getOfferingId(), offering.getTeacherNames()),
+                offering.getSchedules(), offering.getLocationName(), offering.getCampusName(),
+                offering.getTeachingLanguage(), offering.getSelectedCount(),
+                offering.getCapacity(), offering.getRemainingCount(), offering.isSelected(),
+                offering.getAvailabilityStatus());
+    }
+
+    private List<String> currentTeacherNames(long offeringId, List<String> fallback) {
+        if (teacherDirectory == null) return fallback;
+        List<String> names = assignmentRepository.findTeacherUserIds(offeringId).stream()
+                .map(teacherDirectory::findByUserId)
+                .flatMap(java.util.Optional::stream)
+                .map(identity -> identity.displayName())
+                .toList();
+        return names.isEmpty() ? fallback : names;
     }
 
     /**

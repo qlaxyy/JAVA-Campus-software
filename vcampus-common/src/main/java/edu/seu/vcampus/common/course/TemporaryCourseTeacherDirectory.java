@@ -6,15 +6,16 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Compatibility facade for course branches created before the shared teacher table.
- * New code must query USER.CURRENT_TEACHER_PROFILE or ServerContext.teachers().
+ * Frozen compatibility facade for course branches created before the shared teacher table.
+ * New server code must query {@code ServerContext.teachers()} and the persistent
+ * course assignment repository; this class is not the authoritative directory.
  */
 @Deprecated(forRemoval = true)
 public final class TemporaryCourseTeacherDirectory {
 
     private static final Map<String, TeacherAssignment> TEACHERS = Map.of(
-            "20260008",
-            new TeacherAssignment("20260008", "演示教师", Set.of(1001L)));
+            "20260021",
+            new TeacherAssignment("20260021", "王建国", Set.of(1001L)));
 
     private TemporaryCourseTeacherDirectory() {
     }

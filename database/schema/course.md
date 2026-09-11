@@ -4,7 +4,7 @@
 
 * 模块：选课系统
 * 对应 Epic：#3
-* 状态：草稿
+* 状态：课程目录、选课、成绩和教师任课关系已接入 Access；最终种子数据可重复生成
 
 ## 2. 表清单
 
@@ -14,6 +14,7 @@
 | `tblCourseOffering`     | 每学期开设的具体教学班 | `offeringId`        | 同一课程可开多个教学班       |
 | `tblCourseSchedule`     | 教学班上课时间     | `scheduleId`        | 支持周次、单双周和时间冲突检测   |
 | `tblOfferingTeacher`    | 教学班任课教师     | `offeringTeacherId` | 一个教学班可有多个教师       |
+| `tblCourseTeacherAssignment` | 教师账号与教学班关系 | `assignmentId` | `(teacherUserId, offeringId)` 唯一 |
 | `tblSelectionBatch`     | 选课批次        | `batchId`           | 记录预选、重修、退改补及开放时间  |
 | `tblTrainingPlanCourse` | 培养方案课程      | `planCourseId`      | 记录课程建议修读学期        |
 | `tblCourseSubstitution` | 方案外课程替代关系   | `substitutionId`    | 一门方案外课程只替代一门方案内课程 |
@@ -85,6 +86,18 @@
 | `offeringTeacherId` | Long Integer   | 是  | 自动编号 | 主键     |
 | `offeringId`        | Long Integer   | 是  | 无    | 对应教学班  |
 | `teacherName`       | Short Text(50) | 是  | 无    | 任课教师姓名 |
+
+`teacherName` 仅为兼容现有课程 DTO 的显示快照。教师鉴权不再使用硬编码姓名或临时映射，而是读取 `tblCourseTeacherAssignment.teacherUserId`；当前姓名应通过公共教师/用户目录填充。
+
+### `tblCourseTeacherAssignment`
+
+| 字段 | Access 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `assignmentId` | AutoNumber | 是 | 主键 |
+| `teacherUserId` | Short Text(36) | 是 | 公共教师表中的稳定 `userId` |
+| `offeringId` | Long Integer | 是 | 选课模块教学班 |
+
+最终种子库为 8 名教师各分配至少一个教学班，并为 15 名学生建立选课记录，其中 8 条带成绩；`selectedCount` 在重建时根据有效选课记录重新计算。
 
 ---
 

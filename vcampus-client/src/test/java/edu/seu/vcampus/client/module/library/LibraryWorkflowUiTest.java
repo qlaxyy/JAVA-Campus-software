@@ -22,7 +22,7 @@ class LibraryWorkflowUiTest {
     void readerChoosesModesAndUsesCatalogTerminalAndPersonalRecords() throws Exception {
         try (CampusServer server = new CampusServer(0, 3)) {
             server.start();
-            ClientContext context = login(server, "20260001");
+            ClientContext context = login(server, "20260006");
             AtomicReference<LibraryModePanel> root = new AtomicReference<>();
             onEdt(() -> root.set((LibraryModePanel)
                     new LibraryClientModule().createView(context)));
@@ -49,7 +49,7 @@ class LibraryWorkflowUiTest {
             SelfServicePanel terminal = named(terminalMode, SelfServicePanel.class,
                     "library.selfService");
             JLabel terminalUser = named(terminal, JLabel.class, "library.selfService.user");
-            assertEquals("当前用户：演示学生", terminalUser.getText());
+            assertEquals("当前用户：周一", terminalUser.getText());
             assertFalse(terminalUser.getText().contains("U-STUDENT-001"));
             assertFalse(buttons(catalog).stream().anyMatch(button -> button.getText().contains("借阅")));
             assertFalse(buttons(records).stream().anyMatch(button -> button.getText().contains("归还选中")));
@@ -142,7 +142,7 @@ class LibraryWorkflowUiTest {
     void everyLibraryTableIsReadOnlySingleSelectionAndHasFixedHeaders() throws Exception {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
-            ClientContext context = login(server, "20260005");
+            ClientContext context = login(server, "20260003");
             AtomicReference<JComponent> view = new AtomicReference<>();
             onEdt(() -> view.set(new LibraryClientModule().createView(context)));
             List<JTable> tables = descendants(view.get()).stream()

@@ -34,6 +34,7 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Objects;
 import java.util.Optional;
+import edu.seu.vcampus.server.security.UserDirectory;
 
 /** Server entry point owned by the hospital-appointment module. */
 public final class HospitalServerModule implements ServerModule {
@@ -46,9 +47,14 @@ public final class HospitalServerModule implements ServerModule {
 
     /** Creates an Access-backed doctor registry plus the staged clinical repository. */
     public static HospitalServerModule createAccessBacked(Path databasePath) {
+        return createAccessBacked(databasePath, null);
+    }
+
+    /** Creates the persistent module and resolves current doctor names through the shared directory. */
+    public static HospitalServerModule createAccessBacked(Path databasePath, UserDirectory users) {
         Clock clock = Clock.systemDefaultZone();
         return new HospitalServerModule(new HospitalService(
-                new AccessHospitalRepository(new AccessDatabase(databasePath), clock), clock));
+                new AccessHospitalRepository(new AccessDatabase(databasePath), clock, users), clock));
     }
 
     HospitalServerModule(HospitalService service) {

@@ -1,5 +1,6 @@
 package edu.seu.vcampus.server.module.user;
 
+import edu.seu.vcampus.server.demo.FinalDemoRoster;
 import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
 
 import java.sql.Connection;
@@ -9,6 +10,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -17,11 +19,13 @@ import java.util.Optional;
 final class AccessTeacherRepository implements TeacherRepository {
 
     private static final String TABLE = "tblTeacherProfile";
+    private static final Instant DEMO_CREATED_AT = Instant.parse("2026-09-01T00:00:00Z");
     private final AccessDatabase database;
 
     AccessTeacherRepository(AccessDatabase database) {
         this.database = database;
         initializeSchema();
+        seedIfEmpty();
     }
 
     @Override
@@ -112,6 +116,18 @@ final class AccessTeacherRepository implements TeacherRepository {
         } catch (SQLException exception) {
             throw failure("Cannot initialize teacher schema.", exception);
         }
+    }
+
+    private void seedIfEmpty() {
+        if (!findAll().isEmpty()) {
+            return;
+        }
+        saveAll(FinalDemoRoster.teachers().stream()
+                .map(seed -> new TeacherProfile(
+                        seed.userId(), seed.department(), seed.title(), true,
+                        FinalDemoRoster.SUPER_ADMIN_USER_ID,
+                        DEMO_CREATED_AT, DEMO_CREATED_AT))
+                .toList());
     }
 
     private static TeacherProfile read(ResultSet result) throws SQLException {

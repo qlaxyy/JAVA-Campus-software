@@ -3,6 +3,7 @@ package edu.seu.vcampus.client.module.library;
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.infrastructure.CampusClient;
 import edu.seu.vcampus.common.library.BookCopyIdRequest;
+import edu.seu.vcampus.common.library.CreateReservationRequest;
 import edu.seu.vcampus.common.library.LibraryActions;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
 import org.junit.jupiter.api.Test;
@@ -107,6 +108,46 @@ class LibraryAdminUiTest {
             JTable borrows = named(admin, JTable.class, "library.admin.borrows");
             awaitUi(borrows::isEnabled);
             assertFalse(borrows.getModel().isCellEditable(0, 0));
+        }
+    }
+
+    @Test
+    void reservedCopyIsLabeledAndCannotBeEditedOrWithdrawn() throws Exception {
+        try (CampusServer server = new CampusServer(0, 3)) {
+            server.start();
+            ClientContext reader = login(server, "20260001");
+            assertTrue(reader.send(LibraryActions.CREATE_RESERVATION,
+                    new CreateReservationRequest(
+                            "B001", "九龙湖校区—中文图书阅览室3")).isSuccess());
+
+            ClientContext librarian = login(server, "20260005");
+            AtomicReference<LibraryModePanel> root = new AtomicReference<>();
+            onEdt(() -> root.set((LibraryModePanel)
+                    new LibraryClientModule().createView(librarian)));
+            JTabbedPane navigation = named(
+                    root.get(), JTabbedPane.class, "library.navigation");
+            LibraryAdminPanel admin = (LibraryAdminPanel) navigation.getComponentAt(2);
+            onEdt(() -> {
+                named(root.get(), JButton.class, "library.mode.online").doClick();
+                navigation.setSelectedIndex(2);
+            });
+            JTable books = named(admin, JTable.class, "library.admin.books");
+            awaitUi(() -> books.getRowCount() > 0 && books.isEnabled());
+            onEdt(() -> books.setRowSelectionInterval(0, 0));
+            JTabbedPane areas = named(admin, JTabbedPane.class, "library.admin.tabs");
+            onEdt(() -> areas.setSelectedIndex(1));
+
+            JTable copies = named(admin, JTable.class, "library.admin.copies");
+            awaitUi(() -> copies.getRowCount() > 0 && copies.isEnabled());
+            assertEquals("预约待取", copies.getValueAt(0, 4));
+            assertEquals("不可借（预约待取）", copies.getValueAt(0, 5));
+            onEdt(() -> copies.setRowSelectionInterval(0, 0));
+            assertFalse(named(admin, JTextField.class, "library.admin.location").isEnabled());
+            assertFalse(named(admin, JTextField.class, "library.admin.callNumber").isEnabled());
+            assertFalse(button(admin, "保存位置与索书号").isEnabled());
+            assertFalse(button(admin, "确认归架").isEnabled());
+            assertFalse(button(admin, "恢复单册").isEnabled());
+            assertFalse(button(admin, "注销单册").isEnabled());
         }
     }
 

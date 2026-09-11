@@ -23,6 +23,7 @@ public final class SlotView implements Serializable {
     private final int capacity;
     private final int remaining;
     private final SlotAvailability availability;
+    private final boolean bookedByCurrentUser;
 
     public SlotView(
             String scheduleId,
@@ -37,6 +38,25 @@ public final class SlotView implements Serializable {
             int capacity,
             int remaining,
             SlotAvailability availability) {
+        this(scheduleId, departmentId, departmentName, doctorId, doctorName,
+                doctorTitle, startTime, endTime, priceCents, capacity, remaining,
+                availability, false);
+    }
+
+    public SlotView(
+            String scheduleId,
+            String departmentId,
+            String departmentName,
+            String doctorId,
+            String doctorName,
+            String doctorTitle,
+            LocalDateTime startTime,
+            LocalDateTime endTime,
+            int priceCents,
+            int capacity,
+            int remaining,
+            SlotAvailability availability,
+            boolean bookedByCurrentUser) {
         this.scheduleId = requireText(scheduleId, "scheduleId");
         this.departmentId = requireText(departmentId, "departmentId");
         this.departmentName = requireText(departmentName, "departmentName");
@@ -56,6 +76,7 @@ public final class SlotView implements Serializable {
         this.priceCents = priceCents;
         this.capacity = capacity;
         this.remaining = remaining;
+        this.bookedByCurrentUser = bookedByCurrentUser;
     }
 
     public String getScheduleId() {
@@ -104,6 +125,10 @@ public final class SlotView implements Serializable {
 
     public SlotAvailability getAvailability() {
         return availability;
+    }
+
+    public boolean isBookedByCurrentUser() {
+        return bookedByCurrentUser;
     }
 
     private static String requireText(String value, String fieldName) {

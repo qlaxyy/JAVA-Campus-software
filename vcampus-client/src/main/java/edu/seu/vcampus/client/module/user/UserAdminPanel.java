@@ -23,17 +23,23 @@ import edu.seu.vcampus.common.hospital.ReviewDoctorApplicationRequest;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
+import javax.swing.RowFilter;
 import javax.swing.SwingWorker;
 import javax.swing.SwingUtilities;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.event.HierarchyEvent;
@@ -44,6 +50,8 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
@@ -53,39 +61,68 @@ public final class UserAdminPanel extends JPanel {
     private final ClientContext context;
     private final UserAccountTableModel tableModel = new UserAccountTableModel();
     private final JTable table = new JTable(tableModel);
+    private final TableRowSorter<UserAccountTableModel> tableSorter =
+            new TableRowSorter<>(tableModel);
     private final JLabel statusLabel = new JLabel("进入页面后加载账号列表");
+    private final JLabel summaryLabel = new JLabel("账号数据尚未加载");
+    private final JTextField searchField = new JTextField();
+    private final JComboBox<String> statusFilter = new JComboBox<>(new String[]{
+        "全部状态", "启用", "禁用"
+    });
+    private final JComboBox<String> scopeFilter = new JComboBox<>(new String[]{
+        "全部管理范围", "无管理权", "超级管理员", "学籍", "选课", "图书馆", "商店", "医院"
+    });
+    private final JButton clearFilterButton = new JButton("清除筛选");
     private final JButton addButton = new JButton("新增账号");
     private final JButton importButton = new JButton("批量导入");
     private final JButton editButton = new JButton("编辑账号");
     private final JButton statusButton = new JButton("启用/禁用");
     private final JButton resetButton = new JButton("重置密码");
-    private final JButton refreshButton = new JButton("刷新");
     private final JButton doctorReviewButton = new JButton("医生申请审核");
     private final JButton auditButton = new JButton("操作记录");
+    private final JButton teacherManagementButton = new JButton("教师管理");
     private boolean loaded;
 
     public UserAdminPanel(ClientContext context) {
         this.context = context;
-        setLayout(new BorderLayout(12, 12));
-        setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+        setLayout(new BorderLayout(0, 14));
+        setBorder(BorderFactory.createEmptyBorder(18, 22, 18, 22));
+        setBackground(UserUiTheme.PAGE);
 
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        table.setAutoCreateRowSorter(true);
+        table.setRowSorter(tableSorter);
         table.getSelectionModel().addListSelectionListener(event -> updateButtons());
+        table.getColumnModel().getColumn(0).setPreferredWidth(125);
+        table.getColumnModel().getColumn(1).setPreferredWidth(180);
+        table.getColumnModel().getColumn(2).setPreferredWidth(80);
+        table.getColumnModel().getColumn(3).setPreferredWidth(125);
+        table.getColumnModel().getColumn(4).setPreferredWidth(170);
 
-        JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        actions.add(addButton);
-        actions.add(importButton);
-        actions.add(editButton);
-        actions.add(statusButton);
-        actions.add(resetButton);
-        actions.add(doctorReviewButton);
-        actions.add(auditButton);
-        actions.add(refreshButton);
+        JPanel top = new JPanel(new BorderLayout(0, 12));
+        top.setOpaque(false);
+        top.add(UserUiTheme.createSectionHeader("账号名单", summaryLabel), BorderLayout.NORTH);
+        JPanel controls = new JPanel(new BorderLayout(0, 10));
+        controls.setOpaque(false);
+        controls.add(createActionBar(), BorderLayout.NORTH);
+        controls.add(createFilterBar(), BorderLayout.SOUTH);
+        top.add(controls, BorderLayout.SOUTH);
 
-        add(actions, BorderLayout.NORTH);
-        add(new JScrollPane(table), BorderLayout.CENTER);
-        add(statusLabel, BorderLayout.SOUTH);
+        add(top, BorderLayout.NORTH);
+        add(UserUiTheme.createTableScrollPane(table), BorderLayout.CENTER);
+        add(UserUiTheme.createStatusBar(statusLabel), BorderLayout.SOUTH);
+
+        UserUiTheme.stylePrimaryButton(addButton);
+        UserUiTheme.styleSecondaryButton(importButton);
+        UserUiTheme.styleSecondaryButton(editButton);
+        UserUiTheme.styleDangerButton(statusButton);
+        UserUiTheme.styleDangerButton(resetButton);
+        UserUiTheme.styleSecondaryButton(teacherManagementButton);
+        UserUiTheme.styleSecondaryButton(doctorReviewButton);
+        UserUiTheme.styleSecondaryButton(auditButton);
+        UserUiTheme.styleSecondaryButton(clearFilterButton);
+        UserUiTheme.styleSearchField(searchField);
+        UserUiTheme.styleFilterBox(statusFilter, 115);
+        UserUiTheme.styleFilterBox(scopeFilter, 145);
 
         addButton.addActionListener(event -> createAccount());
         importButton.addActionListener(event -> importAccounts());
@@ -94,10 +131,30 @@ public final class UserAdminPanel extends JPanel {
         editButton.addActionListener(event -> editAccount());
         statusButton.addActionListener(event -> changeStatus());
         resetButton.addActionListener(event -> resetPassword());
+        teacherManagementButton.addActionListener(event -> openTeacherManagement());
         doctorReviewButton.addActionListener(event -> loadDoctorApplications());
         auditButton.addActionListener(event -> loadAuditLogs());
-        refreshButton.addActionListener(event -> refreshAccounts());
+        searchField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent event) {
+                applyFilters();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent event) {
+                applyFilters();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent event) {
+                applyFilters();
+            }
+        });
+        statusFilter.addActionListener(event -> applyFilters());
+        scopeFilter.addActionListener(event -> applyFilters());
+        clearFilterButton.addActionListener(event -> clearFilters());
         updateButtons();
+        applyFilters();
 
         addHierarchyListener(event -> {
             if (!loaded
@@ -109,16 +166,134 @@ public final class UserAdminPanel extends JPanel {
         });
     }
 
+    private JPanel createFilterBar() {
+        JPanel filters = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        filters.setOpaque(false);
+        JLabel searchLabel = new JLabel("搜索");
+        searchLabel.setForeground(UserUiTheme.TEXT);
+        filters.add(searchLabel);
+        searchField.setToolTipText("输入一卡通号或姓名，列表会实时筛选");
+        filters.add(searchField);
+        filters.add(statusFilter);
+        filters.add(scopeFilter);
+        filters.add(clearFilterButton);
+        return filters;
+    }
+
+    private JPanel createActionBar() {
+        JPanel actions = new JPanel(new BorderLayout(18, 0));
+        actions.setOpaque(false);
+
+        JPanel accountActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        accountActions.setOpaque(false);
+        accountActions.add(addButton);
+        accountActions.add(importButton);
+        accountActions.add(editButton);
+        accountActions.add(statusButton);
+        accountActions.add(resetButton);
+
+        JPanel relatedActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        relatedActions.setOpaque(false);
+        relatedActions.add(teacherManagementButton);
+        relatedActions.add(doctorReviewButton);
+        relatedActions.add(auditButton);
+
+        actions.add(accountActions, BorderLayout.WEST);
+        actions.add(relatedActions, BorderLayout.EAST);
+        return actions;
+    }
+
     private UserAccountView selectedAccount() {
         int viewRow = table.getSelectedRow();
         return viewRow < 0 ? null : tableModel.accountAt(table.convertRowIndexToModel(viewRow));
     }
 
     private void updateButtons() {
-        boolean selected = selectedAccount() != null;
+        UserAccountView selectedAccount = selectedAccount();
+        boolean selected = selectedAccount != null;
         editButton.setEnabled(selected);
         statusButton.setEnabled(selected);
         resetButton.setEnabled(selected);
+        statusButton.setText(selected && !selectedAccount.isEnabled()
+                ? "启用账号" : "禁用账号");
+        if (selected && !selectedAccount.isEnabled()) {
+            UserUiTheme.styleSecondaryButton(statusButton);
+        } else {
+            UserUiTheme.styleDangerButton(statusButton);
+        }
+    }
+
+    private void applyFilters() {
+        String query = searchField.getText();
+        String status = (String) statusFilter.getSelectedItem();
+        String scope = (String) scopeFilter.getSelectedItem();
+        tableSorter.setRowFilter(new RowFilter<>() {
+            @Override
+            public boolean include(
+                    Entry<? extends UserAccountTableModel, ? extends Integer> entry) {
+                return matchesAccount(
+                        tableModel.accountAt(entry.getIdentifier()), query, status, scope);
+            }
+        });
+        table.clearSelection();
+        boolean active = !query.isBlank()
+                || statusFilter.getSelectedIndex() > 0
+                || scopeFilter.getSelectedIndex() > 0;
+        clearFilterButton.setEnabled(active);
+        updateSummary();
+    }
+
+    private void clearFilters() {
+        searchField.setText("");
+        statusFilter.setSelectedIndex(0);
+        scopeFilter.setSelectedIndex(0);
+        applyFilters();
+        searchField.requestFocusInWindow();
+    }
+
+    private void updateSummary() {
+        int total = tableModel.getRowCount();
+        int visible = table.getRowCount();
+        long enabled = tableModel.accounts().stream()
+                .filter(UserAccountView::isEnabled)
+                .count();
+        String prefix = visible == total
+                ? "共 " + total + " 个账号"
+                : "显示 " + visible + " / " + total + " 个账号";
+        summaryLabel.setText(prefix + " · " + enabled + " 个启用");
+    }
+
+    static boolean matchesAccount(
+            UserAccountView account,
+            String query,
+            String status,
+            String scope) {
+        String normalizedQuery = query == null
+                ? "" : query.strip().toLowerCase(Locale.ROOT);
+        boolean textMatches = normalizedQuery.isEmpty()
+                || account.getUsername().toLowerCase(Locale.ROOT).contains(normalizedQuery)
+                || account.getDisplayName().toLowerCase(Locale.ROOT).contains(normalizedQuery);
+        boolean statusMatches = "全部状态".equals(status)
+                || ("启用".equals(status) && account.isEnabled())
+                || ("禁用".equals(status) && !account.isEnabled());
+        boolean scopeMatches = matchesScope(account, scope);
+        return textMatches && statusMatches && scopeMatches;
+    }
+
+    private static boolean matchesScope(UserAccountView account, String scope) {
+        if (scope == null || "全部管理范围".equals(scope)) {
+            return true;
+        }
+        if ("超级管理员".equals(scope)) {
+            return account.getRole() == edu.seu.vcampus.common.user.Role.SUPER_ADMIN;
+        }
+        Set<edu.seu.vcampus.common.user.AdminScope> scopes = account.getAdminScopes();
+        if ("无管理权".equals(scope)) {
+            return account.getRole() != edu.seu.vcampus.common.user.Role.SUPER_ADMIN
+                    && scopes.isEmpty();
+        }
+        return scopes.stream().anyMatch(value ->
+                UserAccountTableModel.scopeName(value).equals(scope));
     }
 
     private void refreshAccounts() {
@@ -129,6 +304,7 @@ public final class UserAdminPanel extends JPanel {
                             && response.getData() instanceof UserAccountListResponse data) {
                         tableModel.setAccounts(data.getAccounts());
                         table.clearSelection();
+                        applyFilters();
                         statusLabel.setText("已加载 " + data.getAccounts().size() + " 个账号");
                     } else {
                         showFailure(response);
@@ -285,6 +461,26 @@ public final class UserAdminPanel extends JPanel {
                 });
     }
 
+    private void openTeacherManagement() {
+        runRequest(
+                "正在准备教师管理……",
+                () -> context.send(UserActions.ADMIN_LIST_ACCOUNTS, null),
+                response -> {
+                    if (response.isSuccess()
+                            && response.getData() instanceof UserAccountListResponse data) {
+                        tableModel.setAccounts(data.getAccounts());
+                        TeacherManagementDialog dialog = new TeacherManagementDialog(
+                                SwingUtilities.getWindowAncestor(this),
+                                context,
+                                data.getAccounts());
+                        dialog.setVisible(true);
+                        statusLabel.setText("教师管理已关闭");
+                    } else {
+                        showFailure(response);
+                    }
+                });
+    }
+
     private void loadAuditLogs() {
         runRequest(
                 "正在加载操作记录……",
@@ -325,7 +521,7 @@ public final class UserAdminPanel extends JPanel {
         };
         JTable auditTable = new JTable(model);
         auditTable.setAutoCreateRowSorter(true);
-        JScrollPane scrollPane = new JScrollPane(auditTable);
+        JScrollPane scrollPane = UserUiTheme.createTableScrollPane(auditTable);
         scrollPane.setPreferredSize(new java.awt.Dimension(920, 420));
         JOptionPane.showMessageDialog(
                 this,
@@ -350,6 +546,12 @@ public final class UserAdminPanel extends JPanel {
         }
         if (UserActions.ADMIN_RESET_PASSWORD.equals(actionCode)) {
             return "重置密码";
+        }
+        if (UserActions.ADMIN_SAVE_TEACHER_PROFILE.equals(actionCode)) {
+            return "维护教师档案";
+        }
+        if (UserActions.ADMIN_BATCH_SAVE_TEACHERS.equals(actionCode)) {
+            return "批量导入教师";
         }
         return actionCode;
     }
@@ -480,10 +682,10 @@ public final class UserAdminPanel extends JPanel {
     private void setActionsEnabled(boolean enabled) {
         addButton.setEnabled(enabled);
         importButton.setEnabled(enabled);
-        refreshButton.setEnabled(enabled);
         editButton.setEnabled(enabled);
         statusButton.setEnabled(enabled);
         resetButton.setEnabled(enabled);
+        teacherManagementButton.setEnabled(enabled);
         doctorReviewButton.setEnabled(enabled);
         auditButton.setEnabled(enabled);
     }

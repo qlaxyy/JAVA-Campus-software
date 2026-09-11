@@ -1,6 +1,5 @@
 package edu.seu.vcampus.server.module.student;
 
-import edu.seu.vcampus.common.course.TemporaryCourseTeacherDirectory;
 import edu.seu.vcampus.common.protocol.Request;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.student.*;
@@ -56,29 +55,12 @@ public final class StudentServerModule implements ServerModule {
     }
 
     /**
-     * 判断当前登录账号是否具备教学教师身份
-     * 原则：权限按“能力并集”计算，支持兼任医生的教师调阅学籍；阻断纯医生与其它子系统管理员。
-     */
-    private boolean isTeacherUser(SessionInfo session, String currentUserId, String currentUsername) {
-        // 1. 具备课程模块管理权
-        if (session.canAdminister("course")) {
-            return true;
-        }
-        // 2. 存在于教务任课教师名单中
-        if (session.getUsername() != null && TemporaryCourseTeacherDirectory.isTeacher(session.getUsername())) {
-            return true;
-        }
-        // 3. 账号或工号标识包含 teacher
-        return currentUserId.contains("teacher") || currentUsername.contains("teacher");
-    }
-
-    /**
      * 查询学籍档案
      * 权限规范：
      * 1. 学籍管理员（canAdminister("student")）可通览全校学生档案
      * 2. 学生本人仅可查询自身档案
-     * 3. 教师（含兼任医生的教师）允许调阅基础档案用于教学
-     * 4. 纯医生、校医院管理员、商店管理员等非教务人员一律拦截
+     * 3. 教师需通过 context.teachers() 验证有效资格
+     * 4. 非教务人员（纯医生、商店管理员等）直接拦截
      */
     private Response handleGetProfile(Request request, ServerContext context) {
         Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
@@ -103,7 +85,10 @@ public final class StudentServerModule implements ServerModule {
         boolean isStudentAdmin = session.canAdminister("student");
         boolean isSelf = currentUserId.equalsIgnoreCase(cleanTargetId)
             || currentUsername.equalsIgnoreCase(cleanTargetId);
-        boolean isTeacher = isTeacherUser(session, currentUserId, currentUsername);
+
+        boolean isTeacher = context.teachers()
+            .findByUserId(session.getUserId())
+            .isPresent();
 
         if (!isStudentAdmin && !isSelf && !isTeacher) {
             return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：非教务管理或教学人员无权查阅该学生学籍档案");
@@ -214,8 +199,11 @@ public final class StudentServerModule implements ServerModule {
             return Response.success(request, "获取异动列表成功", (Serializable) list);
         }
 
-        // 教师与非学籍管理账号禁止查阅他人异动记录
-        if (isTeacherUser(session, currentUserId, currentUsername) || !session.canAdminister("student")) {
+        // 教师资格查公共教师表，教师与非学籍管理账号禁止查阅他人异动记录
+        boolean isTeacher = context.teachers()
+            .findByUserId(session.getUserId())
+            .isPresent();
+        if (isTeacher || !session.canAdminister("student")) {
             if (queryStudentId != null && !queryStudentId.equalsIgnoreCase(currentUserId)) {
                 return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：无权调阅他人学籍异动记录");
             }

@@ -139,11 +139,18 @@ final class AccessUserRepository implements UserRepository {
             LegacyAccount account,
             String cardNumber) throws SQLException {
         char[] password = "123456".toCharArray();
+        String passwordProof = PasswordProof.create(cardNumber, password);
+        PasswordCredential credential = PasswordCredential.create(passwordProof);
         try (PreparedStatement update = connection.prepareStatement(
-                "UPDATE tblUser SET username = ?, passwordProof = ? WHERE userId = ?")) {
+                "UPDATE tblUser SET username = ?, passwordProof = ?, "
+                        + "passwordHash = ?, passwordSalt = ?, "
+                        + "passwordIterations = ? WHERE userId = ?")) {
             update.setString(1, cardNumber);
-            update.setString(2, PasswordProof.create(cardNumber, password));
-            update.setString(3, account.userId());
+            update.setString(2, credential.legacyProofOrSentinel());
+            update.setString(3, credential.hash());
+            update.setString(4, credential.salt());
+            update.setInt(5, credential.iterations());
+            update.setString(6, account.userId());
             update.executeUpdate();
         } finally {
             Arrays.fill(password, '\0');
@@ -337,10 +344,14 @@ final class AccessUserRepository implements UserRepository {
                         + "displayName TEXT(100) NOT NULL, "
                         + "roleCode TEXT(20) NOT NULL, "
                         + "passwordProof TEXT(64) NOT NULL, "
+                        + "passwordHash TEXT(255), "
+                        + "passwordSalt TEXT(255), "
+                        + "passwordIterations LONG, "
                         + "enabled YESNO NOT NULL)");
                 execute(connection,
                         "CREATE UNIQUE INDEX ux_tblUser_username ON tblUser (username)");
             }
+            ensurePasswordCredentialColumns(connection);
             if (!tableExists(connection, SCOPE_TABLE)) {
                 execute(connection, "CREATE TABLE tblUserAdminScope ("
                         + "scopeId AUTOINCREMENT PRIMARY KEY, "
@@ -352,6 +363,33 @@ final class AccessUserRepository implements UserRepository {
         } catch (SQLException exception) {
             throw failure("Cannot initialize Access user schema.", exception);
         }
+    }
+
+    private void ensurePasswordCredentialColumns(Connection connection) throws SQLException {
+        if (!columnExists(connection, USER_TABLE, "passwordHash")) {
+            execute(connection, "ALTER TABLE tblUser ADD COLUMN passwordHash TEXT(255)");
+        }
+        if (!columnExists(connection, USER_TABLE, "passwordSalt")) {
+            execute(connection, "ALTER TABLE tblUser ADD COLUMN passwordSalt TEXT(255)");
+        }
+        if (!columnExists(connection, USER_TABLE, "passwordIterations")) {
+            execute(connection, "ALTER TABLE tblUser ADD COLUMN passwordIterations LONG");
+        }
+    }
+
+    private boolean columnExists(
+            Connection connection,
+            String table,
+            String expectedColumn) throws SQLException {
+        DatabaseMetaData metadata = connection.getMetaData();
+        try (ResultSet columns = metadata.getColumns(null, null, table, "%")) {
+            while (columns.next()) {
+                if (expectedColumn.equalsIgnoreCase(columns.getString("COLUMN_NAME"))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private boolean tableExists(Connection connection, String expected) throws SQLException {
@@ -384,29 +422,45 @@ final class AccessUserRepository implements UserRepository {
 
     private void insertAccount(Connection connection, UserAccount account) throws SQLException {
         String sql = "INSERT INTO tblUser "
-                + "(userId, username, displayName, roleCode, passwordProof, enabled) "
-                + "VALUES (?, ?, ?, ?, ?, ?)";
+                + "(userId, username, displayName, roleCode, passwordProof, "
+                + "passwordHash, passwordSalt, passwordIterations, enabled) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, account.userId());
             statement.setString(2, account.username());
             statement.setString(3, account.displayName());
             statement.setString(4, account.role().name());
-            statement.setString(5, account.passwordProof());
-            statement.setBoolean(6, account.enabled());
+            statement.setString(5, account.persistedLegacyPasswordProof());
+            statement.setString(6, account.passwordHash());
+            statement.setString(7, account.passwordSalt());
+            if (account.passwordIterations() > 0) {
+                statement.setInt(8, account.passwordIterations());
+            } else {
+                statement.setNull(8, java.sql.Types.INTEGER);
+            }
+            statement.setBoolean(9, account.enabled());
             statement.executeUpdate();
         }
     }
 
     private void updateAccount(Connection connection, UserAccount account) throws SQLException {
         String sql = "UPDATE tblUser SET username = ?, displayName = ?, roleCode = ?, "
-                + "passwordProof = ?, enabled = ? WHERE userId = ?";
+                + "passwordProof = ?, passwordHash = ?, passwordSalt = ?, "
+                + "passwordIterations = ?, enabled = ? WHERE userId = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, account.username());
             statement.setString(2, account.displayName());
             statement.setString(3, account.role().name());
-            statement.setString(4, account.passwordProof());
-            statement.setBoolean(5, account.enabled());
-            statement.setString(6, account.userId());
+            statement.setString(4, account.persistedLegacyPasswordProof());
+            statement.setString(5, account.passwordHash());
+            statement.setString(6, account.passwordSalt());
+            if (account.passwordIterations() > 0) {
+                statement.setInt(7, account.passwordIterations());
+            } else {
+                statement.setNull(7, java.sql.Types.INTEGER);
+            }
+            statement.setBoolean(8, account.enabled());
+            statement.setString(9, account.userId());
             statement.executeUpdate();
         }
     }
@@ -464,13 +518,16 @@ final class AccessUserRepository implements UserRepository {
     private UserAccount readAccount(ResultSet result, Set<AdminScope> scopes)
             throws SQLException {
         try {
-            return new UserAccount(
+            return UserAccount.fromPersistence(
                     result.getString("userId"),
                     result.getString("username"),
                     result.getString("displayName"),
                     Role.valueOf(result.getString("roleCode").toUpperCase(Locale.ROOT)),
                     scopes,
                     result.getString("passwordProof"),
+                    result.getString("passwordHash"),
+                    result.getString("passwordSalt"),
+                    result.getInt("passwordIterations"),
                     result.getBoolean("enabled"));
         } catch (IllegalArgumentException exception) {
             throw new SQLException("Access contains an unknown role or admin scope.", exception);

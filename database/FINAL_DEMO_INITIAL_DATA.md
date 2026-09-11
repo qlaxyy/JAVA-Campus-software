@@ -8,6 +8,93 @@ java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar --rebuild-demo
 
 清单以 2026-09-11 的初始化代码和重建后数据库为准。正常启动服务器不会清空数据库；只有显式执行上述重建命令才会备份旧库并重新生成演示数据。
 
+## 文件位置与组员使用方式
+
+仓库内路径：`database/FINAL_DEMO_INITIAL_DATA.md`
+
+合并到 `main` 后的 GitHub 地址：
+[最终演示数据库初始化数据清单](https://github.com/qlaxyy/JAVA-Campus-software/blob/main/database/FINAL_DEMO_INITIAL_DATA.md)
+
+以下命令都要在能看到根目录 `pom.xml` 的项目目录中执行。执行 `git status` 后如果看到自己尚未提交的修改，先保存自己的工作，不要直接覆盖或使用 `git reset --hard`。
+
+### 公共步骤：更新并构建最新代码
+
+```powershell
+git status
+git switch main
+git pull --ff-only origin main
+mvn clean verify
+```
+
+只有相关修改已经合并到 GitHub 的 `main` 后，上述命令才能获取本清单描述的版本。看到 `BUILD SUCCESS` 后，再根据需要选择以下两种模式之一。
+
+### 模式一：每位组员在自己的电脑上独立测试
+
+这种方式适合开发和自测。每个人都在自己的电脑上运行一套服务器、客户端和本地数据库，彼此数据互不影响，也不需要 Radmin VPN。
+
+先确认自己电脑上没有正在运行的本项目服务器，然后备份并重建本地演示数据库：
+
+```powershell
+java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar --rebuild-demo-database
+```
+
+该命令完成后会自动退出。原来的 `database/vCampus.accdb` 会备份到 `database/backups/`，校验通过的新数据库会替换本地正式文件。随后在第一个终端正常启动本地服务器：
+
+```powershell
+java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar
+```
+
+保持服务器终端运行，在第二个终端启动连接本机 `127.0.0.1:8888` 的客户端：
+
+```powershell
+java -jar vcampus-client\target\vcampus-client-0.1.0-SNAPSHOT.jar
+```
+
+本模式下可以自由增删测试数据。需要重新回到本文所列初始状态时，停止本地服务器，再执行一次重建命令。重建会清除本轮自测产生的数据，但旧数据库仍会自动备份。
+
+### 模式二：通过 Radmin VPN 连接统一演示服务器
+
+这种方式用于多人联调和最终演示。吴尚扬的电脑运行唯一服务器和唯一数据库，其他组员只运行客户端。所有人看到和修改的是同一份业务数据。
+
+#### 服务器负责人操作
+
+完成“公共步骤”并停止旧服务器后，只在需要统一恢复初始数据时执行一次：
+
+```powershell
+java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar --rebuild-demo-database
+```
+
+随后正常启动服务器并保持终端运行：
+
+```powershell
+java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar
+```
+
+启动信息会列出 Radmin VPN 地址。当前计划使用 `26.172.23.159:8888`；如果终端显示的 Radmin IPv4 发生变化，应以服务器本次打印的地址为准。
+
+#### 其他组员操作
+
+其他组员完成“公共步骤”并确认已经加入同一个 Radmin VPN 网络后，先测试服务器端口：
+
+```powershell
+Test-NetConnection 26.172.23.159 -Port 8888
+```
+
+看到 `TcpTestSucceeded : True` 后启动客户端：
+
+```powershell
+java -jar vcampus-client\target\vcampus-client-0.1.0-SNAPSHOT.jar 26.172.23.159 8888
+```
+
+IP 和端口是两个启动参数，中间必须用空格，不能写成 `26.172.23.159:8888`。在本模式下，其他组员：
+
+- 不执行 `--rebuild-demo-database`；
+- 不启动自己的服务器；
+- 不复制、打开或修改服务器电脑上的 `database/vCampus.accdb`；
+- 只需更新代码、构建客户端并连接服务器。
+
+多人联调过程中不要随意重建统一数据库，否则大家刚产生的选课、借阅、购物车、订单、预约等记录都会恢复为初始状态。
+
 ## 初始化数据总览
 
 | 模块 | 初始数据摘要 |

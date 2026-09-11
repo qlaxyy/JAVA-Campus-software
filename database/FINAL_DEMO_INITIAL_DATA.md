@@ -1,12 +1,6 @@
 # 最终演示数据库初始化数据清单
 
-本文记录执行以下命令后，各模块写入 `database/vCampus.accdb` 的初始数据：
-
-```powershell
-java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar --rebuild-demo-database
-```
-
-清单以 2026-09-11 的初始化代码和重建后数据库为准。正常启动服务器不会清空数据库；只有显式执行上述重建命令才会备份旧库并重新生成演示数据。
+本文记录最终演示数据库重建后，各模块写入 `database/vCampus.accdb` 的初始数据。清单以 2026-09-11 的初始化代码和重建结果为准；具体命令按下方“模式一”或“模式二”执行。
 
 ## 文件位置与组员使用方式
 
@@ -44,7 +38,7 @@ java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar --rebuild-demo
 java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar
 ```
 
-保持服务器终端运行；控制台应同时显示校园服务 `8888` 与校园卡网关 `8889`。在第二个终端启动客户端：
+保持服务器终端运行；同一个服务端进程会自动监听校园服务 `8888` 与校园卡网关 `8889`，不需要为校园卡另开服务端。在第二个终端启动客户端：
 
 ```powershell
 java -jar vcampus-client\target\vcampus-client-0.1.0-SNAPSHOT.jar

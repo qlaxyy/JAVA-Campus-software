@@ -53,6 +53,8 @@ java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar --rebuild-demo
 java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar
 ```
 
+这一条正常启动命令会在同一个 Java 进程中同时开启校园服务 `8888` 和校园卡网关 `8889`，无需再启动第二个服务端。两个端口共同访问同一份 `database/vCampus.accdb`。
+
 生成的 `.accdb`、备份和锁文件均不提交 Git；仓库只提交初始化代码、数据字典和重建说明。
 
 ## 数据归属
@@ -64,7 +66,8 @@ java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar
 | 选课 | `tblCourse*`、`tblOfferingTeacher`、`tblEnrollment`、`tblGrade` | 保留 8 门课程和 8 个有教师的演示教学班；任课、选课与成绩持久化 |
 | 医院 | `tblHospital*` | 科室保留；10 名医生、排班和医疗业务以 `userId` 关联 |
 | 图书馆 | `tblBook*`、`tblBorrowRecord`、`tblReservation` | 5 种书、20 册馆藏以及借还预约演示数据 |
-| 商店 | `tblShop*`、`tblCampusCard` | 商品、照片、库存、余额、购物车和订单全部在服务器 Access 中 |
+| 商店 | `tblShop*` | 商品、照片、库存、购物车和订单全部在服务器 Access 中；支付引用校园卡余额 |
+| 校园卡 | `tblCampusCard`、`tblCampusCardLedger` | 一卡通余额和充值、扣款、退款流水 |
 
 模块只能写自己拥有的表；跨模块只能通过 `ServerContext.users()`、`ServerContext.teachers()` 等公共只读目录取当前姓名、一卡通号和资格，不能自行访问 `tblUser`。审计、订单、证明和医疗历史可以保留办理时姓名快照，但快照不能覆盖当前姓名。
 

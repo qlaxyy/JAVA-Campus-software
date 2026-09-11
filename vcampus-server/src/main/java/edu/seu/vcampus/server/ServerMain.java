@@ -1,7 +1,5 @@
 package edu.seu.vcampus.server;
 
-import edu.seu.vcampus.server.infrastructure.CampusServer;
-import edu.seu.vcampus.server.module.ServerModules;
 import edu.seu.vcampus.server.module.user.LocalSuperAdminRecovery;
 
 import java.io.Console;
@@ -21,7 +19,6 @@ import java.util.Locale;
  */
 public final class ServerMain {
 
-    private static final int DEFAULT_PORT = 8888;
     private static final Path DEFAULT_DATABASE_PATH = Path.of("database", "vCampus.accdb");
 
     private ServerMain() {
@@ -38,19 +35,20 @@ public final class ServerMain {
             resetSuperAdministratorPassword(args);
             return;
         }
-        int port = args.length > 0 ? Integer.parseInt(args[0]) : DEFAULT_PORT;
+        int port = args.length > 0 ? Integer.parseInt(args[0]) : VirtualCampusRuntime.DEFAULT_CAMPUS_PORT;
         Path databasePath = args.length > 1 ? Path.of(args[1]) : DEFAULT_DATABASE_PATH;
-        CampusServer server = new CampusServer(
-                port, ServerModules.createPersistentRouter(databasePath));
-        Runtime.getRuntime().addShutdownHook(new Thread(server::close, "vcampus-shutdown"));
+        int cardPort = port == 0 ? 0 : port + 1;
+        VirtualCampusRuntime runtime = VirtualCampusRuntime.start(port, cardPort, databasePath);
+        Runtime.getRuntime().addShutdownHook(new Thread(runtime::close, "vcampus-shutdown"));
 
-        server.start();
-        System.out.printf("Virtual Campus server started on port %d.%n", server.getPort());
+        System.out.printf("Virtual Campus server started on port %d.%n", runtime.campusPort());
+        System.out.printf("Campus card gateway started on port %d.%n", runtime.cardPort());
         System.out.println("The server is listening on all available network interfaces.");
-        printClientConnectionAddresses(server.getPort());
+        printClientConnectionAddresses("Campus service", runtime.campusPort());
+        printClientConnectionAddresses("Campus card gateway", runtime.cardPort());
         System.out.printf("Persistent server data is stored in %s.%n",
                 databasePath.toAbsolutePath().normalize());
-        server.awaitTermination();
+        runtime.awaitTermination();
     }
 
     private static void resetSuperAdministratorPassword(String[] args) {
@@ -88,7 +86,7 @@ public final class ServerMain {
         }
     }
 
-    private static void printClientConnectionAddresses(int port) {
+    private static void printClientConnectionAddresses(String role, int port) {
         try {
             List<ConnectionAddress> addresses = new ArrayList<>();
             Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
@@ -110,7 +108,7 @@ public final class ServerMain {
                     .thenComparing(ConnectionAddress::interfaceName));
             for (ConnectionAddress address : addresses) {
                 String recommendation = address.isRadmin() ? " [Radmin VPN - recommended]" : "";
-                System.out.printf("Client address%s: %s:%d (%s)%n", recommendation,
+                System.out.printf("%s%s: %s:%d (%s)%n", role, recommendation,
                         address.host(), port, address.interfaceName());
             }
         } catch (SocketException exception) {

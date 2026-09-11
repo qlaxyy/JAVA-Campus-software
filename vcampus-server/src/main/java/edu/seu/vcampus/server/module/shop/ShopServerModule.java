@@ -13,6 +13,8 @@ import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.infrastructure.ActionRouter;
 import edu.seu.vcampus.server.module.ServerContext;
 import edu.seu.vcampus.server.module.ServerModule;
+import edu.seu.vcampus.server.module.card.CampusCardWallet;
+import edu.seu.vcampus.server.module.card.InMemoryCampusCardWallet;
 
 import java.util.Optional;
 
@@ -23,8 +25,22 @@ public final class ShopServerModule implements ServerModule {
 
     private final InMemoryShopCatalog catalog = new InMemoryShopCatalog();
     private final ShopCatalogService catalogService = new ShopCatalogService(catalog);
-    private final ShopCheckoutService checkoutService = new ShopCheckoutService(
-            catalog, new InMemoryCampusCardStore(), new InMemoryShopOrderStore());
+    private final ShopCheckoutService checkoutService;
+
+    /** Creates the shop module with an in-memory campus-card wallet. */
+    public ShopServerModule() {
+        this(new InMemoryCampusCardWallet());
+    }
+
+    /**
+     * Creates the shop module.
+     *
+     * @param cards campus-card wallet, local or TCP gateway
+     */
+    public ShopServerModule(CampusCardWallet cards) {
+        this.checkoutService = new ShopCheckoutService(
+                catalog, cards, new InMemoryShopOrderStore());
+    }
 
     @Override
     public String id() {

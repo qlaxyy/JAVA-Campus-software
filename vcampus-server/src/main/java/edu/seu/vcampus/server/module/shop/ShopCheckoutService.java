@@ -1,6 +1,7 @@
 package edu.seu.vcampus.server.module.shop;
 
 import edu.seu.vcampus.common.protocol.ErrorCodes;
+import edu.seu.vcampus.common.protocol.ModuleNames;
 import edu.seu.vcampus.common.shop.CampusCardView;
 import edu.seu.vcampus.common.shop.CancelOrderRequest;
 import edu.seu.vcampus.common.shop.CreateOrderRequest;
@@ -13,6 +14,8 @@ import edu.seu.vcampus.common.shop.ShopOrderDto;
 import edu.seu.vcampus.common.shop.ShopOrderStatus;
 import edu.seu.vcampus.common.shop.ShopPaymentMethods;
 import edu.seu.vcampus.common.user.SessionInfo;
+import edu.seu.vcampus.server.module.card.CampusCardWallet;
+import edu.seu.vcampus.server.module.card.CardBusinessException;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -23,18 +26,18 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Campus-card wallet, checkout, cancel and refund. Memory-backed until Access DAOs exist.
+ * Shop checkout that pays and refunds through the campus-card subsystem.
  */
 final class ShopCheckoutService {
 
     private final InMemoryShopCatalog catalog;
-    private final InMemoryCampusCardStore cards;
+    private final CampusCardWallet cards;
     private final InMemoryShopOrderStore orders;
     private final Object lock = new Object();
 
     ShopCheckoutService(
             InMemoryShopCatalog catalog,
-            InMemoryCampusCardStore cards,
+            CampusCardWallet cards,
             InMemoryShopOrderStore orders) {
         this.catalog = Objects.requireNonNull(catalog, "catalog must not be null");
         this.cards = Objects.requireNonNull(cards, "cards must not be null");
@@ -42,13 +45,21 @@ final class ShopCheckoutService {
     }
 
     CampusCardView card(SessionInfo session) {
-        return cards.view(session);
+        try {
+            return cards.view(session);
+        } catch (CardBusinessException exception) {
+            throw wrap(exception);
+        }
     }
 
     CampusCardView recharge(SessionInfo session, RechargeCampusCardRequest request) {
         Objects.requireNonNull(request, "request must not be null");
         synchronized (lock) {
-            return cards.recharge(session, request.getAmountFen());
+            try {
+                return cards.recharge(session, request.getAmountFen());
+            } catch (CardBusinessException exception) {
+                throw wrap(exception);
+            }
         }
     }
 
@@ -81,7 +92,12 @@ final class ShopCheckoutService {
                         subtotal));
                 totalFen += subtotal;
             }
-            cards.deduct(session, totalFen);
+            String orderId = orders.nextOrderId();
+            try {
+                cards.debit(session, totalFen, ModuleNames.SHOP, "order:" + orderId);
+            } catch (CardBusinessException exception) {
+                throw wrap(exception);
+            }
             List<Long> reserved = new ArrayList<>();
             try {
                 for (Map.Entry<Long, Integer> entry : quantities.entrySet()) {
@@ -93,7 +109,11 @@ final class ShopCheckoutService {
                     reserved.add(entry.getKey());
                 }
             } catch (RuntimeException exception) {
-                cards.refund(session.getUserId(), totalFen);
+                try {
+                    cards.credit(session, totalFen, ModuleNames.SHOP, "order-refund:" + orderId);
+                } catch (CardBusinessException ignored) {
+                    // Stock rollback still runs; card refund failure is logged by the gateway.
+                }
                 for (int index = 0; index < reserved.size(); index++) {
                     Long productId = reserved.get(index);
                     catalog.incrementStock(productId, quantities.get(productId));
@@ -101,7 +121,7 @@ final class ShopCheckoutService {
                 throw exception;
             }
             ShopOrderDto order = new ShopOrderDto(
-                    orders.nextOrderId(),
+                    orderId,
                     session.getUserId(),
                     session.getDisplayName(),
                     ShopOrderStatus.PAID,
@@ -130,7 +150,15 @@ final class ShopCheckoutService {
             }
             ShopOrderDto cancelled = order.withStatus(ShopOrderStatus.CANCELLED);
             orders.save(cancelled);
-            cards.refund(session.getUserId(), order.getTotalFen());
+            try {
+                cards.credit(
+                        session,
+                        order.getTotalFen(),
+                        ModuleNames.SHOP,
+                        "order-refund:" + order.getOrderId());
+            } catch (CardBusinessException exception) {
+                throw wrap(exception);
+            }
             for (OrderItemDto item : order.getItems()) {
                 catalog.incrementStock(item.getProductId(), item.getQuantity());
             }
@@ -152,5 +180,12 @@ final class ShopCheckoutService {
             quantities.merge(line.getProductId(), line.getQuantity(), Integer::sum);
         }
         return quantities;
+    }
+
+    private static ShopBusinessException wrap(CardBusinessException exception) {
+        String code = ErrorCodes.CARD_INSUFFICIENT_BALANCE.equals(exception.code())
+                ? ErrorCodes.SHOP_INSUFFICIENT_BALANCE
+                : exception.code();
+        return new ShopBusinessException(code, exception.getMessage());
     }
 }

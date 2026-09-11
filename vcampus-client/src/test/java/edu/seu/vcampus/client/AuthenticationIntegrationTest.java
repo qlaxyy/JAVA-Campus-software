@@ -40,7 +40,7 @@ class AuthenticationIntegrationTest {
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
 
-            Response login = context.login("20260001", "123456".toCharArray());
+            Response login = context.login("20260006", "123456".toCharArray());
 
             assertTrue(login.isSuccess());
             SessionInfo session = assertInstanceOf(SessionInfo.class, login.getData());
@@ -70,13 +70,13 @@ class AuthenticationIntegrationTest {
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
 
-            Response login = context.login("20260008", "123456".toCharArray());
+            Response login = context.login("20260021", "123456".toCharArray());
 
             assertTrue(login.isSuccess());
             SessionInfo session = assertInstanceOf(SessionInfo.class, login.getData());
-            assertEquals("U-COURSE-TEACHER-001", session.getUserId());
-            assertEquals("20260008", session.getUsername());
-            assertEquals("演示教师", session.getDisplayName());
+            assertEquals("U-TEACHER-001", session.getUserId());
+            assertEquals("20260021", session.getUsername());
+            assertEquals("王建国", session.getDisplayName());
             assertEquals(Role.USER, session.getRole());
             assertTrue(session.getAdminScopes().isEmpty());
 
@@ -85,8 +85,8 @@ class AuthenticationIntegrationTest {
             assertTrue(profileResponse.isSuccess());
             TeacherProfileView profile = assertInstanceOf(
                     TeacherProfileView.class, profileResponse.getData());
-            assertEquals("计算机科学与工程学院", profile.getDepartment());
-            assertEquals("讲师", profile.getTitle());
+            assertEquals("计算机学院", profile.getDepartment());
+            assertEquals("教授", profile.getTitle());
         }
     }
 
@@ -100,7 +100,7 @@ class AuthenticationIntegrationTest {
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(administrator.login(
                     "20260000", "123456".toCharArray()).isSuccess());
-            assertTrue(student.login("20260001", "123456".toCharArray()).isSuccess());
+            assertTrue(student.login("20260006", "123456".toCharArray()).isSuccess());
 
             Response created = administrator.send(
                     UserActions.ADMIN_SAVE_TEACHER_PROFILE,
@@ -112,7 +112,7 @@ class AuthenticationIntegrationTest {
             Response list = administrator.send(UserActions.ADMIN_LIST_TEACHERS, null);
             TeacherProfileListResponse profiles = assertInstanceOf(
                     TeacherProfileListResponse.class, list.getData());
-            assertEquals(2, profiles.getTeachers().size());
+            assertEquals(9, profiles.getTeachers().size());
 
             Response disabled = administrator.send(
                     UserActions.ADMIN_SAVE_TEACHER_PROFILE,
@@ -149,7 +149,7 @@ class AuthenticationIntegrationTest {
                     TeacherProfileListResponse.class, imported.getData());
             assertEquals(2, profiles.getTeachers().size());
             Response listed = administrator.send(UserActions.ADMIN_LIST_TEACHERS, null);
-            assertEquals(3, assertInstanceOf(
+            assertEquals(9, assertInstanceOf(
                     TeacherProfileListResponse.class, listed.getData()).getTeachers().size());
         }
     }
@@ -162,7 +162,7 @@ class AuthenticationIntegrationTest {
                     new CampusClient("127.0.0.1", server.getPort()));
             char[] password = "wrong-password".toCharArray();
 
-            Response response = context.login("20260001", password);
+            Response response = context.login("20260006", password);
 
             assertFalse(response.isSuccess());
             assertEquals(ErrorCodes.AUTH_INVALID_CREDENTIALS, response.getCode());
@@ -179,15 +179,15 @@ class AuthenticationIntegrationTest {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260006", "123456".toCharArray()).isSuccess());
 
             Response changed = context.changePassword(
                     "123456".toCharArray(), "654321".toCharArray());
 
             assertTrue(changed.isSuccess());
             assertTrue(context.currentSession().isEmpty());
-            assertFalse(context.login("20260001", "123456".toCharArray()).isSuccess());
-            assertTrue(context.login("20260001", "654321".toCharArray()).isSuccess());
+            assertFalse(context.login("20260006", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260006", "654321".toCharArray()).isSuccess());
         }
     }
 
@@ -197,7 +197,7 @@ class AuthenticationIntegrationTest {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260006", "123456".toCharArray()).isSuccess());
 
             Response changed = context.changePassword(
                     "wrong".toCharArray(), "654321".toCharArray());
@@ -217,7 +217,7 @@ class AuthenticationIntegrationTest {
                     new CampusClient("127.0.0.1", server.getPort()));
 
             Response login = context.login(
-                    "20260007", "123456".toCharArray());
+                    "20260005", "123456".toCharArray());
 
             assertTrue(login.isSuccess());
             SessionInfo session = assertInstanceOf(SessionInfo.class, login.getData());
@@ -229,11 +229,11 @@ class AuthenticationIntegrationTest {
     @Test
     void everySubsystemAdministratorReceivesItsOwnScope() throws Exception {
         Map<String, AdminLogin> accounts = Map.of(
-                "20260003", new AdminLogin(AdminScope.STUDENT),
-                "20260004", new AdminLogin(AdminScope.COURSE),
-                "20260005", new AdminLogin(AdminScope.LIBRARY),
-                "20260006", new AdminLogin(AdminScope.SHOP),
-                "20260007", new AdminLogin(AdminScope.HOSPITAL));
+                "20260001", new AdminLogin(AdminScope.STUDENT),
+                "20260002", new AdminLogin(AdminScope.COURSE),
+                "20260003", new AdminLogin(AdminScope.LIBRARY),
+                "20260004", new AdminLogin(AdminScope.SHOP),
+                "20260005", new AdminLogin(AdminScope.HOSPITAL));
 
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
@@ -270,7 +270,7 @@ class AuthenticationIntegrationTest {
                             throw new IllegalStateException("clients did not start together");
                         }
                         Response login = context.login(
-                                "20260001", "123456".toCharArray());
+                                "20260006", "123456".toCharArray());
                         assertTrue(login.isSuccess());
                         SessionInfo session = assertInstanceOf(
                                 SessionInfo.class, login.getData());
@@ -288,7 +288,7 @@ class AuthenticationIntegrationTest {
                 Set<String> tokens = new HashSet<>();
                 for (Future<SessionInfo> result : results) {
                     SessionInfo session = result.get(10, TimeUnit.SECONDS);
-                    assertEquals("20260001", session.getUsername());
+                    assertEquals("20260006", session.getUsername());
                     tokens.add(session.getToken());
                 }
                 assertEquals(clientCount, tokens.size());
@@ -307,8 +307,8 @@ class AuthenticationIntegrationTest {
             ClientContext second = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
 
-            assertTrue(first.login("20260001", "123456".toCharArray()).isSuccess());
-            assertTrue(second.login("20260001", "123456".toCharArray()).isSuccess());
+            assertTrue(first.login("20260006", "123456".toCharArray()).isSuccess());
+            assertTrue(second.login("20260006", "123456".toCharArray()).isSuccess());
             assertFalse(first.currentSession().orElseThrow().getToken().equals(
                     second.currentSession().orElseThrow().getToken()));
 

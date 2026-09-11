@@ -8,13 +8,13 @@ import java.util.Optional;
 
 public final class StudentService {
 
-    private final StudentMemoryRepository repository;
+    private final StudentRepository repository;
 
     public StudentService() {
         this(new StudentMemoryRepository());
     }
 
-    public StudentService(StudentMemoryRepository repository) {
+    public StudentService(StudentRepository repository) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
     }
 

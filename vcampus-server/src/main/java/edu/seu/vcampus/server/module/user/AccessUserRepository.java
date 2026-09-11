@@ -38,17 +38,6 @@ final class AccessUserRepository implements UserRepository {
             "libraryadmin", "20260005",
             "shopadmin", "20260006",
             "hospitaladmin", "20260007");
-    private static final Map<String, String> DEMO_CARD_NUMBERS_BY_USER_ID = Map.of(
-            "U-ADMIN-001", "20260000",
-            "U-STUDENT-001", "20260001",
-            "U-TEACHER-001", "20260002",
-            "U-STUDENT-ADMIN-001", "20260003",
-            "U-COURSE-ADMIN-001", "20260004",
-            "U-LIBRARY-ADMIN-001", "20260005",
-            "U-SHOP-ADMIN-001", "20260006",
-            "U-HOSPITAL-ADMIN-001", "20260007",
-            "U-COURSE-TEACHER-001", "20260008");
-
     private final AccessDatabase database;
 
     AccessUserRepository(AccessDatabase database) {
@@ -57,7 +46,6 @@ final class AccessUserRepository implements UserRepository {
         normalizeLegacyProfessionalRoles();
         normalizeLegacyDemoDoctorName();
         migrateLegacyLoginAccounts();
-        migrateCanonicalDemoAccountNumbers();
     }
 
     AccessDatabase database() {
@@ -164,72 +152,6 @@ final class AccessUserRepository implements UserRepository {
                 updateApplication.setString(3, account.username());
                 updateApplication.executeUpdate();
             }
-        }
-    }
-
-    /** Renumbers existing development accounts to the canonical contiguous sequence. */
-    private void migrateCanonicalDemoAccountNumbers() {
-        try (Connection connection = database.openConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                List<LegacyAccount> moves = new ArrayList<>();
-                Map<String, String> ownersByUsername = new LinkedHashMap<>();
-                try (Statement statement = connection.createStatement();
-                     ResultSet result = statement.executeQuery(
-                             "SELECT userId, username FROM tblUser")) {
-                    while (result.next()) {
-                        String userId = result.getString("userId");
-                        String username = result.getString("username");
-                        ownersByUsername.put(username, userId);
-                        String target = DEMO_CARD_NUMBERS_BY_USER_ID.get(userId);
-                        if (target != null && !target.equals(username)) {
-                            moves.add(new LegacyAccount(userId, username));
-                        }
-                    }
-                }
-
-                for (LegacyAccount move : moves) {
-                    String target = DEMO_CARD_NUMBERS_BY_USER_ID.get(move.userId());
-                    String owner = ownersByUsername.get(target);
-                    if (owner != null && !DEMO_CARD_NUMBERS_BY_USER_ID.containsKey(owner)) {
-                        throw new SQLException(
-                                "Canonical demo number is already used by another account: "
-                                        + target);
-                    }
-                }
-
-                try (PreparedStatement temporary = connection.prepareStatement(
-                        "UPDATE tblUser SET username = ? WHERE userId = ?")) {
-                    for (int index = 0; index < moves.size(); index++) {
-                        LegacyAccount move = moves.get(index);
-                        temporary.setString(1, "MIGRATION-" + index + "-" + move.userId());
-                        temporary.setString(2, move.userId());
-                        temporary.addBatch();
-                    }
-                    if (!moves.isEmpty()) {
-                        temporary.executeBatch();
-                    }
-                }
-                for (LegacyAccount move : moves) {
-                    migrateLoginAccount(
-                            connection,
-                            move,
-                            DEMO_CARD_NUMBERS_BY_USER_ID.get(move.userId()));
-                }
-                connection.commit();
-            } catch (SQLException exception) {
-                rollback(connection, exception);
-                throw exception;
-            } catch (RuntimeException exception) {
-                try {
-                    connection.rollback();
-                } catch (SQLException rollbackFailure) {
-                    exception.addSuppressed(rollbackFailure);
-                }
-                throw exception;
-            }
-        } catch (SQLException exception) {
-            throw failure("Cannot migrate development account numbers.", exception);
         }
     }
 

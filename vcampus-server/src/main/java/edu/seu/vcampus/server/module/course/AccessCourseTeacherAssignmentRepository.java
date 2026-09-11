@@ -432,7 +432,7 @@ final class AccessCourseTeacherAssignmentRepository
 
             statement.setString(
                 2,
-                "U-COURSE-TEACHER-001");
+                "U-TEACHER-001");
 
             try (ResultSet result =
                      statement.executeQuery()) {
@@ -462,7 +462,7 @@ final class AccessCourseTeacherAssignmentRepository
 
                 statement.setString(
                     1,
-                    "U-COURSE-TEACHER-001");
+                    "U-TEACHER-001");
 
                 statement.setLong(
                     2,
@@ -490,7 +490,7 @@ final class AccessCourseTeacherAssignmentRepository
 
             statement.setString(
                 2,
-                "U-COURSE-TEACHER-001");
+                "U-TEACHER-001");
 
             statement.setString(
                 3,

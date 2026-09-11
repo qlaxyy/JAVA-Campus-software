@@ -15,7 +15,7 @@ class ShopViewTest {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
             ClientContext context = new ClientContext(new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260006", "123456".toCharArray()).isSuccess());
             ShopView view = new ShopView(context);
             assertEquals(ShopView.CARD_SHOP, view.visibleCard());
             assertEquals(3, view.tabCount());
@@ -27,7 +27,7 @@ class ShopViewTest {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
             ClientContext context = new ClientContext(new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(context.login("20260006", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260004", "123456".toCharArray()).isSuccess());
             ShopView view = new ShopView(context);
             assertEquals(ShopView.CARD_SELECT, view.visibleCard());
             view.openShopping();

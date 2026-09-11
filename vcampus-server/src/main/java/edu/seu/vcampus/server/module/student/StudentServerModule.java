@@ -5,10 +5,13 @@ import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.student.*;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.infrastructure.ActionRouter;
+import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
 import edu.seu.vcampus.server.module.ServerContext;
 import edu.seu.vcampus.server.module.ServerModule;
+import edu.seu.vcampus.server.security.UserDirectory;
 
 import java.io.Serializable;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -26,6 +29,13 @@ public final class StudentServerModule implements ServerModule {
 
     public StudentServerModule(StudentService studentService) {
         this.studentService = Objects.requireNonNull(studentService, "studentService must not be null");
+    }
+
+    /** Creates a student module backed by the shared server Access database. */
+    public static StudentServerModule createAccessBacked(
+            Path databasePath, UserDirectory users) {
+        return new StudentServerModule(new StudentService(
+                new AccessStudentRepository(new AccessDatabase(databasePath), users)));
     }
 
     @Override
@@ -89,8 +99,11 @@ public final class StudentServerModule implements ServerModule {
         boolean isTeacher = context.teachers()
             .findByUserId(session.getUserId())
             .isPresent();
+        boolean isAssignedTeacher = isTeacher
+            && context.teacherStudentAccess()
+                .canViewStudent(session.getUserId(), targetId);
 
-        if (!isStudentAdmin && !isSelf && !isTeacher) {
+        if (!isStudentAdmin && !isSelf && !isAssignedTeacher) {
             return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：非教务管理或教学人员无权查阅该学生学籍档案");
         }
 
@@ -185,8 +198,7 @@ public final class StudentServerModule implements ServerModule {
         SessionInfo session = sessionOpt.get();
 
         boolean isStudentAdmin = session.canAdminister("student");
-        String currentUserId = cleanId(session.getUserId());
-        String currentUsername = cleanId(session.getUsername());
+        String currentStudentNumber = session.getUsername();
 
         String queryStudentId = null;
         if (request.getData() instanceof String s && !s.isBlank()) {
@@ -204,14 +216,14 @@ public final class StudentServerModule implements ServerModule {
             .findByUserId(session.getUserId())
             .isPresent();
         if (isTeacher || !session.canAdminister("student")) {
-            if (queryStudentId != null && !queryStudentId.equalsIgnoreCase(currentUserId)) {
-                return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：无权调阅他人学籍异动记录");
+            if (queryStudentId != null
+                    && !queryStudentId.equalsIgnoreCase(cleanId(currentStudentNumber))) {
+                return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：无权调阅他人学籍异动");
             }
         }
 
-        // 普通学生：仅查本人
-        String selfTarget = !currentUserId.isBlank() ? currentUserId : currentUsername;
-        List<StatusChangeDto> list = studentService.listStatusChanges(selfTarget);
+        // 普通学生强制仅查本人
+        List<StatusChangeDto> list = studentService.listStatusChanges(currentStudentNumber);
         return Response.success(request, "获取个人异动成功", (Serializable) list);
     }
 

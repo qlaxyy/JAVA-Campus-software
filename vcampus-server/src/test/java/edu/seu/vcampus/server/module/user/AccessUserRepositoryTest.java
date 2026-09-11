@@ -55,17 +55,17 @@ class AccessUserRepositoryTest {
         Path databasePath = temporaryDirectory.resolve("seeded.accdb");
         InMemoryAuthenticationService first =
                 UserAuthenticationBootstrap.createAccessBacked(databasePath);
-        UserAccount student = first.users().findByUsername("20260001").orElseThrow();
+        UserAccount student = first.users().findByUsername("20260006").orElseThrow();
         first.users().save(student.withEnabled(false));
 
         InMemoryAuthenticationService restarted =
                 UserAuthenticationBootstrap.createAccessBacked(databasePath);
-        assertEquals(9, restarted.users().findAll().size());
-        assertFalse(restarted.users().findByUsername("20260001").orElseThrow().enabled());
+        assertEquals(39, restarted.users().findAll().size());
+        assertFalse(restarted.users().findByUsername("20260006").orElseThrow().enabled());
         UserAccount teacher = restarted.users()
-                .findByUsername("20260008").orElseThrow();
-        assertEquals("U-COURSE-TEACHER-001", teacher.userId());
-        assertEquals("演示教师", teacher.displayName());
+                .findByUsername("20260021").orElseThrow();
+        assertEquals("U-TEACHER-001", teacher.userId());
+        assertEquals("王建国", teacher.displayName());
         assertEquals(Role.USER, teacher.role());
         assertTrue(teacher.adminScopes().isEmpty());
     }
@@ -119,7 +119,7 @@ class AccessUserRepositoryTest {
     }
 
     @Test
-    void migratesExistingDemoAccountsToContiguousCampusCardNumbers() {
+    void doesNotSilentlyRenumberExistingStructuredCampusCardNumbers() {
         Path databasePath = temporaryDirectory.resolve("legacy-admin-number.accdb");
         AccessUserRepository initial = repository(databasePath);
         char[] password = "123456".toCharArray();
@@ -147,31 +147,18 @@ class AccessUserRepositoryTest {
 
         AccessUserRepository migrated = repository(databasePath);
 
-        assertEquals("U-ADMIN-001",
-                migrated.findByUsername("20260000").orElseThrow().userId());
         assertEquals("U-STUDENT-001",
                 migrated.findByUsername("20260001").orElseThrow().userId());
         assertEquals("U-TEACHER-001",
                 migrated.findByUsername("20260002").orElseThrow().userId());
-        assertEquals("U-STUDENT-ADMIN-001",
-                migrated.findByUsername("20260003").orElseThrow().userId());
-        assertEquals("U-COURSE-ADMIN-001",
-                migrated.findByUsername("20260004").orElseThrow().userId());
-        assertEquals("U-LIBRARY-ADMIN-001",
-                migrated.findByUsername("20260005").orElseThrow().userId());
-        assertEquals("U-SHOP-ADMIN-001",
-                migrated.findByUsername("20260006").orElseThrow().userId());
         UserAccount hospitalAdministrator =
-                migrated.findByUsername("20260007").orElseThrow();
+                migrated.findByUsername("20260008").orElseThrow();
         assertEquals("U-HOSPITAL-ADMIN-001", hospitalAdministrator.userId());
         assertEquals(Set.of(AdminScope.HOSPITAL), hospitalAdministrator.adminScopes());
-        assertTrue(migrated.findByUsername("20260008").isEmpty());
         char[] migratedPassword = "123456".toCharArray();
         try {
-            assertTrue(migrated.findByUsername("20260000").orElseThrow()
-                    .passwordMatches(PasswordProof.create("20260000", migratedPassword)));
             assertTrue(hospitalAdministrator.passwordMatches(
-                    PasswordProof.create("20260007", migratedPassword)));
+                    PasswordProof.create("20260008", migratedPassword)));
         } finally {
             java.util.Arrays.fill(migratedPassword, '\0');
         }

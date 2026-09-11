@@ -26,7 +26,7 @@ class SmartTriagePanelTest {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260006", "123456".toCharArray()).isSuccess());
             AtomicReference<String> openedDepartment = new AtomicReference<>();
             SmartTriagePanel[] panel = new SmartTriagePanel[1];
             SwingUtilities.invokeAndWait(() -> {
@@ -53,7 +53,7 @@ class SmartTriagePanelTest {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260006", "123456".toCharArray()).isSuccess());
             SmartTriagePanel[] panel = new SmartTriagePanel[1];
             SwingUtilities.invokeAndWait(() -> {
                 panel[0] = new SmartTriagePanel(context, () -> { }, ignored -> { });

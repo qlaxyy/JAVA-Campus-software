@@ -207,7 +207,7 @@ flowchart LR
 
 ### 5.1 模块背景
 
-用户登录模块是所有业务模块的统一入口。它确认“当前账号是谁、具有哪些账号级权限和模块管理范围”。学校统一维护的教师基础资格保存在 `tblTeacherProfile`，由超级管理员设置；选课和学籍服务器通过 `ServerContext.teachers()` 按 `userId` 查询。医生等专业资料仍由所属业务模块维护。开发期的 `20260008` 已绑定一条有效公共教师档案。
+用户登录模块是所有业务模块的统一入口。它确认“当前账号是谁、具有哪些账号级权限和模块管理范围”。学校统一维护的教师基础资格保存在 `tblTeacherProfile`，由超级管理员设置；选课和学籍服务器通过 `ServerContext.teachers()` 按 `userId` 查询。医生等专业资料仍由所属业务模块维护。最终种子库包含 8 名教师和 10 名医生，当前姓名统一从 `tblUser.displayName` 读取。
 
 ### 5.2 用例设计
 
@@ -826,7 +826,7 @@ Swing 组件必须在事件分派线程中创建和更新。登录网络请求�
 
 - `AccessUserRepository` 首次连接时创建用户表；
 - `AccessUserAuditRepository` 首次连接时创建只追加的账号管理审计表；
-- `DemoUserAccounts` 在空库中初始化完整公开测试账号，并可在未占用 `20260008` 时为旧开发数据库补入教师演示账号；`TeacherRegistryService` 同步补入其公共教师档案；
+- `FinalDemoRoster` 定义 39 个最终演示账号；停服后的 `--rebuild-demo-database` 先备份旧库，再在临时文件中初始化并校验，成功后原子替换；
 - 账号资料和 `AdminScope` 修改会跨服务器重启保留；
 - `InMemoryAuthenticationService` 在内存中保存会话；
 - `AccessHospitalRepository` 保存医生新增申请和已审核医生档案；

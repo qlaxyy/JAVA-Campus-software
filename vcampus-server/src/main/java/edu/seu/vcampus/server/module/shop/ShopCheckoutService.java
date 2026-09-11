@@ -27,18 +27,28 @@ import java.util.Objects;
  */
 final class ShopCheckoutService {
 
-    private final InMemoryShopCatalog catalog;
-    private final InMemoryCampusCardStore cards;
-    private final InMemoryShopOrderStore orders;
+    private final ShopCatalogRepository catalog;
+    private final CampusCardRepository cards;
+    private final ShopOrderRepository orders;
+    private final AccessShopCheckoutTransaction accessCheckout;
     private final Object lock = new Object();
 
     ShopCheckoutService(
-            InMemoryShopCatalog catalog,
-            InMemoryCampusCardStore cards,
-            InMemoryShopOrderStore orders) {
+            ShopCatalogRepository catalog,
+            CampusCardRepository cards,
+            ShopOrderRepository orders) {
+        this(catalog, cards, orders, null);
+    }
+
+    ShopCheckoutService(
+            ShopCatalogRepository catalog,
+            CampusCardRepository cards,
+            ShopOrderRepository orders,
+            AccessShopCheckoutTransaction accessCheckout) {
         this.catalog = Objects.requireNonNull(catalog, "catalog must not be null");
         this.cards = Objects.requireNonNull(cards, "cards must not be null");
         this.orders = Objects.requireNonNull(orders, "orders must not be null");
+        this.accessCheckout = accessCheckout;
     }
 
     CampusCardView card(SessionInfo session) {
@@ -61,6 +71,9 @@ final class ShopCheckoutService {
         }
         Map<Long, Integer> quantities = merge(request.getLines());
         synchronized (lock) {
+            if (accessCheckout != null) {
+                return accessCheckout.createOrder(session, request, quantities);
+            }
             List<OrderItemDto> items = new ArrayList<>();
             int totalFen = 0;
             for (Map.Entry<Long, Integer> entry : quantities.entrySet()) {

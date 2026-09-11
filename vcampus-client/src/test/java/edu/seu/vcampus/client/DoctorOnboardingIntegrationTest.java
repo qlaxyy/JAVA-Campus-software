@@ -40,10 +40,10 @@ class DoctorOnboardingIntegrationTest {
             server.start();
             ClientContext hospitalAdministrator = client(server);
             assertTrue(hospitalAdministrator.login(
-                    "20260007", password()).isSuccess());
+                    "20260005", password()).isSuccess());
             Response submitted = hospitalAdministrator.send(
                     HospitalActions.SUBMIT_DOCTOR_APPLICATION,
-                    existingApplication("20260001"));
+                    existingApplication("20260006"));
             assertTrue(submitted.isSuccess());
 
             ClientContext administrator = client(server);
@@ -57,10 +57,10 @@ class DoctorOnboardingIntegrationTest {
                     DoctorApplicationView.class, approved.getData());
             assertEquals(DoctorApplicationStatus.APPROVED, reviewed.getStatus());
             assertEquals("U-STUDENT-001", reviewed.getTargetUserId());
-            assertEquals("20260001", reviewed.getUsername());
+            assertEquals("20260006", reviewed.getUsername());
 
             ClientContext doctor = client(server);
-            assertTrue(doctor.login("20260001", password()).isSuccess());
+            assertTrue(doctor.login("20260006", password()).isSuccess());
             HospitalModeAccessView access = assertInstanceOf(
                     HospitalModeAccessView.class,
                     doctor.send(HospitalActions.GET_MODE_ACCESS, null).getData());
@@ -74,7 +74,7 @@ class DoctorOnboardingIntegrationTest {
             server.start();
             ClientContext hospitalAdministrator = client(server);
             assertTrue(hospitalAdministrator.login(
-                    "20260007", password()).isSuccess());
+                    "20260005", password()).isSuccess());
             assertTrue(hospitalAdministrator.send(
                     HospitalActions.SUBMIT_DOCTOR_APPLICATION,
                     externalApplication("新医生")).isSuccess());
@@ -88,8 +88,8 @@ class DoctorOnboardingIntegrationTest {
             assertTrue(approval.isSuccess());
             DoctorApplicationView reviewed = assertInstanceOf(
                     DoctorApplicationView.class, approval.getData());
-            assertEquals("20260009", reviewed.getUsername());
-            assertFalse(reviewed.getUsername().equals("20260001"));
+            assertEquals("20260039", reviewed.getUsername());
+            assertFalse(reviewed.getUsername().equals("20260006"));
 
             DoctorApplicationListResponse hospitalHistory = assertInstanceOf(
                     DoctorApplicationListResponse.class,
@@ -117,7 +117,7 @@ class DoctorOnboardingIntegrationTest {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
             ClientContext student = client(server);
-            assertTrue(student.login("20260001", password()).isSuccess());
+            assertTrue(student.login("20260006", password()).isSuccess());
             Response submitted = student.send(
                     HospitalActions.SUBMIT_DOCTOR_APPLICATION,
                     externalApplication("无权申请"));
@@ -141,7 +141,7 @@ class DoctorOnboardingIntegrationTest {
             first.start();
             ClientContext hospitalAdministrator = client(first);
             assertTrue(hospitalAdministrator.login(
-                    "20260007", password()).isSuccess());
+                    "20260005", password()).isSuccess());
             assertTrue(hospitalAdministrator.send(
                     HospitalActions.SUBMIT_DOCTOR_APPLICATION,
                     externalApplication("持久化医生")).isSuccess());
@@ -175,7 +175,7 @@ class DoctorOnboardingIntegrationTest {
             server.start();
             ClientContext hospitalAdministrator = client(server);
             assertTrue(hospitalAdministrator.login(
-                    "20260007", password()).isSuccess());
+                    "20260005", password()).isSuccess());
             assertTrue(hospitalAdministrator.send(
                     HospitalActions.SUBMIT_DOCTOR_APPLICATION,
                     externalApplication("与学生同名的医生")).isSuccess());
@@ -190,7 +190,7 @@ class DoctorOnboardingIntegrationTest {
             DoctorApplicationView reviewed = assertInstanceOf(
                     DoctorApplicationView.class, approval.getData());
             assertTrue(approval.isSuccess());
-            assertFalse(reviewed.getUsername().equals("20260001"));
+            assertFalse(reviewed.getUsername().equals("20260006"));
             assertFalse(reviewed.getTargetUserId().equals("U-STUDENT-001"));
         }
     }
@@ -201,7 +201,7 @@ class DoctorOnboardingIntegrationTest {
             server.start();
             ClientContext hospitalAdministrator = client(server);
             assertTrue(hospitalAdministrator.login(
-                    "20260007", password()).isSuccess());
+                    "20260005", password()).isSuccess());
 
             Response response = hospitalAdministrator.send(
                     HospitalActions.SUBMIT_DOCTOR_APPLICATION,
@@ -221,7 +221,7 @@ class DoctorOnboardingIntegrationTest {
                 0, ServerModules.createPersistentRouter(database))) {
             server.start();
             ClientContext doctor = client(server);
-            assertTrue(doctor.login("20260002", password()).isSuccess());
+            assertTrue(doctor.login("20260021", password()).isSuccess());
             HospitalModeAccessView access = assertInstanceOf(
                     HospitalModeAccessView.class,
                     doctor.send(HospitalActions.GET_MODE_ACCESS, null).getData());
@@ -260,7 +260,7 @@ class DoctorOnboardingIntegrationTest {
                     + "(requestId, username, displayName, departmentId, doctorTitle, "
                     + "requestedByUserId, applicationStatus, targetUserId, "
                     + "reviewedByUserId, createdAt) VALUES "
-                    + "('DAR-LEGACY-001', 'student001', '演示学生', 'dept-general', "
+                    + "('DAR-LEGACY-001', 'student001', '周一', 'dept-general', "
                     + "'主治医师', 'U-HOSPITAL-ADMIN-001', 'PENDING', NULL, NULL, NOW())");
         }
     }

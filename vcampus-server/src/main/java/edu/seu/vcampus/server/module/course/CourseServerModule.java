@@ -14,6 +14,10 @@ import edu.seu.vcampus.server.infrastructure.ActionRouter;
 import edu.seu.vcampus.server.module.ServerContext;
 import edu.seu.vcampus.server.module.ServerModule;
 import edu.seu.vcampus.server.module.student.StudentMemoryRepository;
+import edu.seu.vcampus.server.module.student.AccessStudentRepository;
+import edu.seu.vcampus.server.module.student.StudentRepository;
+import edu.seu.vcampus.server.security.UserDirectory;
+import edu.seu.vcampus.server.security.TeacherDirectory;
 import edu.seu.vcampus.common.course.GeneralCourseListRequest;
 import java.time.Clock;
 import java.util.ArrayList;
@@ -117,7 +121,7 @@ public final class CourseServerModule
         enrollmentService;
     public CourseServerModule() {
 
-        this(null);
+        this(null, null, null);
     }
     /**
      * 创建使用 Access 数据库的课程模块。
@@ -128,7 +132,46 @@ public final class CourseServerModule
         return new CourseServerModule(
             new AccessDatabase(
                 Objects.requireNonNull(
-                    databasePath)));
+                    databasePath)),
+            new UserDirectory() {
+                @Override
+                public java.util.Optional<edu.seu.vcampus.server.security.UserIdentity>
+                        findByUserId(String userId) {
+                    return java.util.Optional.empty();
+                }
+
+                @Override
+                public java.util.Optional<edu.seu.vcampus.server.security.UserIdentity>
+                        findByCampusCardNumber(String campusCardNumber) {
+                    return java.util.Optional.empty();
+                }
+            },
+            null);
+    }
+
+    /**
+     * 创建使用 Access 数据库和公共用户目录的课程模块。
+     */
+    public static CourseServerModule createAccessBacked(
+        Path databasePath,
+        UserDirectory users) {
+
+        return createAccessBacked(databasePath, users, null);
+    }
+
+    /** Creates an Access-backed course module with live user and teacher directories. */
+    public static CourseServerModule createAccessBacked(
+        Path databasePath,
+        UserDirectory users,
+        TeacherDirectory teachers) {
+
+        return new CourseServerModule(
+            new AccessDatabase(
+                Objects.requireNonNull(
+                    databasePath)),
+            Objects.requireNonNull(
+                users),
+            teachers);
     }
     /**
      * 根据数据库配置创建课程模块。
@@ -137,7 +180,9 @@ public final class CourseServerModule
      * 不为 null 时使用 Access 仓库。
      */
     private CourseServerModule(
-        AccessDatabase database) {
+        AccessDatabase database,
+        UserDirectory users,
+        TeacherDirectory teachers) {
 
 
             /*
@@ -342,7 +387,8 @@ public final class CourseServerModule
             new CourseTeacherService(
                 this.offeringAdministrationService,
                 enrollmentRepository,
-                teacherAssignmentRepository);
+                teacherAssignmentRepository,
+                teachers);
             /*
              * =========================
              * 7. 历史修读 Repository
@@ -361,12 +407,15 @@ public final class CourseServerModule
              *
              * 体育课需要读取学生性别。
              *
-             * 当前直接复用现有
-             * StudentMemoryRepository。
+             * 内存模式使用内存学籍；生产模式
+             * 读取同一个 Access 学籍表。
              */
-            StudentMemoryRepository
-                studentRepository =
-                new StudentMemoryRepository();
+            StudentRepository studentRepository =
+                database == null
+                    ? new StudentMemoryRepository()
+                    : new AccessStudentRepository(
+                        database,
+                        Objects.requireNonNull(users));
 
             /*
              * =========================
@@ -625,7 +674,8 @@ public final class CourseServerModule
             new CourseTeacherService(
                 this.offeringAdministrationService,
                 adminEnrollmentRepository,
-                teacherAssignmentRepository);
+                teacherAssignmentRepository,
+                null);
 
     }
 
@@ -1725,10 +1775,10 @@ public final class CourseServerModule
             request,
             "学生已选课程加载成功。",
             new ArrayList<>(
-                enrollmentService
-                    .listAdminEnrollments(
+                teacherService.withCurrentEnrollmentTeacherNames(
+                    enrollmentService.listAdminEnrollments(
                         adminRequest
-                            .getStudentId())));
+                            .getStudentId()))));
     }
 
     /**
@@ -1877,9 +1927,9 @@ public final class CourseServerModule
         return Response.success(
             request,
             "教学班列表加载成功。",
-            new ArrayList<>(offeringAdministrationService
-                .listCourses(
-                    batchRequest.getBatchId()))
+            new ArrayList<>(teacherService.withCurrentTeacherNames(
+                offeringAdministrationService.listCourses(
+                    batchRequest.getBatchId())))
                );
     }
     /**
@@ -2433,9 +2483,10 @@ public final class CourseServerModule
             "Plan courses loaded.",
             applyStudentOfferingSettings(
                 batchRequest.getBatchId(),
+                teacherService.withCurrentTeacherNames(
                 planService.listPlanCourses(
                     batchRequest.getBatchId(),
-                    studentId(session))));
+                    studentId(session)))));
     }
 
     /**
@@ -2489,10 +2540,11 @@ public final class CourseServerModule
             "Substitute courses loaded.",
             applyStudentOfferingSettings(
                 batchRequest.getBatchId(),
+                teacherService.withCurrentTeacherNames(
                 substitutionService
                     .listSubstituteCourses(
                         batchRequest.getBatchId(),
-                        studentId(session))));
+                        studentId(session)))));
     }
 
     /**
@@ -2552,21 +2604,21 @@ public final class CourseServerModule
          * session.getUsername()
          *
          * 例如：
-         * student001
+         * 20260006
          *
-         * 当前 demo 中用于查询
-         * StudentMemoryRepository。
+         * 生产模式中用于查询 Access 学籍表。
          */
         return Response.success(
             request,
             "PE courses loaded.",
             applyStudentOfferingSettings(
                 peRequest.getBatchId(),
+                teacherService.withCurrentTeacherNames(
                 peCourseService.listPeCourses(
                     peRequest.getBatchId(),
                     peRequest.getSportProject(),
                     studentId(session),
-                    studentId(session))));
+                    studentId(session)))));
     }
     /**
      * 查询通选课程。
@@ -2619,10 +2671,11 @@ public final class CourseServerModule
             "General courses loaded.",
             applyStudentOfferingSettings(
                 generalRequest.getBatchId(),
+                teacherService.withCurrentTeacherNames(
                 generalCourseService.listGeneralCourses(
                     generalRequest.getBatchId(),
                     generalRequest.getGeneralCategory(),
-                    studentId(session))));
+                    studentId(session)))));
     }
     /**
      * 全校课程查询。
@@ -2673,8 +2726,8 @@ public final class CourseServerModule
         return Response.success(
             request,
             "Courses loaded.",
-            searchService.search(
-                searchRequest));
+            teacherService.withCurrentSearchTeacherNames(
+                searchService.search(searchRequest)));
     }
     /**
      * 学生选择教学班。
@@ -2816,11 +2869,11 @@ public final class CourseServerModule
             request,
             "Enrollments loaded.",
             new ArrayList<>(
-                enrollmentService
-                    .listEnrollments(
+                teacherService.withCurrentEnrollmentTeacherNames(
+                    enrollmentService.listEnrollments(
                         studentId(session),
                         batchRequest
-                            .getBatchId())));
+                            .getBatchId()))));
     }
 
     /**

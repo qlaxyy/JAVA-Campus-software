@@ -5,12 +5,14 @@ import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.application.ModuleAccessPolicy;
 import edu.seu.vcampus.client.module.ClientModule;
 import edu.seu.vcampus.client.module.ClientModules;
+import edu.seu.vcampus.client.module.ModuleViewLifecycle;
 import edu.seu.vcampus.client.module.user.LoginPanel;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.user.SessionInfo;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -262,9 +264,15 @@ public final class MainFrame extends JFrame {
             CardLayout moduleLayout) {
         JPanel page = new JPanel(new BorderLayout());
         page.setBackground(SURFACE);
+        JComponent moduleView = module.createView(context);
         JButton backButton = new JButton("←  返回校园服务");
         backButton.setName("module.back." + module.id());
-        backButton.addActionListener(event -> moduleLayout.show(modulePanel, MODULE_HOME_CARD));
+        backButton.addActionListener(event -> {
+            if (moduleView instanceof ModuleViewLifecycle lifecycle) {
+                lifecycle.onModuleExit();
+            }
+            moduleLayout.show(modulePanel, MODULE_HOME_CARD);
+        });
         styleOutlineButton(backButton);
 
         JPanel toolbar = new JPanel(new BorderLayout());
@@ -279,7 +287,7 @@ public final class MainFrame extends JFrame {
         toolbar.add(moduleTitle, BorderLayout.EAST);
 
         page.add(toolbar, BorderLayout.NORTH);
-        page.add(module.createView(context), BorderLayout.CENTER);
+        page.add(moduleView, BorderLayout.CENTER);
         return page;
     }
 

@@ -12,13 +12,15 @@
 
 ## 模式与用户入口
 
-- 进入图书馆后先选择 **线上图书馆** 或 **模拟自助终端**，两种模式均可返回选择页；不修改六模块首页。
+- 进入图书馆后先选择 **线上图书馆** 或 **模拟自助终端**，两种模式均可返回选择页；返回校园服务后
+  再次进入图书馆，也始终从模式选择页开始；不修改六模块首页。
 - **线上图书馆 / 馆藏查询**：按关键词、分类查询书目，展示按馆藏地汇总的馆藏数和可借数；
   选择书目和取书馆藏地后预约，不在网页检索结果中直接借走实体书。
 - **线上图书馆 / 我的图书馆**：分为当前借阅、历史借阅和我的预约。预约页显示状态、排队位次、
   分配条码和取书截止时间，排队中或待取预约可以取消。
-- **模拟自助终端**：复用当前登录会话，扫描或输入实体书馆藏条码后进行借书、归还登记；
-  对预约保留单册先校验归属，成功后刷新预约与借阅状态。
+- **模拟自助终端**：复用当前登录会话，扫描或输入实体书馆藏条码后先由服务器预检；界面展示
+  书名、单册状态和当前用户可执行的操作，只启用合法的借书或归还按钮。正式提交时服务器仍会
+  在事务内重新校验，成功后刷新预约与借阅状态。
 - **线上图书馆 / 图书管理**：仅图书馆模块管理员和超级管理员可见，详见
   [管理员维护说明](library-admin-maintenance.md)。
 
@@ -32,6 +34,7 @@
 | `LIBRARY.GET_BORROW_RECORDS` | `null` | `List<BorrowRecordDTO>` | 已登录 |
 | `LIBRARY.BORROW_COPY` | `CopyBorrowRequest(barcode)` | `null` | 已登录 |
 | `LIBRARY.RETURN_COPY` | `CopyReturnRequest(barcode)` | `null` | 已登录 |
+| `LIBRARY.INSPECT_COPY` | `CopyInspectionRequest(barcode)` | `CopyInspectionDTO` | 已登录 |
 | `LIBRARY.CREATE_RESERVATION` | `CreateReservationRequest(bookId, pickupLocation)` | `ReservationDTO` | 已登录 |
 | `LIBRARY.GET_MY_RESERVATIONS` | `null` | `List<ReservationDTO>` | 已登录 |
 | `LIBRARY.CANCEL_RESERVATION` | `ReservationIdRequest(reservationId)` | `ReservationDTO` | 已登录且为预约本人 |
@@ -56,7 +59,8 @@ V1 的 `BORROW_BOOK`、`RETURN_BOOK`、`UPDATE_STOCK`、`DELETE_BOOK` 以及对�
 预约规则：
 
 - 预约面向“书目 + 取书馆藏地”，请求不接受 `userId`、`copyId`；有可借单册时立即保留 24 小时，
-  无可借单册时按 `createdAt + reservationId` 稳定 FIFO 排队；
+  这里把工作人员找书并送到取书点简化为系统自动配书；无可借单册时按
+  `createdAt + reservationId` 稳定 FIFO 排队；
 - 最多同时存在 3 条有效预约；逾期未还、已借同书目、同书目已有有效预约或 7 天爽约冷却期内拒绝；
 - 归架、新增或恢复单册会优先分配给同书目同馆藏地的队首；取消或过期释放单册并顺延下一人；
 - 借预约单册时，预约 `-> FULFILLED`、单册 `-> LOANED`、创建 `BORROWED` 记录必须同一事务成功；
@@ -87,6 +91,7 @@ InMemory 版本仍通过第二步失败时补偿第一步维持测试状态一�
 - 预约：立即保留、无库存排队、稳定 FIFO、三条上限、逾期停约、同书防重复、24 小时过期、
   7 天冷却、取消顺延、停用书目取消预约；
 - Socket：真实登录、线上预约、我的图书馆、预约条码借书、归还、管理员上架及状态刷新；
+- 终端预检：可借、本人借出、本人预约、他人预约、待上架和已注销状态只启用合法操作；
 - Access：五类 Repository 映射、唯一索引、预约/单册/借阅三方失败回滚，以及多次服务器重启后的状态；
 - 演示种子：仅新建图书馆表时写入、三组关联不变量、写入失败整体回滚、已有空业务表不补种；
 - Swing：模式选择、预约按钮状态、取消状态、条码归属反馈、只读单选表格和清晰中文错误信息。

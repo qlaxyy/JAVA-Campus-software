@@ -2,10 +2,10 @@ package edu.seu.vcampus.client.module.library;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
+import edu.seu.vcampus.common.library.CopyInspectionDTO;
+import edu.seu.vcampus.common.library.CopyInspectionRequest;
 import edu.seu.vcampus.common.library.CopyReturnRequest;
 import edu.seu.vcampus.common.library.LibraryActions;
-import edu.seu.vcampus.common.library.ReservationDTO;
-import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.user.SessionInfo;
 
@@ -16,13 +16,13 @@ import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 import javax.swing.SwingWorker;
+import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
-import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 
@@ -38,6 +38,9 @@ public final class SelfServicePanel extends JPanel {
             SwingConstants.CENTER);
     private final JLabel outcome = new JLabel("请扫描或输入实体书馆藏条码", SwingConstants.CENTER);
     private final Runnable circulationChanged;
+    private final Timer inspectionTimer;
+    private CopyInspectionDTO inspection;
+    private int inspectionVersion;
     private boolean working;
 
     /** @param context shared authenticated client context */
@@ -90,15 +93,16 @@ public final class SelfServicePanel extends JPanel {
         add(form, BorderLayout.CENTER);
         add(outcome, BorderLayout.SOUTH);
 
+        inspectionTimer = new Timer(350, event -> inspectBarcode(true));
+        inspectionTimer.setRepeats(false);
         barcode.addActionListener(event -> {
-            if (borrow.isEnabled()) {
-                submit(true);
-            }
+            inspectionTimer.stop();
+            inspectBarcode(true);
         });
         barcode.getDocument().addDocumentListener(new DocumentListener() {
-            public void insertUpdate(DocumentEvent event) { updateButtons(); }
-            public void removeUpdate(DocumentEvent event) { updateButtons(); }
-            public void changedUpdate(DocumentEvent event) { updateButtons(); }
+            public void insertUpdate(DocumentEvent event) { barcodeChanged(); }
+            public void removeUpdate(DocumentEvent event) { barcodeChanged(); }
+            public void changedUpdate(DocumentEvent event) { barcodeChanged(); }
         });
         borrow.addActionListener(event -> submit(true));
         returnCopy.addActionListener(event -> submit(false));
@@ -106,26 +110,29 @@ public final class SelfServicePanel extends JPanel {
     }
 
     private void submit(boolean borrowing) {
-        if (working || barcode.getText().isBlank()) {
+        CopyInspectionDTO approved = inspection;
+        if (working || approved == null || barcode.getText().isBlank()
+                || (borrowing && !approved.isBorrowAllowed())
+                || (!borrowing && !approved.isReturnAllowed())) {
             return;
         }
         String scanned = barcode.getText().strip();
+        inspection = null;
         setWorking(true);
         reservationCheck.setText(borrowing
-                ? "预约校验：正在核验单册保留归属……"
-                : "预约校验：归还操作不需要预约归属");
+                ? "服务器正在重新校验借阅条件……"
+                : "服务器正在重新校验归还条件……");
         outcome.setText(borrowing ? "正在登记借书……" : "正在登记归还……");
         new SwingWorker<TerminalResult, Void>() {
             @Override
             protected TerminalResult doInBackground() throws Exception {
-                if (!borrowing) {
-                    return new TerminalResult(context.send(LibraryActions.RETURN_COPY,
-                            new CopyReturnRequest(scanned)), false, false);
-                }
-                ReservationCheck check = inspectOwnReservations(scanned);
-                Response response = context.send(LibraryActions.BORROW_COPY,
-                        new CopyBorrowRequest(scanned));
-                return new TerminalResult(response, check.completed(), check.owned());
+                Response response = borrowing
+                        ? context.send(LibraryActions.BORROW_COPY,
+                                new CopyBorrowRequest(scanned))
+                        : context.send(LibraryActions.RETURN_COPY,
+                                new CopyReturnRequest(scanned));
+                return new TerminalResult(
+                        response, approved.isReservedForCurrentUser());
             }
 
             @Override
@@ -133,13 +140,16 @@ public final class SelfServicePanel extends JPanel {
                 try {
                     TerminalResult result = get();
                     Response response = result.response();
-                    showReservationCheck(result, borrowing);
                     if (response == null || !response.isSuccess()) {
+                        reservationCheck.setText("服务器最终校验未通过，正在刷新单册状态");
                         outcome.setText((borrowing ? "借书失败：" : "归还失败：")
                                 + (response == null ? "服务器未返回结果"
                                 : LibraryMessages.failure(response)));
                         return;
                     }
+                    reservationCheck.setText(borrowing && result.ownedReservation()
+                            ? "服务器校验通过：已领取本人预约保留的单册"
+                            : "服务器最终校验通过");
                     outcome.setText(borrowing
                             ? "借书成功：" + scanned + "，借期 30 天"
                             : "归还成功：" + scanned + "，单册正在等待管理员上架");
@@ -152,48 +162,97 @@ public final class SelfServicePanel extends JPanel {
                     showUncertain(borrowing);
                 } finally {
                     setWorking(false);
+                    if (!barcode.getText().isBlank()) {
+                        inspectBarcode(false);
+                    }
                 }
             }
         }.execute();
     }
 
-    private ReservationCheck inspectOwnReservations(String scanned) {
-        try {
-            Response response = context.send(LibraryActions.GET_MY_RESERVATIONS, null);
-            if (response == null || !response.isSuccess()
-                    || !(response.getData() instanceof List<?> values)
-                    || values.stream().anyMatch(value -> !(value instanceof ReservationDTO))) {
-                return new ReservationCheck(false, false);
+    private void barcodeChanged() {
+        inspectionVersion++;
+        inspection = null;
+        inspectionTimer.stop();
+        updateButtons();
+        if (barcode.getText().isBlank()) {
+            if (!working) {
+                reservationCheck.setText("单册预检：请输入馆藏条码");
+                outcome.setText("请扫描或输入实体书馆藏条码");
             }
-            boolean owned = values.stream().map(ReservationDTO.class::cast)
-                    .anyMatch(reservation -> "READY_FOR_PICKUP".equals(reservation.getStatus())
-                            && scanned.equals(reservation.getAssignedBarcode()));
-            return new ReservationCheck(true, owned);
-        } catch (Exception exception) {
-            return new ReservationCheck(false, false);
-        }
-    }
-
-    private void showReservationCheck(TerminalResult result, boolean borrowing) {
-        if (!borrowing) {
-            reservationCheck.setText("预约校验：归还操作不需要预约归属");
             return;
         }
-        Response response = result.response();
-        if (response != null && response.isSuccess()) {
-            reservationCheck.setText(result.ownedReservation()
-                    ? "预约校验：通过，这是为当前用户保留的单册"
-                    : "预约校验：通过，该单册可由当前用户借阅");
-        } else if (response != null
-                && ErrorCodes.LIBRARY_COPY_RESERVED_FOR_OTHER.equals(response.getCode())) {
-            reservationCheck.setText("预约校验：未通过，该单册已为其他读者保留");
-        } else if (result.ownedReservation()) {
-            reservationCheck.setText("预约校验：客户端预检匹配，但服务器最终校验未通过");
-        } else if (!result.checkCompleted()) {
-            reservationCheck.setText("预约校验：客户端预检失败，已由服务器完成最终校验");
-        } else {
-            reservationCheck.setText("预约校验：单册不属于当前用户的待取预约");
+        reservationCheck.setText("单册预检：等待检查条码……");
+        outcome.setText("预检完成前不能执行借还操作");
+        inspectionTimer.restart();
+    }
+
+    private void inspectBarcode(boolean updateOutcome) {
+        if (working || barcode.getText().isBlank()) {
+            return;
         }
+        String scanned = barcode.getText().strip();
+        int version = inspectionVersion;
+        inspection = null;
+        updateButtons();
+        reservationCheck.setText("单册预检：正在查询条码……");
+        if (updateOutcome) {
+            outcome.setText("正在检查可执行的借还操作……");
+        }
+        new SwingWorker<Response, Void>() {
+            @Override
+            protected Response doInBackground() throws Exception {
+                return context.send(LibraryActions.INSPECT_COPY,
+                        new CopyInspectionRequest(scanned));
+            }
+
+            @Override
+            protected void done() {
+                if (version != inspectionVersion
+                        || !scanned.equals(barcode.getText().strip())) {
+                    return;
+                }
+                try {
+                    Response response = get();
+                    if (response == null || !response.isSuccess()
+                            || !(response.getData() instanceof CopyInspectionDTO value)) {
+                        reservationCheck.setText("单册预检失败：" + (response == null
+                                ? "服务器未返回结果" : LibraryMessages.failure(response)));
+                        if (updateOutcome) {
+                            outcome.setText("当前不能执行借还操作");
+                        }
+                        return;
+                    }
+                    inspection = value;
+                    reservationCheck.setText("单册预检：" + value.getBookTitle()
+                            + "｜" + statusLabel(value.getCopyStatus())
+                            + "｜" + value.getStatusMessage());
+                    if (updateOutcome) {
+                        outcome.setText(value.isBorrowAllowed() || value.isReturnAllowed()
+                                ? "预检完成，请点击已启用的操作"
+                                : "当前没有可执行的借还操作");
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    reservationCheck.setText("单册预检被中断，请重新输入条码");
+                } catch (ExecutionException exception) {
+                    reservationCheck.setText("单册预检失败，请检查网络后重试");
+                } finally {
+                    updateButtons();
+                }
+            }
+        }.execute();
+    }
+
+    private String statusLabel(String status) {
+        return switch (status) {
+            case "AVAILABLE" -> "可借";
+            case "RESERVED" -> "预约待取";
+            case "LOANED" -> "已借出";
+            case "WAITING_SHELVING" -> "待上架";
+            case "WITHDRAWN" -> "已注销";
+            default -> status;
+        };
     }
 
     private void showUncertain(boolean borrowing) {
@@ -203,18 +262,19 @@ public final class SelfServicePanel extends JPanel {
 
     private void setWorking(boolean value) {
         working = value;
+        if (value) {
+            inspectionTimer.stop();
+        }
         barcode.setEnabled(!value);
         updateButtons();
     }
 
     private void updateButtons() {
-        boolean enabled = !working && !barcode.getText().isBlank();
-        borrow.setEnabled(enabled);
-        returnCopy.setEnabled(enabled);
+        boolean inspected = !working && inspection != null
+                && inspection.getBarcode().equals(barcode.getText().strip());
+        borrow.setEnabled(inspected && inspection.isBorrowAllowed());
+        returnCopy.setEnabled(inspected && inspection.isReturnAllowed());
     }
 
-    private record ReservationCheck(boolean completed, boolean owned) { }
-
-    private record TerminalResult(
-            Response response, boolean checkCompleted, boolean ownedReservation) { }
+    private record TerminalResult(Response response, boolean ownedReservation) { }
 }

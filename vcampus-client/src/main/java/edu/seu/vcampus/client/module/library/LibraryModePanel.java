@@ -1,6 +1,7 @@
 package edu.seu.vcampus.client.module.library;
 
 import edu.seu.vcampus.client.application.ClientContext;
+import edu.seu.vcampus.client.module.ModuleViewLifecycle;
 import edu.seu.vcampus.common.protocol.ModuleNames;
 
 import javax.swing.BorderFactory;
@@ -19,7 +20,7 @@ import java.awt.Font;
 import java.awt.GridLayout;
 
 /** Selects and hosts the online library and simulated self-service terminal modes. */
-public final class LibraryModePanel extends JPanel {
+public final class LibraryModePanel extends JPanel implements ModuleViewLifecycle {
 
     private static final String MODE_SELECTION = "modeSelection";
     private static final String ONLINE_LIBRARY = "onlineLibrary";
@@ -140,6 +141,11 @@ public final class LibraryModePanel extends JPanel {
         header.add(Box.createHorizontalStrut(back.getPreferredSize().width), BorderLayout.EAST);
         container.add(header, BorderLayout.NORTH);
         return container;
+    }
+
+    @Override
+    public void onModuleExit() {
+        showModeSelection();
     }
 
     private void showModeSelection() {

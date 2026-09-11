@@ -112,15 +112,16 @@ class LibraryReservationUiTest {
             JTextField barcode = named(
                     panel.get(), JTextField.class, "library.selfService.barcode");
             JButton borrow = button(panel.get(), "借书登记");
+            JButton giveBack = button(panel.get(), "归还登记");
             onEdt(() -> barcode.setText("SEU-B001-001"));
-            awaitUi(borrow::isEnabled);
-            onEdt(borrow::doClick);
 
             JLabel check = named(
                     panel.get(), JLabel.class, "library.selfService.reservationCheck");
             JLabel outcome = named(panel.get(), JLabel.class, "library.selfService.outcome");
-            awaitUi(() -> check.getText().contains("未通过")
-                    && outcome.getText().contains("其他读者预约保留"));
+            awaitUi(() -> check.getText().contains("其他读者预约保留"));
+            assertFalse(borrow.isEnabled());
+            assertFalse(giveBack.isEnabled());
+            assertTrue(outcome.getText().contains("没有可执行"));
         }
     }
 

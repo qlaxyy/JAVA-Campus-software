@@ -4,6 +4,8 @@ import edu.seu.vcampus.common.library.AddBookCopyRequest;
 import edu.seu.vcampus.common.library.BookCopyIdRequest;
 import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
+import edu.seu.vcampus.common.library.CopyInspectionDTO;
+import edu.seu.vcampus.common.library.CopyInspectionRequest;
 import edu.seu.vcampus.common.library.CopyReturnRequest;
 import edu.seu.vcampus.common.library.CreateReservationRequest;
 import edu.seu.vcampus.common.library.ReservationDTO;
@@ -207,6 +209,18 @@ class LibraryReservationServiceTest {
     @Test
     void onlyReservationOwnerCanBorrowHeldCopyAndBorrowFulfillsReservation() {
         ReservationDTO ready = reserve("U-OWNER", "B001", JIULONGHU);
+        CopyInspectionDTO ownerInspection = service.inspectCopy(
+                "U-OWNER", new CopyInspectionRequest(ready.getAssignedBarcode()));
+        CopyInspectionDTO otherInspection = service.inspectCopy(
+                "U-OTHER", new CopyInspectionRequest(ready.getAssignedBarcode()));
+        assertTrue(ownerInspection.isReservedForCurrentUser());
+        assertTrue(ownerInspection.isBorrowAllowed());
+        assertFalse(ownerInspection.isReturnAllowed());
+        assertFalse(otherInspection.isReservedForCurrentUser());
+        assertFalse(otherInspection.isBorrowAllowed());
+        assertFalse(otherInspection.isReturnAllowed());
+        assertTrue(otherInspection.getStatusMessage().contains("其他读者"));
+
         failure(ErrorCodes.LIBRARY_COPY_RESERVED_FOR_OTHER,
                 () -> service.borrowCopy("U-OTHER",
                         new CopyBorrowRequest(ready.getAssignedBarcode())));

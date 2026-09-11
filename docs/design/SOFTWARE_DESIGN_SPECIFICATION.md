@@ -655,7 +655,8 @@ classDiagram
 ## 8. 图书馆子系统设计说明（预约与入口调整阶段 4 已实现）
 
 负责人：吴昊哲。当前已完成书目与实体单册分离、按馆藏地汇总、线上预约、个人图书馆、
-模拟自助条码借还、书目与单册维护、全馆借阅查询、Access Repository 和跨 Repository 事务。
+模拟自助条码借还、服务器条码预检与合法操作按钮控制、书目与单册维护、全馆借阅查询、
+Access Repository 和跨 Repository 事务。
 
 当前实现及评审入口：[借阅归还交付说明](../modules/library-borrow-return.md)、
 [图书管理员维护设计与测试](../modules/library-admin-maintenance.md)。

@@ -32,7 +32,8 @@ class LibraryServerModuleTest {
                         && field.getType() == String.class)
                 .map(this::read).collect(java.util.stream.Collectors.toSet());
         assertEquals(Set.of(LibraryActions.SEARCH_BOOKS, LibraryActions.GET_BORROW_RECORDS,
-                LibraryActions.BORROW_COPY, LibraryActions.RETURN_COPY, LibraryActions.LIST_CATEGORIES,
+                LibraryActions.BORROW_COPY, LibraryActions.RETURN_COPY,
+                LibraryActions.INSPECT_COPY, LibraryActions.LIST_CATEGORIES,
                 LibraryActions.ADMIN_SEARCH_BOOKS, LibraryActions.ADD_BOOK, LibraryActions.UPDATE_BOOK,
                 LibraryActions.SET_BOOK_STATUS, LibraryActions.ADD_BOOK_COPY, LibraryActions.LIST_BOOK_COPIES,
                 LibraryActions.UPDATE_BOOK_COPY, LibraryActions.SHELVE_BOOK_COPY,
@@ -50,6 +51,10 @@ class LibraryServerModuleTest {
         assertEquals(ErrorCodes.AUTH_REQUIRED, dispatch(router, LibraryActions.GET_BORROW_RECORDS,
                 "expired-token", null).getCode());
         assertEquals(ErrorCodes.COMMON_INVALID_REQUEST, dispatch(router, LibraryActions.SEARCH_BOOKS,
+                READER.getToken(), new CopyBorrowRequest("SEU-B001-001")).getCode());
+        assertEquals(ErrorCodes.AUTH_REQUIRED, dispatch(router, LibraryActions.INSPECT_COPY,
+                null, new CopyInspectionRequest("SEU-B001-001")).getCode());
+        assertEquals(ErrorCodes.COMMON_INVALID_REQUEST, dispatch(router, LibraryActions.INSPECT_COPY,
                 READER.getToken(), new CopyBorrowRequest("SEU-B001-001")).getCode());
         assertEquals(ErrorCodes.COMMON_INVALID_REQUEST, dispatch(router, LibraryActions.GET_BORROW_RECORDS,
                 READER.getToken(), "forged-user-id").getCode());
@@ -91,8 +96,21 @@ class LibraryServerModuleTest {
     @Test
     void sessionIdentityRatherThanRequestPayloadOwnsBarcodeCirculation() {
         ActionRouter router = router();
+        Response inspection = dispatch(router, LibraryActions.INSPECT_COPY,
+                READER.getToken(), new CopyInspectionRequest("SEU-B001-001"));
+        assertTrue(inspection.isSuccess());
+        CopyInspectionDTO available = assertInstanceOf(
+                CopyInspectionDTO.class, inspection.getData());
+        assertTrue(available.isBorrowAllowed());
+        assertFalse(available.isReturnAllowed());
+
         assertTrue(dispatch(router, LibraryActions.BORROW_COPY, READER.getToken(),
                 new CopyBorrowRequest("SEU-B001-001")).isSuccess());
+        CopyInspectionDTO loaned = assertInstanceOf(CopyInspectionDTO.class,
+                dispatch(router, LibraryActions.INSPECT_COPY, READER.getToken(),
+                        new CopyInspectionRequest("SEU-B001-001")).getData());
+        assertFalse(loaned.isBorrowAllowed());
+        assertTrue(loaned.isReturnAllowed());
         Response records = dispatch(router, LibraryActions.GET_BORROW_RECORDS, READER.getToken(), null);
         assertTrue(records.isSuccess());
         BorrowRecordDTO record = assertInstanceOf(BorrowRecordDTO.class,

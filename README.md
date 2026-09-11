@@ -65,16 +65,10 @@ java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar --rebuild-demo
 
 ### 图书馆完整演示
 
-图书馆业务演示数据只在整套图书馆表第一次创建时写入。若 `database/vCampus.accdb` 已经启动过，
-请使用一个从未存在过的数据库文件名启动演示服务器。每轮完整演示换一个编号，例如第一次使用：
-
-```powershell
-java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar 8888 database\library-demo-01.accdb
-```
-
-再次从头演示时改用 `library-demo-02.accdb` 等新文件；验证持久化时则继续使用上一轮的同一个文件，
-重启服务器后检查预约、借阅和单册状态是否保持不变。返回校园服务或重新进入图书馆只会重置界面导航，
-不会重置这些业务数据。
+图书馆与其他模块统一使用 `database/vCampus.accdb`，不再为图书馆创建
+`library-demo-01.accdb` 等独立数据库。需要从初始状态完整演示时，由服务器负责人停止服务器并执行上方
+`--rebuild-demo-database` 命令；一轮演示期间始终使用同一数据库。重启服务器后检查预约、借阅和单册状态
+是否保持不变。返回校园服务或重新进入图书馆只会重置界面导航，不会重置这些业务数据。
 
 然后按以下顺序演示：
 
@@ -166,6 +160,23 @@ mvn clean verify
 ```
 
 如果 `git status` 显示未提交修改，先停止操作并保留终端输出；不要执行 `git reset --hard`，也不要重新克隆覆盖。
+
+普通组员更新后只需构建并运行客户端，不要执行 `--rebuild-demo-database`，也不要复制或打开服务器数据库：
+
+```powershell
+java -jar vcampus-client\target\vcampus-client-0.1.0-SNAPSHOT.jar <服务器Radmin-IP> 8888
+```
+
+最终演示数据库只由服务器负责人维护。需要统一恢复到初始状态时，服务器负责人完成上述更新和构建后，
+先停止服务器，再执行一次：
+
+```powershell
+java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar --rebuild-demo-database
+java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar
+```
+
+第一条命令会备份并重建数据库后退出；第二条命令才是正常启动服务器。演示过程中不要重复执行第一条命令，
+否则刚刚产生的选课、借阅、购物车、订单、预约等数据会被恢复为初始状态。
 
 ## 3. 开发自己的功能
 

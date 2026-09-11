@@ -2,6 +2,7 @@ package edu.seu.vcampus.server.module.course;
 
 import edu.seu.vcampus.common.course.CourseInfo;
 import edu.seu.vcampus.common.course.OfferingInfo;
+import edu.seu.vcampus.common.course.ScheduleInfo;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +40,9 @@ final class CourseOfferingAdministrationService {
     private final CourseOfferingSettingsRepository
         settingsRepository;
 
+    private final CourseOfferingCreationRepository
+        creationRepository;
+
     CourseOfferingAdministrationService(
         CoursePlanRepository planRepository,
         CourseSubstitutionRepository
@@ -51,7 +55,9 @@ final class CourseOfferingAdministrationService {
         CourseOfferingSettingsRepository
             settingsRepository,
         CourseSettingsRepository
-            courseSettingsRepository) {
+            courseSettingsRepository,
+        CourseOfferingCreationRepository
+            creationRepository) {
 
         this.planRepository =
             Objects.requireNonNull(
@@ -80,6 +86,69 @@ final class CourseOfferingAdministrationService {
         this.courseSettingsRepository =
             Objects.requireNonNull(
                 courseSettingsRepository);
+
+        this.creationRepository = creationRepository;
+    }
+
+    /** Creates a global teaching class for an existing course. */
+    synchronized CourseOfferingCreateResult createOffering(
+        long ignoredBatchId,
+        long courseId,
+        String classNo,
+        String locationName,
+        String campusName,
+        String teachingLanguage,
+        int capacity,
+        ScheduleInfo schedule) {
+
+        boolean courseExists = listCourses()
+            .stream()
+            .anyMatch(course -> course.getCourseId() == courseId);
+        if (!courseExists) {
+            return CourseOfferingCreateResult.failure("课程不存在。");
+        }
+        if (creationRepository == null) {
+            return CourseOfferingCreateResult.failure("当前存储模式不支持新增教学班。");
+        }
+        if (classNo == null || classNo.isBlank()) {
+            return CourseOfferingCreateResult.failure("教学班班号不能为空。");
+        }
+        if (capacity <= 0) {
+            return CourseOfferingCreateResult.failure("教学班容量必须大于零。");
+        }
+        if (schedule == null
+            || schedule.getDayOfWeek() < 1
+            || schedule.getDayOfWeek() > 7
+            || schedule.getStartPeriod() < 1
+            || schedule.getEndPeriod() < schedule.getStartPeriod()
+            || schedule.getStartWeek() < 1
+            || schedule.getEndWeek() < schedule.getStartWeek()) {
+            return CourseOfferingCreateResult.failure("上课时间设置不正确。");
+        }
+
+        try {
+            long offeringId = creationRepository.create(
+                courseId,
+                classNo.trim(),
+                normalizedText(locationName),
+                normalizedText(campusName),
+                normalizedText(teachingLanguage),
+                capacity,
+                schedule);
+            return CourseOfferingCreateResult.success(
+                "教学班新增成功，教学班 ID 为 " + offeringId
+                    + "。请在任课教师管理中分配教师。",
+                offeringId);
+        } catch (IllegalArgumentException exception) {
+            return CourseOfferingCreateResult.failure(exception.getMessage());
+        } catch (IllegalStateException exception) {
+            return CourseOfferingCreateResult.failure(
+                "新增教学班失败：" + exception.getMessage());
+        }
+    }
+
+    private String normalizedText(String value) {
+        return value == null ? "" : value.trim();
     }
 
     /**

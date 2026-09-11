@@ -29,6 +29,7 @@ import edu.seu.vcampus.server.infrastructure.ActionRouter;
 import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
 import edu.seu.vcampus.server.module.ServerModule;
 import edu.seu.vcampus.server.module.ServerContext;
+import edu.seu.vcampus.server.module.card.CampusCardWallet;
 
 import java.nio.file.Path;
 import java.time.Clock;
@@ -45,16 +46,37 @@ public final class HospitalServerModule implements ServerModule {
         this(createDefaultService());
     }
 
+    /**
+     * Creates the in-memory hospital module with a campus-card wallet.
+     *
+     * @param campusCards campus-card gateway
+     */
+    public HospitalServerModule(CampusCardWallet campusCards) {
+        this(createDefaultService(campusCards));
+    }
+
     /** Creates an Access-backed doctor registry plus the staged clinical repository. */
     public static HospitalServerModule createAccessBacked(Path databasePath) {
-        return createAccessBacked(databasePath, null);
+        return createAccessBacked(databasePath, null, null);
     }
 
     /** Creates the persistent module and resolves current doctor names through the shared directory. */
     public static HospitalServerModule createAccessBacked(Path databasePath, UserDirectory users) {
+        return createAccessBacked(databasePath, users, null);
+    }
+
+    /**
+     * Creates the persistent hospital module with live user names and campus-card settlement.
+     */
+    public static HospitalServerModule createAccessBacked(
+            Path databasePath,
+            UserDirectory users,
+            CampusCardWallet campusCards) {
         Clock clock = Clock.systemDefaultZone();
         return new HospitalServerModule(new HospitalService(
-                new AccessHospitalRepository(new AccessDatabase(databasePath), clock, users), clock));
+                new AccessHospitalRepository(new AccessDatabase(databasePath), clock, users),
+                clock,
+                campusCards));
     }
 
     HospitalServerModule(HospitalService service) {
@@ -706,7 +728,7 @@ public final class HospitalServerModule implements ServerModule {
         try {
             return Response.success(
                     request,
-                    "模拟缴费成功。",
+                    "校园卡缴费成功。",
                     service.payBill(session.get(), data));
         } catch (HospitalBusinessException exception) {
             return Response.failure(
@@ -752,7 +774,11 @@ public final class HospitalServerModule implements ServerModule {
     }
 
     private static HospitalService createDefaultService() {
+        return createDefaultService(null);
+    }
+
+    static HospitalService createDefaultService(CampusCardWallet campusCards) {
         Clock clock = Clock.systemDefaultZone();
-        return new HospitalService(new InMemoryHospitalRepository(clock), clock);
+        return new HospitalService(new InMemoryHospitalRepository(clock), clock, campusCards);
     }
 }

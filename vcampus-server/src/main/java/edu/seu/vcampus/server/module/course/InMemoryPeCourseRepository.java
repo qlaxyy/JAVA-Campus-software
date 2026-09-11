@@ -17,9 +17,7 @@ final class InMemoryPeCourseRepository
         long batchId) {
 
         return List.of(
-            createBasketball(),
-            createYoga(),
-            createBadminton()
+            createBasketball()
         );
     }
 

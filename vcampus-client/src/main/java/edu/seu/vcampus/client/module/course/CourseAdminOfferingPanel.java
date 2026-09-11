@@ -71,6 +71,8 @@ final class CourseAdminOfferingPanel
     private final List<OfferingRow> allRows =
         new ArrayList<>();
 
+    private final List<CourseChoice> allCourses =
+        new ArrayList<>();
 
     private final DefaultTableModel tableModel =
         new DefaultTableModel(
@@ -627,13 +629,10 @@ final class CourseAdminOfferingPanel
      */
     private void createOffering() {
 
-        BatchChoice batch =
-            (BatchChoice) batchBox.getSelectedItem();
-
-        if (batch == null || allCourses.isEmpty()) {
+        if (allCourses.isEmpty()) {
             JOptionPane.showMessageDialog(
                 this,
-                "当前没有可用的选课批次或课程。",
+                "当前没有可用课程。",
                 "无法新增",
                 JOptionPane.WARNING_MESSAGE);
             return;
@@ -741,7 +740,7 @@ final class CourseAdminOfferingPanel
 
         AdminCreateOfferingRequest request =
             new AdminCreateOfferingRequest(
-                batch.batchId(),
+                1L,
                 course.courseId(),
                 classNoField.getText(),
                 locationField.getText(),

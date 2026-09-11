@@ -176,7 +176,6 @@ public final class DemoDatabaseRebuilder {
                     statement.executeUpdate("DELETE FROM tblEnrollment");
                     statement.executeUpdate("DELETE FROM tblOfferingTeacher");
                     statement.executeUpdate("UPDATE tblCourseOffering SET selectedCount = 0");
-                    statement.executeUpdate("UPDATE tblCatalogOffering SET selectedCount = 0");
                 }
                 try (PreparedStatement assignment = connection.prepareStatement(
                         "INSERT INTO tblOfferingTeacher (offeringId, teacherUserId, teacherName) VALUES (?, ?, ?)")) {
@@ -225,12 +224,8 @@ public final class DemoDatabaseRebuilder {
                 try (PreparedStatement updatePlan = connection.prepareStatement(
                         "UPDATE tblCourseOffering SET selectedCount = "
                                 + "(SELECT COUNT(*) FROM tblEnrollment e WHERE e.offeringId = tblCourseOffering.offeringId "
-                                + "AND e.enrollmentStatus = 'SELECTED')");
-                     PreparedStatement updateCatalog = connection.prepareStatement(
-                        "UPDATE tblCatalogOffering SET selectedCount = "
-                                + "(SELECT COUNT(*) FROM tblEnrollment e WHERE e.offeringId = tblCatalogOffering.offeringId "
                                 + "AND e.enrollmentStatus = 'SELECTED')")) {
-                    updatePlan.executeUpdate(); updateCatalog.executeUpdate();
+                    updatePlan.executeUpdate();
                 }
                 connection.commit();
             } catch (SQLException | RuntimeException exception) {
@@ -254,7 +249,7 @@ public final class DemoDatabaseRebuilder {
             requireCount(connection, "SELECT COUNT(*) FROM tblStudentProfile", 15, "student profiles");
             requireCount(connection, "SELECT COUNT(*) FROM tblHospitalDoctor WHERE active = TRUE", 10, "doctors");
             requireCount(connection, "SELECT COUNT(*) FROM tblCampusCard", 39, "campus cards");
-            requireCount(connection, "SELECT COUNT(*) FROM tblCourse", 18, "course catalogue entries");
+            requireCount(connection, "SELECT COUNT(*) FROM tblCourse", 8, "course catalogue entries");
             requireCount(connection, "SELECT COUNT(*) FROM tblCourseOffering", 8, "open teaching classes");
             requireCount(connection, "SELECT COUNT(*) FROM tblOfferingTeacher WHERE teacherUserId IS NOT NULL", 8, "teaching assignments");
             requireCount(connection, "SELECT COUNT(*) FROM tblCourseOffering o LEFT JOIN tblOfferingTeacher a "

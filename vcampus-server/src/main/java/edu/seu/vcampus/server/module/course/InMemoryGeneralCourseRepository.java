@@ -17,7 +17,8 @@ final class InMemoryGeneralCourseRepository
         long batchId) {
 
         return List.of(
-            createNaturalScience()
+            createNaturalScience(),
+            createHumanities()
 
         );
     }

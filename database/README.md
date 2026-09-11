@@ -27,6 +27,18 @@
 
 教师院系和职称、医生科室和职称的完整种子清单以 [`FinalDemoRoster`](../vcampus-server/src/main/java/edu/seu/vcampus/server/demo/FinalDemoRoster.java) 为唯一代码来源；数据库重建器会逐条校验上述一卡通号、姓名、`userId` 与资格表引用。
 
+## 模块数据归属
+
+| 模块 | 数据字典 | 本模块拥有的数据 | 可引用的外部 ID |
+|---|---|---|---|
+| 用户管理 | [user.md](schema/user.md) | 账号、全局角色、管理范围、公共教师基础档案 | 无 |
+| 学生学籍 | [student.md](schema/student.md) | 学生、院系、专业、班级 | `userId` |
+| 选课系统 | [course.md](schema/course.md) | 课程、开课、选课、成绩 | `userId`、`studentId` |
+| 图书馆 | [library.md](schema/library.md) | 书目、实体单册、借阅记录、预约 | `userId` |
+| 商店 | [shop.md](schema/shop.md) | 商品、库存、购物车、订单 | `userId`；支付走校园卡子系统 |
+| 校园卡 | [card.md](schema/card.md) | 余额、流水 | `userId` |
+| 医院 | [hospital.md](schema/hospital.md) | 医生申请、医生档案、科室、排班、号源、预约 | `userId`、`studentId` |
+
 ## 安全重建
 
 先停止服务器并完成构建，然后在仓库根目录执行：
@@ -49,7 +61,7 @@ java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar
 |---|---|---|
 | 用户 | `tblUser`、`tblUserAdminScope`、`tblTeacherProfile`、`tblUserAuditLog` | 拥有账号、当前姓名、管理权和公共教师资格 |
 | 学籍 | `tblStudentProfile`、`tblStudentStatusChange` | 15 份学生档案，以 `userId` 关联账号，姓名实时查用户目录 |
-| 选课 | `tblCourse*`、`tblOfferingTeacher`、`tblEnrollment`、`tblGrade` | 保留 18 门课程目录和 8 个有教师的演示教学班；任课、选课与成绩持久化 |
+| 选课 | `tblCourse*`、`tblOfferingTeacher`、`tblEnrollment`、`tblGrade` | 保留 8 门课程和 8 个有教师的演示教学班；任课、选课与成绩持久化 |
 | 医院 | `tblHospital*` | 科室保留；10 名医生、排班和医疗业务以 `userId` 关联 |
 | 图书馆 | `tblBook*`、`tblBorrowRecord`、`tblReservation` | 5 种书、20 册馆藏以及借还预约演示数据 |
 | 商店 | `tblShop*`、`tblCampusCard` | 商品、照片、库存、余额、购物车和订单全部在服务器 Access 中 |
@@ -58,10 +70,12 @@ java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar
 
 ## 单服务器、多客户端
 
-所有电脑加入同一个 Radmin VPN 网络。服务器电脑启动服务端后，将控制台标记为 `Radmin VPN - recommended` 的 IPv4 和端口 8888 发给组员。客户端使用：
+所有电脑加入同一个 Radmin VPN 网络。服务器电脑启动服务端后，将控制台标记为 `Radmin VPN - recommended` 的 IPv4 发给组员，并同时放行校园服务 8888 与校园卡网关 8889。客户端使用：
 
 ```powershell
 java -jar vcampus-client\target\vcampus-client-0.1.0-SNAPSHOT.jar 26.x.x.x 8888
 ```
+
+客户端默认自动使用同一主机的 8889 端口访问校园卡；联机前应分别用 `Test-NetConnection` 检查 8888 和 8889。
 
 至少用两台真实电脑同时验证登录、共享购物车或订单以及一个并发业务。当前 Socket 协议没有 TLS，只能用于课程组可信成员的虚拟局域网，不能直接开放到公网。

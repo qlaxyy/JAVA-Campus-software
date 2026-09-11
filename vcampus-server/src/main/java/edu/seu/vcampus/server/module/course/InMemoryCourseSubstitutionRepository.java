@@ -33,9 +33,7 @@ final class InMemoryCourseSubstitutionRepository
     public List<CourseInfo> findSubstituteCourses(
         long batchId) {
 
-        return List.of(
-            createAnalysisCourse()
-        );
+        return List.of();
     }
 
     @Override

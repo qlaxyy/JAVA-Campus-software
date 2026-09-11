@@ -29,8 +29,8 @@ class AccessCourseOfferingCreationRepositoryTest {
             new AccessCourseOfferingCreationRepository(database);
 
         long offeringId = creation.create(
-            105L,
-            "01",
+            101L,
+            "02",
             "教一-101",
             "九龙湖校区",
             "中文",
@@ -39,22 +39,22 @@ class AccessCourseOfferingCreationRepositoryTest {
 
         CourseInfo course = plan.findPlanCourses(1L)
             .stream()
-            .filter(value -> value.getCourseId() == 105L)
+            .filter(value -> value.getCourseId() == 101L)
             .findFirst()
             .orElseThrow();
 
-        assertEquals(1, course.getOfferings().size());
+        assertEquals(2, course.getOfferings().size());
         assertEquals(offeringId,
-            course.getOfferings().getFirst().getOfferingId());
+            course.getOfferings().getLast().getOfferingId());
         assertEquals(1,
-            course.getOfferings().getFirst().getSchedules().size());
+            course.getOfferings().getLast().getSchedules().size());
         assertTrue(offeringId > 0);
 
         assertThrows(
             IllegalArgumentException.class,
             () -> creation.create(
-                105L,
-                "01",
+                101L,
+                "02",
                 "教一-102",
                 "九龙湖校区",
                 "中文",

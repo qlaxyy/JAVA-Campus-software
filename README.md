@@ -29,7 +29,7 @@ mvn clean verify
 java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar
 ```
 
-首次启动会自动创建 `database/vCampus.accdb` 及各模块 Access 表。最终演示前应先执行下方重建命令，生成 39 个统一账号以及学籍、任课、医院、图书馆和商店演示数据。看到 `Virtual Campus server started on port 8888.` 后保持终端运行。账号与各模块业务数据都会保存在服务器的同一 Access 数据库中。
+首次启动会自动创建 `database/vCampus.accdb` 及各模块 Access 表。最终演示前应先执行下方重建命令，生成 39 个统一账号以及学籍、任课、医院、图书馆、商店和校园卡演示数据。看到 `Virtual Campus server started on port 8888.` 与 `Campus card gateway started on port 8889.` 后保持终端运行。账号与各模块业务数据都会保存在服务器的同一 Access 数据库中。
 token 会话仍保存在服务器内存，连续 30 分钟无操作或单次登录达到 8 小时后自动失效，服务器重启后也需要重新登录。
 
 图书馆 V2 是首次正式接入 Access，不迁移早期开发数据库中的旧版图书表。若已有旧结构的 `.accdb`，
@@ -102,18 +102,18 @@ java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar --reset-super-
 
 系统没有全局“用户/管理模式”。每个子系统在模块内部提供自己的模式入口，例如医院管理员可以进入患者和管理员模式；只有绑定有效医生档案的账号才能进入医生模式。医生申请必须明确选择“关联已有校园账号”或“新建外来医生账号”：前者校验并锁定已有一卡通号，后者不填写一卡通号，由用户模块在超级管理员批准后按当年已有最大流水号加一生成。客户端只能发送 Action，实际校验和数据库读写必须经过服务器 Service 与 DAO，禁止 Swing 客户端直接连接 Access。完整规则见 [现行系统设计总览](docs/design/SYSTEM_DESIGN.md)。
 
-当前可复现：登录门禁、模块大厅、登出、PING/PONG、超级管理员账号维护与 CSV 批量导入、学生学籍查询与异动、选课与退课、图书检索预约与模拟借还、商店购物车及校园卡支付、医院患者号源查询、医院三模式入口，以及“医院管理员分类申请—超级管理员审核—账号关联/生成—申请记录交付账号—医生档案激活”链路。停止服务器时在服务器终端按 `Ctrl + C`。
+当前可复现：登录门禁、模块大厅、登出、PING/PONG、超级管理员账号维护与 CSV 批量导入、学生学籍查询与异动、选课与退课、图书检索预约与模拟借还、独立校园卡网关（Access 余额/充值/扣款）、商店购物车及校园卡支付、医院患者号源查询与校园卡缴费、医院三模式入口，以及“医院管理员分类申请—超级管理员审核—账号关联/生成—申请记录交付账号—医生档案激活”链路。停止服务器时在服务器终端按 `Ctrl + C`。
 
 超级管理员单独新增账号时，一卡通号由服务器按照“当前年份 + 当年最大流水号加一”自动生成；界面中的一卡通号框只用于预览，不能手工修改，最终号码以服务器创建结果为准。批量导入文件使用 UTF-8 CSV，第一行固定为 `campusCardNumber,displayName`。每次最多
 1000 个普通账号，初始密码统一为 `123456`；任何一行错误都会取消整批写入。
 
-如果 8888 端口被占用，可临时改用 8890：
+如果 8888 端口被占用，可临时改用 8890（校园卡网关自动使用校园端口 + 1，即 8891）：
 
 ```powershell
 # 服务端
 java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar 8890
 
-# 客户端
+# 客户端（第三参数可省略，默认校园端口 + 1）
 java -jar vcampus-client\target\vcampus-client-0.1.0-SNAPSHOT.jar 127.0.0.1 8890
 ```
 
@@ -136,13 +136,16 @@ java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar 8888 database\
 java -jar vcampus-client\target\vcampus-client-0.1.0-SNAPSHOT.jar 26.12.34.56 8888
 ```
 
+客户端默认再连接同一主机的 **8889** 校园卡网关。防火墙需同时放行 8888 与 8889。
+
 连接失败时，先在客户端电脑检查端口：
 
 ```powershell
 Test-NetConnection 26.12.34.56 -Port 8888
+Test-NetConnection 26.12.34.56 -Port 8889
 ```
 
-看到 `TcpTestSucceeded : True` 才说明 Radmin VPN 链路和防火墙已经放行。若为 `False`，依次检查 Radmin 中双方是否在线、所填地址是否为服务器的 Radmin IPv4、服务器是否仍在运行，以及服务器防火墙是否允许 Java/8888 端口。不要填写客户端自己的 IP，也不要把数据库文件发给客户端。
+两个检查都看到 `TcpTestSucceeded : True` 才说明 Radmin VPN 链路和防火墙已经放行。若为 `False`，依次检查 Radmin 中双方是否在线、所填地址是否为服务器的 Radmin IPv4、服务器是否仍在运行，以及服务器防火墙是否允许 Java 使用 8888/8889。不要填写客户端自己的 IP，也不要把数据库文件发给客户端。
 
 验收时至少同时打开两个客户端，分别完成登录、会话查询和一项业务操作；其中一个客户端退出后，另一个客户端应仍能正常操作。Radmin VPN 仅用于课程组可信成员之间的联调，本项目当前 Socket 协议没有 TLS，不应开放给不可信网络。
 

@@ -22,7 +22,9 @@ final class InMemoryCoursePlanRepository
         return List.of(
             createCalculusCourse(),
             createPhysicsCourse(),
-            createDataStructureCourse()
+            createDataStructureCourse(),
+            createOperatingSystemCourse(),
+            createNetworkCourse()
 
         );
     }

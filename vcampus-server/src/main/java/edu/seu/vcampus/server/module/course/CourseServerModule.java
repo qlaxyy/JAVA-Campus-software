@@ -361,6 +361,11 @@ public final class CourseServerModule
                 ? new InMemoryCourseSettingsRepository()
                 : new AccessCourseSettingsRepository(
                 database);
+        CourseOfferingCreationRepository
+            offeringCreationRepository =
+            database == null
+                ? null
+                : new AccessCourseOfferingCreationRepository(database);
         this.offeringAdministrationService =
             new CourseOfferingAdministrationService(
                 planRepository,
@@ -369,7 +374,8 @@ public final class CourseServerModule
                 generalCourseRepository,
                 enrollmentRepository,
                 offeringSettingsRepository,
-                courseSettingsRepository);
+                courseSettingsRepository,
+                offeringCreationRepository);
         CourseCatalogRepository catalogRepository =
             new LiveCourseCatalogRepository(
                 batchService,
@@ -645,7 +651,8 @@ public final class CourseServerModule
                 adminGeneralRepository,
                 adminEnrollmentRepository,
                 new InMemoryCourseOfferingSettingsRepository(),
-                new InMemoryCourseSettingsRepository());
+                new InMemoryCourseSettingsRepository(),
+                null);
         this.searchService =
             new CourseSearchService(
                 new LiveCourseCatalogRepository(

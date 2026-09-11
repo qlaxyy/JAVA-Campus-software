@@ -35,7 +35,9 @@ import java.nio.file.Path;
 import edu.seu.vcampus.common.course.CourseGradeInfo;
 import edu.seu.vcampus.common.course.TeacherStudentInfo;
 import edu.seu.vcampus.common.course.TeacherUpdateGradePolicyRequest;
-
+import edu.seu.vcampus.common.course.AdminTeacherAssignmentRequest;
+import edu.seu.vcampus.common.course.OfferingTeacherRequest;
+import edu.seu.vcampus.common.user.TeacherProfileView;
 
 
 /**
@@ -150,6 +152,13 @@ public final class CourseServerModule
             database == null
                 ? new InMemoryCourseAdminAuditRepository()
                 : new AccessCourseAdminAuditRepository(
+                database);
+
+        CourseTeacherAssignmentRepository
+            teacherAssignmentRepository =
+            database == null
+                ? new InMemoryCourseTeacherAssignmentRepository()
+                : new AccessCourseTeacherAssignmentRepository(
                 database);
         /*
          * =========================
@@ -332,7 +341,8 @@ public final class CourseServerModule
         this.teacherService =
             new CourseTeacherService(
                 this.offeringAdministrationService,
-                enrollmentRepository);
+                enrollmentRepository,
+                teacherAssignmentRepository);
             /*
              * =========================
              * 7. 历史修读 Repository
@@ -607,10 +617,15 @@ public final class CourseServerModule
                 this.batchService,
                 this.offeringAdministrationService);
 
+        CourseTeacherAssignmentRepository
+            teacherAssignmentRepository =
+            new InMemoryCourseTeacherAssignmentRepository();
+
         this.teacherService =
             new CourseTeacherService(
                 this.offeringAdministrationService,
-                adminEnrollmentRepository);
+                adminEnrollmentRepository,
+                teacherAssignmentRepository);
 
     }
 
@@ -923,6 +938,35 @@ public final class CourseServerModule
                 teacherUpdateGradePolicy(
                     request,
                     context));
+
+        router.register(
+            CourseActions.ADMIN_LIST_ACTIVE_TEACHERS,
+            request ->
+                adminListActiveTeachers(
+                    request,
+                    context));
+
+        router.register(
+            CourseActions.ADMIN_LIST_OFFERING_TEACHERS,
+            request ->
+                adminListOfferingTeachers(
+                    request,
+                    context));
+
+        router.register(
+            CourseActions.ADMIN_ASSIGN_TEACHER,
+            request ->
+                adminAssignTeacher(
+                    request,
+                    context));
+
+        router.register(
+            CourseActions.ADMIN_REMOVE_TEACHER,
+            request ->
+                adminRemoveTeacher(
+                    request,
+                    context));
+
     }
     /**
      * 教师查询本人教学班的成绩比例。
@@ -2875,5 +2919,255 @@ public final class CourseServerModule
                             batchId,
                             course))
                 .toList());
+    }
+    /**
+     * 教务查询公共有效教师名单。
+     */
+    private Response adminListActiveTeachers(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!session.canAdminister(
+            ModuleNames.COURSE)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "没有任课教师管理权限。");
+        }
+
+        List<TeacherProfileView> teachers =
+            context.teachers()
+                .findActiveTeachers()
+                .stream()
+                .map(teacher ->
+                    new TeacherProfileView(
+                        teacher.userId(),
+                        teacher.campusCardNumber(),
+                        teacher.displayName(),
+                        teacher.department(),
+                        teacher.title(),
+                        true))
+                .toList();
+
+        return Response.success(
+            request,
+            "有效教师名单加载成功。",
+            new ArrayList<>(
+                teachers));
+    }
+
+    /**
+     * 教务查询教学班已经分配的教师。
+     */
+    private Response adminListOfferingTeachers(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!session.canAdminister(
+            ModuleNames.COURSE)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "没有任课教师管理权限。");
+        }
+
+        if (!(request.getData()
+            instanceof OfferingTeacherRequest
+            teacherRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "教学班教师查询请求格式错误。");
+        }
+
+        List<String> teacherUserIds =
+            teacherService.listTeacherUserIds(
+                teacherRequest.getOfferingId());
+
+        return Response.success(
+            request,
+            "教学班任课教师加载成功。",
+            new ArrayList<>(
+                teacherUserIds));
+    }
+
+    /**
+     * 教务为教学班分配教师。
+     */
+    private Response adminAssignTeacher(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!session.canAdminister(
+            ModuleNames.COURSE)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "没有任课教师管理权限。");
+        }
+
+        if (!(request.getData()
+            instanceof AdminTeacherAssignmentRequest
+            assignmentRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "任课教师分配请求格式错误。");
+        }
+
+        var teacher =
+            context.teachers()
+                .findByUserId(
+                    assignmentRequest
+                        .getTeacherUserId())
+                .orElse(null);
+
+        /*
+         * findByUserId 只返回有效教师，
+         * 因此停用的教师不能再被分配。
+         */
+        if (teacher == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "未找到有效的教师档案。");
+        }
+
+        boolean assigned =
+            teacherService.assignTeacher(
+                assignmentRequest.getOfferingId(),
+                teacher.userId(),
+                teacher.displayName());
+
+        if (!assigned) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "该教师已经负责这个教学班。");
+        }
+
+        return Response.success(
+            request,
+            "任课教师分配成功。",
+            null);
+    }
+
+    /**
+     * 教务移除教学班任课教师。
+     */
+    private Response adminRemoveTeacher(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录。");
+        }
+
+        if (!session.canAdminister(
+            ModuleNames.COURSE)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_FORBIDDEN,
+                "没有任课教师管理权限。");
+        }
+
+        if (!(request.getData()
+            instanceof AdminTeacherAssignmentRequest
+            assignmentRequest)) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "任课教师移除请求格式错误。");
+        }
+
+        /*
+         * 移除时不能要求教师仍处于有效状态，
+         * 否则已停用教师的旧任课关系将无法删除。
+         */
+        boolean removed =
+            teacherService.removeTeacher(
+                assignmentRequest.getOfferingId(),
+                assignmentRequest.getTeacherUserId());
+
+        if (!removed) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "未找到对应的任课关系。");
+        }
+
+        return Response.success(
+            request,
+            "任课教师移除成功。",
+            null);
+    }
+    /**
+     * 向其他服务器模块提供教师学生范围检查。
+     */
+    public TeacherStudentAccess teacherStudentAccess() {
+
+        return teacherService::canViewStudent;
     }
 }

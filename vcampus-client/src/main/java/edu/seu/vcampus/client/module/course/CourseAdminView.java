@@ -158,7 +158,10 @@ final class CourseAdminView extends JPanel {
             "教学班管理",
             new CourseAdminOfferingPanel(
                 context));
-
+        tabs.addTab(
+            "任课教师管理",
+            new CourseAdminTeacherPanel(
+                context));
         tabs.addTab(
             "课程管理",
             new CourseAdminCoursePanel(

@@ -4,7 +4,7 @@
 
 * 模块：选课系统
 * 对应 Epic：#3
-* 状态：草稿
+* 状态：课程目录、选课、成绩和教师任课关系已接入 Access；最终种子数据可重复生成
 
 ## 2. 表清单
 
@@ -13,7 +13,7 @@
 | `tblCourse`             | 课程基本信息      | `courseId`          | 课程编号唯一            |
 | `tblCourseOffering`     | 每学期开设的具体教学班 | `offeringId`        | 同一课程可开多个教学班       |
 | `tblCourseSchedule`     | 教学班上课时间     | `scheduleId`        | 支持周次、单双周和时间冲突检测   |
-| `tblOfferingTeacher`    | 教学班任课教师     | `offeringTeacherId` | 一个教学班可有多个教师       |
+| `tblOfferingTeacher`    | 教师账号与教学班关系 | `offeringTeacherId` | `(offeringId, teacherUserId)` 业务唯一 |
 | `tblSelectionBatch`     | 选课批次        | `batchId`           | 记录预选、重修、退改补及开放时间  |
 | `tblTrainingPlanCourse` | 培养方案课程      | `planCourseId`      | 记录课程建议修读学期        |
 | `tblCourseSubstitution` | 方案外课程替代关系   | `substitutionId`    | 一门方案外课程只替代一门方案内课程 |
@@ -76,15 +76,22 @@
 
 当前已选人数不保存为字段，由 `tblEnrollment` 动态统计。
 
----
-
 ### `tblOfferingTeacher`
 
-| 字段                  | Access 类型      | 必填 | 默认值  | 说明     |
-| ------------------- | -------------- | -- | ---- | ------ |
-| `offeringTeacherId` | Long Integer   | 是  | 自动编号 | 主键     |
-| `offeringId`        | Long Integer   | 是  | 无    | 对应教学班  |
-| `teacherName`       | Short Text(50) | 是  | 无    | 任课教师姓名 |
+| 字段 | Access 类型 | 必填 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `offeringTeacherId` | Long Integer | 是 | 自动编号 | 主键 |
+| `offeringId` | Long Integer | 是 | 无 | 对应教学班 |
+| `teacherUserId` | Short Text(64) | 否 | 无 | 公共教师档案的稳定 userId |
+| `teacherName` | Short Text(50) | 否 | 无 | 兼容旧数据及页面显示，不作为关联字段 |
+
+新建任课关系必须保存 `teacherUserId`。旧数据中的 `teacherUserId` 可以暂时为空。
+
+同一 `(offeringId, teacherUserId)` 不允许重复。由于 Access 对可空字段唯一索引的兼容问题，目前由 `CourseTeacherAssignmentRepository.assign()` 执行业务唯一性检查。
+
+`teacherName` 仅为兼容现有课程 DTO 的显示快照。教师鉴权不再使用硬编码姓名或临时映射，而是读取 `tblOfferingTeacher.teacherUserId`；当前姓名应通过公共教师/用户目录填充。
+
+最终种子库保留 8 门课程和 8 个演示教学班；8 名教师各负责一个教学班，不存在无教师教学班。15 名学生均有选课记录，其中 8 条带成绩；`selectedCount` 在重建时根据有效选课记录重新计算。选课管理员可在“教学班管理”中为已有课程新建教学班，再到“任课教师管理”中从公共有效教师目录选择教师并建立任课关系。新增教学班由 `COURSE.ADMIN_CREATE_OFFERING` 处理，教学班及首条上课时间在同一事务中写入。
 
 ---
 
@@ -228,7 +235,7 @@
 * `tblEnrollment.offeringId` → `tblCourseOffering.offeringId`
 * `tblEnrollment.studentId` → 学生模块学生主键
 * `tblGrade.enrollmentId` → `tblEnrollment.enrollmentId`
-
+* `tblOfferingTeacher.teacherUserId` → 用户模块公共教师档案的 `userId`
 ### 4.2 唯一索引
 
 * `tblCourse.courseCode`
@@ -238,7 +245,7 @@
 * `tblCampus.campusCode`
 * `tblTeachingLocation(campusId, locationName)`
 * `tblTrainingPlanCourse(planId, courseId)`
-
+* `tblOfferingTeacher(offeringId, teacherUserId)`：由服务器 Repository 保证业务唯一
 ### 4.3 普通索引
 
 * `tblCourseOffering.courseId`

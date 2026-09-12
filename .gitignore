@@ -16,6 +16,8 @@ out/
 logs/
 *.log
 *.laccdb
+*.server.lock
+database/backups/
 
 # OS files
 .DS_Store

@@ -22,16 +22,28 @@ import java.util.Optional;
 public final class ClientContext {
 
     private final CampusClient client;
+    private final CampusClient cardClient;
     private final ClientSession session = new ClientSession();
     private volatile Runnable authenticationLostHandler = () -> { };
 
     /**
-     * Creates the shared application context.
+     * Creates the shared application context using one campus server.
      *
      * @param client network client
      */
     public ClientContext(CampusClient client) {
+        this(client, client);
+    }
+
+    /**
+     * Creates the shared application context.
+     *
+     * @param client campus services client (login, shop, hospital, library)
+     * @param cardClient campus-card gateway client
+     */
+    public ClientContext(CampusClient client, CampusClient cardClient) {
         this.client = Objects.requireNonNull(client, "client must not be null");
+        this.cardClient = Objects.requireNonNull(cardClient, "cardClient must not be null");
     }
 
     /**
@@ -84,6 +96,24 @@ public final class ClientContext {
     }
 
     private Response handleAuthenticatedResponse(Response response) {
+        if (ErrorCodes.AUTH_REQUIRED.equals(response.getCode())
+                && session.current().isPresent()) {
+            session.clear();
+            authenticationLostHandler.run();
+        }
+        return response;
+    }
+
+    /**
+     * Sends a request to the campus-card TCP gateway with the current session token.
+     *
+     * @param action public card action name
+     * @param data serializable request DTO, or {@code null}
+     * @return server response
+     * @throws IOException when the card gateway cannot be reached
+     */
+    public Response sendCard(String action, Serializable data) throws IOException {
+        Response response = cardClient.send(Request.create(action, session.tokenOrNull(), data));
         if (ErrorCodes.AUTH_REQUIRED.equals(response.getCode())
                 && session.current().isPresent()) {
             session.clear();

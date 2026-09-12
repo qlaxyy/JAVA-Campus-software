@@ -7,6 +7,8 @@ import edu.seu.vcampus.common.library.BookCopyIdRequest;
 import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BookSearchResult;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
+import edu.seu.vcampus.common.library.CopyInspectionDTO;
+import edu.seu.vcampus.common.library.CopyInspectionRequest;
 import edu.seu.vcampus.common.library.CopyReturnRequest;
 import edu.seu.vcampus.common.library.CreateReservationRequest;
 import edu.seu.vcampus.common.library.LibraryActions;
@@ -25,6 +27,8 @@ import edu.seu.vcampus.server.infrastructure.ActionRouter;
 import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
 import edu.seu.vcampus.server.module.ServerContext;
 import edu.seu.vcampus.server.module.ServerModule;
+import edu.seu.vcampus.server.module.card.CampusCardWallet;
+import edu.seu.vcampus.common.shop.CampusCardView;
 
 import java.io.Serializable;
 import java.nio.file.Path;
@@ -39,35 +43,71 @@ import java.util.function.BiFunction;
 public final class LibraryServerModule implements ServerModule {
 
     private final LibraryService service;
+    private final CampusCardWallet campusCards;
 
     /** Creates the production library module with the current repositories. */
     public LibraryServerModule() {
-        this(createDefaultService());
+        this(createDefaultService(), null);
     }
 
     /** Creates the production library module backed by the shared Access database. */
     public static LibraryServerModule createAccessBacked(Path databasePath) {
+        return createAccessBacked(databasePath, null);
+    }
+
+    /**
+     * Creates the Access-backed library module connected to campus card.
+     *
+     * @param databasePath shared Access file
+     * @param campusCards campus-card TCP/local wallet, or {@code null}
+     * @return library module
+     */
+    public static LibraryServerModule createAccessBacked(
+            Path databasePath, CampusCardWallet campusCards) {
         AccessLibraryStore store = new AccessLibraryStore(new AccessDatabase(databasePath));
+        Clock clock = Clock.systemDefaultZone();
         BookRepository books = new AccessBookRepository(store);
         BorrowRecordRepository records = new AccessBorrowRecordRepository(store);
         BookCategoryRepository categories = new AccessBookCategoryRepository(store);
         BookCopyRepository copies = new AccessBookCopyRepository(store);
         ReservationRepository reservations = new AccessReservationRepository(store);
+        AccessLibraryDemonstrationData.seedIfEligible(
+                store, copies, records, reservations, clock);
         LibraryService service = new LibraryService(
                 books,
                 records,
-                Clock.systemDefaultZone(),
+                clock,
                 () -> UUID.randomUUID().toString(),
                 categories,
                 copies,
                 reservations,
                 store,
                 () -> UUID.randomUUID().toString());
-        return new LibraryServerModule(service);
+        return new LibraryServerModule(service, campusCards);
     }
 
     LibraryServerModule(LibraryService service) {
+        this(service, null);
+    }
+
+    LibraryServerModule(LibraryService service, CampusCardWallet campusCards) {
         this.service = Objects.requireNonNull(service, "service must not be null");
+        this.campusCards = campusCards;
+    }
+
+    /**
+     * Settles a library fee through the campus-card gateway.
+     *
+     * @param session paying user
+     * @param amountFen positive amount in fen
+     * @param reference unique library business key
+     * @return updated card snapshot
+     */
+    public CampusCardView settleFee(SessionInfo session, int amountFen, String reference) {
+        if (campusCards == null) {
+            throw new IllegalStateException("校园卡网关未连接。");
+        }
+        return campusCards.debit(session, amountFen, ModuleNames.LIBRARY, reference);
     }
 
     @Override
@@ -83,6 +123,8 @@ public final class LibraryServerModule implements ServerModule {
                 request -> borrowCopy(request, context));
         router.register(LibraryActions.RETURN_COPY,
                 request -> returnCopy(request, context));
+        router.register(LibraryActions.INSPECT_COPY,
+                request -> inspectCopy(request, context));
         router.register(LibraryActions.GET_BORROW_RECORDS,
                 request -> getBorrowRecords(request, context));
         router.register(LibraryActions.CREATE_RESERVATION,
@@ -166,6 +208,25 @@ public final class LibraryServerModule implements ServerModule {
         try {
             service.returnCopy(session.orElseThrow().getUserId(), data);
             return Response.success(request, "归还成功，单册等待管理员上架", null);
+        } catch (LibraryBusinessException exception) {
+            return businessFailure(request, exception);
+        } catch (IllegalArgumentException exception) {
+            return invalidArgument(request, exception);
+        }
+    }
+
+    private Response inspectCopy(Request request, ServerContext context) {
+        Optional<SessionInfo> session = session(request, context);
+        if (session.isEmpty()) {
+            return authenticationRequired(request);
+        }
+        if (!(request.getData() instanceof CopyInspectionRequest data)) {
+            return invalidRequest(request, "条码预检请求格式不正确");
+        }
+        try {
+            CopyInspectionDTO inspection = service.inspectCopy(
+                    session.orElseThrow().getUserId(), data);
+            return Response.success(request, "条码预检完成", inspection);
         } catch (LibraryBusinessException exception) {
             return businessFailure(request, exception);
         } catch (IllegalArgumentException exception) {

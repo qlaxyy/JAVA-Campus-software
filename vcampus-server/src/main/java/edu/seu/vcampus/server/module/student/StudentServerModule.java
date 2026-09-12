@@ -2,13 +2,17 @@ package edu.seu.vcampus.server.module.student;
 
 import edu.seu.vcampus.common.protocol.Request;
 import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.common.protocol.ModuleNames;
 import edu.seu.vcampus.common.student.*;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.infrastructure.ActionRouter;
+import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
 import edu.seu.vcampus.server.module.ServerContext;
 import edu.seu.vcampus.server.module.ServerModule;
+import edu.seu.vcampus.server.security.UserDirectory;
 
 import java.io.Serializable;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -20,18 +24,19 @@ public final class StudentServerModule implements ServerModule {
 
     private final StudentService studentService;
 
-    /**
-     * Default constructor for ServerModules automatic assembly.
-     */
     public StudentServerModule() {
         this(new StudentService());
     }
 
-    /**
-     * Constructor with dependency injection.
-     */
     public StudentServerModule(StudentService studentService) {
         this.studentService = Objects.requireNonNull(studentService, "studentService must not be null");
+    }
+
+    /** Creates a student module backed by the shared server Access database. */
+    public static StudentServerModule createAccessBacked(
+            Path databasePath, UserDirectory users) {
+        return new StudentServerModule(new StudentService(
+                new AccessStudentRepository(new AccessDatabase(databasePath), users)));
     }
 
     @Override
@@ -49,16 +54,58 @@ public final class StudentServerModule implements ServerModule {
     }
 
     /**
+     * 辅助方法：去除 u- 等统一前缀与连字符，兼容不同格式的学号与账号对比
+     */
+    private String cleanId(String id) {
+        if (id == null) return "";
+        String s = id.trim().toLowerCase();
+        if (s.startsWith("u-")) {
+            s = s.substring(2);
+        }
+        return s.replace("-", "");
+    }
+
+    /**
      * 查询学籍档案
+     * 权限规范：
+     * 1. 学籍管理员（canAdminister(ModuleNames.STUDENT)）可通览全校学生档案
+     * 2. 学生本人仅可查询自身档案
+     * 3. 教师需通过 context.teachers() 验证有效资格
+     * 4. 非教务人员（纯医生、商店管理员等）直接拦截
      */
     private Response handleGetProfile(Request request, ServerContext context) {
         Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
         if (sessionOpt.isEmpty()) {
             return Response.failure(request.getRequestId(), "UNAUTHORIZED", "未登录或会话已失效");
         }
+        SessionInfo session = sessionOpt.get();
 
         if (!(request.getData() instanceof StudentProfileRequest req)) {
             return Response.failure(request.getRequestId(), "BAD_REQUEST", "请求参数错误");
+        }
+
+        String targetId = req.getStudentId();
+        if (targetId == null || targetId.isBlank()) {
+            return Response.failure(request.getRequestId(), "BAD_REQUEST", "学号不能为空");
+        }
+
+        String currentUserId = cleanId(session.getUserId());
+        String currentUsername = cleanId(session.getUsername());
+        String cleanTargetId = cleanId(targetId);
+
+        boolean isStudentAdmin = session.canAdminister(ModuleNames.STUDENT);
+        boolean isSelf = currentUserId.equalsIgnoreCase(cleanTargetId)
+            || currentUsername.equalsIgnoreCase(cleanTargetId);
+
+        boolean isTeacher = context.teachers()
+            .findByUserId(session.getUserId())
+            .isPresent();
+        boolean isAssignedTeacher = isTeacher
+            && context.teacherStudentAccess()
+                .canViewStudent(session.getUserId(), targetId);
+
+        if (!isStudentAdmin && !isSelf && !isAssignedTeacher) {
+            return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：非教务管理或教学人员无权查阅该学生学籍档案");
         }
 
         StudentProfileResponse profileResponse = studentService.getProfile(req);
@@ -67,7 +114,7 @@ public final class StudentServerModule implements ServerModule {
 
     /**
      * 更新学生联络补充档案
-     * 权限规范：仅允许学生本人或具备学籍管理权限的管理员修改（防止商店管理员越权）
+     * 权限规范：仅允许学生本人或具备学籍管理权限的管理员修改（教师与外部模块无权修改）
      */
     private Response handleUpdateProfile(Request request, ServerContext context) {
         Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
@@ -80,8 +127,13 @@ public final class StudentServerModule implements ServerModule {
             return Response.failure(request.getRequestId(), "BAD_REQUEST", "请求参数错误");
         }
 
-        boolean isStudentAdmin = session.canAdminister("student");
-        boolean isSelf = session.getUserId().equalsIgnoreCase(req.getStudentId());
+        String currentUserId = cleanId(session.getUserId());
+        String currentUsername = cleanId(session.getUsername());
+        String cleanTargetId = cleanId(req.getStudentId());
+
+        boolean isStudentAdmin = session.canAdminister(ModuleNames.STUDENT);
+        boolean isSelf = currentUserId.equalsIgnoreCase(cleanTargetId)
+            || currentUsername.equalsIgnoreCase(cleanTargetId);
 
         if (!isStudentAdmin && !isSelf) {
             return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：当前账号无权修改该学生档案");
@@ -97,7 +149,9 @@ public final class StudentServerModule implements ServerModule {
 
     /**
      * 发起学籍异动申请
-     * 权限规范：仅学生本人可发起自身异动
+     * 权限与业务规范：
+     * 1. 仅学生本人可发起自身异动
+     * 2. 状态机校验（如未休学不可复学、待审核不可并发提交等）由 StudentService 校验并抛出具体异常提示
      */
     private Response handleApplyStatusChange(Request request, ServerContext context) {
         Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
@@ -110,24 +164,32 @@ public final class StudentServerModule implements ServerModule {
             return Response.failure(request.getRequestId(), "BAD_REQUEST", "请求参数错误");
         }
 
-        boolean isStudentAdmin = session.canAdminister("student");
-        boolean isSelf = session.getUserId().equalsIgnoreCase(req.getStudentId());
+        String currentUserId = cleanId(session.getUserId());
+        String currentUsername = cleanId(session.getUsername());
+        String cleanTargetId = cleanId(req.getStudentId());
+
+        boolean isStudentAdmin = session.canAdminister(ModuleNames.STUDENT);
+        boolean isSelf = currentUserId.equalsIgnoreCase(cleanTargetId)
+            || currentUsername.equalsIgnoreCase(cleanTargetId);
 
         if (!isStudentAdmin && !isSelf) {
             return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：学生仅能提交本人的异动申请");
         }
 
-        StatusChangeDto dto = studentService.applyStatusChange(req);
-        if (dto != null) {
+        try {
+            StatusChangeDto dto = studentService.applyStatusChange(req);
             return Response.success(request, "异动申请提交成功", dto);
-        } else {
-            return Response.failure(request.getRequestId(), "BAD_REQUEST", "申请提交失败，请检查学生学号");
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            // 返回具体的状态机拦截提示（如：未休学不能复学、已有待审核申请等）
+            return Response.failure(request.getRequestId(), "BAD_REQUEST", e.getMessage());
+        } catch (Exception e) {
+            return Response.failure(request.getRequestId(), "INTERNAL_ERROR", "申请提交异常：" + e.getMessage());
         }
     }
 
     /**
      * 查询学籍异动申请履历
-     * 权限规范：学籍管理员可通览或查他人；学生仅限查看本人；禁止教师及非学籍管理员调阅
+     * 权限规范：学籍管理员可查询全校；学生仅限查本人；教师及外部管理员无权调阅他人异动
      */
     private Response handleListStatusChanges(Request request, ServerContext context) {
         Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
@@ -136,34 +198,39 @@ public final class StudentServerModule implements ServerModule {
         }
         SessionInfo session = sessionOpt.get();
 
-        boolean isStudentAdmin = session.canAdminister("student");
-        String currentUserId = session.getUserId();
+        boolean isStudentAdmin = session.canAdminister(ModuleNames.STUDENT);
+        String currentStudentNumber = session.getUsername();
 
         String queryStudentId = null;
         if (request.getData() instanceof String s && !s.isBlank()) {
-            queryStudentId = s.trim();
+            queryStudentId = cleanId(s);
         }
 
+        // 学籍管理员可通览全校
         if (isStudentAdmin) {
             List<StatusChangeDto> list = studentService.listStatusChanges(queryStudentId);
             return Response.success(request, "获取异动列表成功", (Serializable) list);
         }
 
-        // 非学籍管理员且非学生本人（例如教师或商店管理员）直接拦截
-        if (session.getUserId().toLowerCase().contains("teacher") || !session.canAdminister("student")) {
-            if (queryStudentId != null && !queryStudentId.equalsIgnoreCase(currentUserId)) {
+        // 教师资格查公共教师表，教师与非学籍管理账号禁止查阅他人异动记录
+        boolean isTeacher = context.teachers()
+            .findByUserId(session.getUserId())
+            .isPresent();
+        if (isTeacher || !session.canAdminister(ModuleNames.STUDENT)) {
+            if (queryStudentId != null
+                    && !queryStudentId.equalsIgnoreCase(cleanId(currentStudentNumber))) {
                 return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：无权调阅他人学籍异动");
             }
         }
 
         // 普通学生强制仅查本人
-        List<StatusChangeDto> list = studentService.listStatusChanges(currentUserId);
+        List<StatusChangeDto> list = studentService.listStatusChanges(currentStudentNumber);
         return Response.success(request, "获取个人异动成功", (Serializable) list);
     }
 
     /**
      * 审核学籍异动申请
-     * 权限规范：必须具备学籍管理权限 (SUPER_ADMIN 或具有 student 作用域的管理员)
+     * 权限规范：严禁教师及非学籍管理员审核，仅限 canAdminister(ModuleNames.STUDENT)
      */
     private Response handleAuditStatusChange(Request request, ServerContext context) {
         Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
@@ -176,8 +243,7 @@ public final class StudentServerModule implements ServerModule {
             return Response.failure(request.getRequestId(), "BAD_REQUEST", "请求参数错误");
         }
 
-        // 强权限拦截：非学籍管理员直接拒绝
-        if (!session.canAdminister("student")) {
+        if (!session.canAdminister(ModuleNames.STUDENT)) {
             return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：当前账号不具备学籍管理审核权限");
         }
 

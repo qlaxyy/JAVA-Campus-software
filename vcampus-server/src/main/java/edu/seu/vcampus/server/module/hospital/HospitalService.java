@@ -62,6 +62,8 @@ import edu.seu.vcampus.common.hospital.UpdatePatientHealthProfileRequest;
 import edu.seu.vcampus.common.hospital.UpdateDepartmentRequest;
 import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.user.SessionInfo;
+import edu.seu.vcampus.server.module.card.CampusCardWallet;
+import edu.seu.vcampus.server.module.card.CardBusinessException;
 import edu.seu.vcampus.server.security.AccountProvisioning;
 import edu.seu.vcampus.server.security.ProvisionedAccount;
 import edu.seu.vcampus.server.security.UserDirectory;
@@ -89,6 +91,7 @@ final class HospitalService {
     private final HospitalRepository repository;
     private final Clock clock;
     private final HybridHospitalTriageEngine triageEngine;
+    private final CampusCardWallet campusCards;
     private final ConcurrentMap<String, Object> scheduleLocks = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Object> doctorScheduleLocks =
             new ConcurrentHashMap<>();
@@ -96,15 +99,28 @@ final class HospitalService {
     private final ConcurrentMap<String, Object> billLocks = new ConcurrentHashMap<>();
 
     HospitalService(HospitalRepository repository, Clock clock) {
-        this(repository, clock, HospitalAiTriageClient.disabled());
+        this(repository, clock, null, HospitalAiTriageClient.disabled());
     }
 
     HospitalService(
             HospitalRepository repository,
             Clock clock,
             HospitalAiTriageClient aiTriageClient) {
+        this(repository, clock, null, aiTriageClient);
+    }
+
+    HospitalService(HospitalRepository repository, Clock clock, CampusCardWallet campusCards) {
+        this(repository, clock, campusCards, HospitalAiTriageClient.disabled());
+    }
+
+    HospitalService(
+            HospitalRepository repository,
+            Clock clock,
+            CampusCardWallet campusCards,
+            HospitalAiTriageClient aiTriageClient) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.campusCards = campusCards;
         this.triageEngine = new HybridHospitalTriageEngine(
                 new HospitalTriageEngine(),
                 Objects.requireNonNull(aiTriageClient, "aiTriageClient must not be null"));
@@ -805,11 +821,36 @@ final class HospitalService {
                         ErrorCodes.HOSPITAL_BILL_NOT_PAYABLE,
                         "Only an unpaid bill can be paid.");
             }
+            int amountFen = toCampusCardFen(current.amountCents());
+            boolean charged = false;
+            if (campusCards != null && amountFen > 0) {
+                try {
+                    campusCards.debit(
+                            session,
+                            amountFen,
+                            ModuleNames.HOSPITAL,
+                            "bill:" + current.billId());
+                    charged = true;
+                } catch (CardBusinessException exception) {
+                    throw mapCardFailure(exception);
+                }
+            }
             HospitalPatientBill paid = new HospitalPatientBill(
                     current.billId(), current.appointmentId(), current.patientUserId(),
                     current.billType(), PaymentStatus.PAID, current.createdAt(),
                     LocalDateTime.now(clock), null, current.item());
-            repository.updatePatientBill(paid);
+            try {
+                repository.updatePatientBill(paid);
+            } catch (RuntimeException exception) {
+                if (charged) {
+                    campusCards.credit(
+                            session,
+                            amountFen,
+                            ModuleNames.HOSPITAL,
+                            "bill-refund:" + current.billId());
+                }
+                throw exception;
+            }
             return toPatientBillView(paid);
         }
     }
@@ -2097,6 +2138,20 @@ final class HospitalService {
                 .max()
                 .orElse(0);
         return Math.max(slot.bookedCount(), historicalMaximum) + 1;
+    }
+
+    private static HospitalBusinessException mapCardFailure(CardBusinessException exception) {
+        String code = ErrorCodes.CARD_INSUFFICIENT_BALANCE.equals(exception.code())
+                ? ErrorCodes.CARD_INSUFFICIENT_BALANCE
+                : exception.code();
+        return new HospitalBusinessException(code, exception.getMessage());
+    }
+
+    private static int toCampusCardFen(long amountCents) {
+        if (amountCents > Integer.MAX_VALUE) {
+            throw new IllegalStateException("hospital bill exceeds campus-card amount range");
+        }
+        return (int) amountCents;
     }
 
     private static HospitalBusinessException businessFailure(

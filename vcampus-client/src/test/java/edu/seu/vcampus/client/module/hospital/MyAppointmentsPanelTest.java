@@ -34,7 +34,7 @@ class MyAppointmentsPanelTest {
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(context.login(
-                    "20260001", "123456".toCharArray()).isSuccess());
+                    "20260006", "123456".toCharArray()).isSuccess());
             assertTrue(context.send(
                     HospitalActions.BOOK_APPOINTMENT,
                     BookAppointmentRequest.firstVisit("slot-general-1")).isSuccess());

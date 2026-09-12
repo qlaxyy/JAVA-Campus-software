@@ -22,14 +22,14 @@ import java.util.Optional;
  */
 public final class ShopCatalogService {
 
-    private final InMemoryShopCatalog catalog;
+    private final ShopCatalogRepository catalog;
 
     /**
      * Creates the catalog service.
      *
      * @param catalog in-memory catalog
      */
-    public ShopCatalogService(InMemoryShopCatalog catalog) {
+    public ShopCatalogService(ShopCatalogRepository catalog) {
         this.catalog = Objects.requireNonNull(catalog, "catalog must not be null");
     }
 

@@ -1,6 +1,7 @@
 package edu.seu.vcampus.client.module.student;
 
 import edu.seu.vcampus.client.application.ClientContext;
+import edu.seu.vcampus.common.protocol.ModuleNames;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.student.StudentActions;
 import edu.seu.vcampus.common.student.StudentProfileDto;
@@ -81,7 +82,7 @@ public class StudentView extends JPanel {
      */
     private boolean isStudentAdmin() {
         return context.currentSession()
-            .map(session -> session.canAdminister("student") || session.canAdminister("STUDENT"))
+            .map(session -> session.canAdminister(ModuleNames.STUDENT))
             .orElse(false);
     }
 
@@ -161,7 +162,7 @@ public class StudentView extends JPanel {
         JPanel bannerRightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 5));
         bannerRightPanel.setOpaque(false);
         txtSearchId.setPreferredSize(new Dimension(110, 32));
-        txtSearchId.setText("student001");
+        txtSearchId.setText("20260006");
         txtSearchId.setFont(FONT_BODY);
 
         btnSearch.setPreferredSize(new Dimension(95, 32));

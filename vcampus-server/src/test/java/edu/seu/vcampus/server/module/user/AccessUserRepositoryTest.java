@@ -1,6 +1,7 @@
 package edu.seu.vcampus.server.module.user;
 
 import edu.seu.vcampus.common.user.AdminScope;
+import edu.seu.vcampus.common.user.LoginRequest;
 import edu.seu.vcampus.common.user.PasswordProof;
 import edu.seu.vcampus.common.user.Role;
 import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
@@ -42,6 +43,10 @@ class AccessUserRepositoryTest {
         assertTrue(Files.exists(databasePath));
         assertEquals("修改后的用户", persisted.displayName());
         assertEquals(Set.of(AdminScope.HOSPITAL), persisted.adminScopes());
+        assertEquals("0".repeat(64), persisted.persistedLegacyPasswordProof());
+        assertFalse(persisted.passwordHash().isBlank());
+        assertFalse(persisted.passwordSalt().isBlank());
+        assertEquals(PasswordCredential.CURRENT_ITERATIONS, persisted.passwordIterations());
         assertEquals(1, repository(databasePath).findAll().size());
     }
 
@@ -50,17 +55,17 @@ class AccessUserRepositoryTest {
         Path databasePath = temporaryDirectory.resolve("seeded.accdb");
         InMemoryAuthenticationService first =
                 UserAuthenticationBootstrap.createAccessBacked(databasePath);
-        UserAccount student = first.users().findByUsername("20260001").orElseThrow();
+        UserAccount student = first.users().findByUsername("20260006").orElseThrow();
         first.users().save(student.withEnabled(false));
 
         InMemoryAuthenticationService restarted =
                 UserAuthenticationBootstrap.createAccessBacked(databasePath);
-        assertEquals(9, restarted.users().findAll().size());
-        assertFalse(restarted.users().findByUsername("20260001").orElseThrow().enabled());
+        assertEquals(39, restarted.users().findAll().size());
+        assertFalse(restarted.users().findByUsername("20260006").orElseThrow().enabled());
         UserAccount teacher = restarted.users()
-                .findByUsername("20260008").orElseThrow();
-        assertEquals("U-COURSE-TEACHER-001", teacher.userId());
-        assertEquals("演示教师", teacher.displayName());
+                .findByUsername("20260021").orElseThrow();
+        assertEquals("U-TEACHER-001", teacher.userId());
+        assertEquals("王建国", teacher.displayName());
         assertEquals(Role.USER, teacher.role());
         assertTrue(teacher.adminScopes().isEmpty());
     }
@@ -108,13 +113,13 @@ class AccessUserRepositoryTest {
 
         assertEquals("U-LEGACY-STUDENT", migrated.userId());
         assertEquals("演示学生", migrated.displayName());
-        assertEquals(
-                PasswordProof.create("20260001", "123456".toCharArray()),
-                migrated.passwordProof());
+        assertTrue(migrated.passwordMatches(
+                PasswordProof.create("20260001", "123456".toCharArray())));
+        assertFalse(migrated.passwordNeedsUpgrade());
     }
 
     @Test
-    void migratesExistingDemoAccountsToContiguousCampusCardNumbers() {
+    void doesNotSilentlyRenumberExistingStructuredCampusCardNumbers() {
         Path databasePath = temporaryDirectory.resolve("legacy-admin-number.accdb");
         AccessUserRepository initial = repository(databasePath);
         char[] password = "123456".toCharArray();
@@ -142,36 +147,55 @@ class AccessUserRepositoryTest {
 
         AccessUserRepository migrated = repository(databasePath);
 
-        assertEquals("U-ADMIN-001",
-                migrated.findByUsername("20260000").orElseThrow().userId());
         assertEquals("U-STUDENT-001",
                 migrated.findByUsername("20260001").orElseThrow().userId());
         assertEquals("U-TEACHER-001",
                 migrated.findByUsername("20260002").orElseThrow().userId());
-        assertEquals("U-STUDENT-ADMIN-001",
-                migrated.findByUsername("20260003").orElseThrow().userId());
-        assertEquals("U-COURSE-ADMIN-001",
-                migrated.findByUsername("20260004").orElseThrow().userId());
-        assertEquals("U-LIBRARY-ADMIN-001",
-                migrated.findByUsername("20260005").orElseThrow().userId());
-        assertEquals("U-SHOP-ADMIN-001",
-                migrated.findByUsername("20260006").orElseThrow().userId());
         UserAccount hospitalAdministrator =
-                migrated.findByUsername("20260007").orElseThrow();
+                migrated.findByUsername("20260008").orElseThrow();
         assertEquals("U-HOSPITAL-ADMIN-001", hospitalAdministrator.userId());
         assertEquals(Set.of(AdminScope.HOSPITAL), hospitalAdministrator.adminScopes());
-        assertTrue(migrated.findByUsername("20260008").isEmpty());
         char[] migratedPassword = "123456".toCharArray();
         try {
-            assertEquals(
-                    PasswordProof.create("20260000", migratedPassword),
-                    migrated.findByUsername("20260000").orElseThrow().passwordProof());
-            assertEquals(
-                    PasswordProof.create("20260007", migratedPassword),
-                    hospitalAdministrator.passwordProof());
+            assertTrue(hospitalAdministrator.passwordMatches(
+                    PasswordProof.create("20260008", migratedPassword)));
         } finally {
             java.util.Arrays.fill(migratedPassword, '\0');
         }
+    }
+
+    @Test
+    void upgradesAnOldAccessSchemaAndCredentialAfterSuccessfulLogin() throws Exception {
+        Path databasePath = temporaryDirectory.resolve("old-password-schema.accdb");
+        String proof = PasswordProof.create("20261234", "123456".toCharArray());
+        try (Connection connection = new AccessDatabase(databasePath).openConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("CREATE TABLE tblUser ("
+                    + "userId TEXT(36) PRIMARY KEY, "
+                    + "username TEXT(50) NOT NULL, "
+                    + "displayName TEXT(100) NOT NULL, "
+                    + "roleCode TEXT(20) NOT NULL, "
+                    + "passwordProof TEXT(64) NOT NULL, "
+                    + "enabled YESNO NOT NULL)");
+            statement.executeUpdate("INSERT INTO tblUser "
+                    + "(userId, username, displayName, roleCode, passwordProof, enabled) "
+                    + "VALUES ('U-OLD-PASSWORD', '20261234', '旧库账号', 'USER', '"
+                    + proof + "', TRUE)");
+        }
+
+        AccessUserRepository repository = repository(databasePath);
+        UserAccount beforeLogin = repository.findById("U-OLD-PASSWORD").orElseThrow();
+        assertTrue(beforeLogin.passwordNeedsUpgrade());
+
+        InMemoryAuthenticationService authentication =
+                new InMemoryAuthenticationService(repository);
+        assertTrue(authentication.login(new LoginRequest("20261234", proof)).isPresent());
+
+        UserAccount upgraded = repository(databasePath)
+                .findById("U-OLD-PASSWORD").orElseThrow();
+        assertFalse(upgraded.passwordNeedsUpgrade());
+        assertEquals("0".repeat(64), upgraded.persistedLegacyPasswordProof());
+        assertTrue(upgraded.passwordMatches(proof));
     }
 
     private AccessUserRepository repository(Path path) {

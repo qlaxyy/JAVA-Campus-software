@@ -30,6 +30,10 @@ final class UserAccountTableModel extends AbstractTableModel {
         return accounts.get(modelRow);
     }
 
+    List<UserAccountView> accounts() {
+        return List.copyOf(accounts);
+    }
+
     @Override
     public int getRowCount() { return accounts.size(); }
 

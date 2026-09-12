@@ -1,9 +1,12 @@
 package edu.seu.vcampus.server.module.course;
 
 import edu.seu.vcampus.common.course.CourseInfo;
+import edu.seu.vcampus.common.course.CourseSearchItem;
+import edu.seu.vcampus.common.course.CourseSearchResult;
+import edu.seu.vcampus.common.course.EnrollmentInfo;
 import edu.seu.vcampus.common.course.OfferingInfo;
 import edu.seu.vcampus.common.course.TeacherStudentInfo;
-import edu.seu.vcampus.common.course.TemporaryCourseTeacherDirectory;
+import edu.seu.vcampus.server.security.TeacherDirectory;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -14,18 +17,21 @@ import java.util.Objects;
  * 教师端课程业务。
  */
 final class CourseTeacherService {
-
     private final CourseOfferingAdministrationService
         offeringAdministrationService;
 
     private final CourseEnrollmentRepository
         enrollmentRepository;
+    private final CourseTeacherAssignmentRepository assignmentRepository;
+    private final TeacherDirectory teacherDirectory;
 
     CourseTeacherService(
         CourseOfferingAdministrationService
             offeringAdministrationService,
         CourseEnrollmentRepository
-            enrollmentRepository) {
+            enrollmentRepository,
+        CourseTeacherAssignmentRepository assignmentRepository,
+        TeacherDirectory teacherDirectory) {
 
         this.offeringAdministrationService =
             Objects.requireNonNull(
@@ -34,52 +40,34 @@ final class CourseTeacherService {
         this.enrollmentRepository =
             Objects.requireNonNull(
                 enrollmentRepository);
-    }
-
-    /**
-     * 判断账号是否为临时教师。
-     */
-    boolean isTeacher(
-        String username) {
-
-        return TemporaryCourseTeacherDirectory
-            .isTeacher(
-                username);
+        this.assignmentRepository = Objects.requireNonNull(assignmentRepository);
+        this.teacherDirectory = teacherDirectory;
     }
 
     /**
      * 判断教师是否负责指定教学班。
      */
     boolean canManageOffering(
-        String username,
+        String userId,
         long offeringId) {
 
-        return TemporaryCourseTeacherDirectory
-            .isAssignedToOffering(
-                username,
-                offeringId);
+        return assignmentRepository.isAssigned(
+            userId,
+            offeringId);
     }
 
     /**
      * 查询教师在指定批次负责的课程。
      */
     List<CourseInfo> listTeacherCourses(
-        String username,
+        String userId,
         long batchId) {
-
-        if (!isTeacher(
-            username)) {
-
-            return List.of();
-        }
 
         List<CourseInfo> result =
             new ArrayList<>();
 
-        for (CourseInfo course
-            : offeringAdministrationService
-            .listCourses(
-                batchId)) {
+        for (CourseInfo course : withCurrentTeacherNames(
+                offeringAdministrationService.listCourses(batchId))) {
 
             List<OfferingInfo>
                 assignedOfferings =
@@ -87,7 +75,7 @@ final class CourseTeacherService {
                     .stream()
                     .filter(offering ->
                         canManageOffering(
-                            username,
+                            userId,
                             offering
                                 .getOfferingId()))
                     .toList();
@@ -112,16 +100,72 @@ final class CourseTeacherService {
             result);
     }
 
+    /** Replaces stored display snapshots with names from the public teacher directory. */
+    List<CourseInfo> withCurrentTeacherNames(List<CourseInfo> courses) {
+        return courses.stream().map(course -> new CourseInfo(
+                course.getCourseId(),
+                course.getCourseCode(),
+                course.getCourseName(),
+                course.getCredits(),
+                course.getCourseType(),
+                course.isSelected(),
+                course.getOfferings().stream().map(this::withCurrentTeacherNames).toList()))
+                .toList();
+    }
+
+    CourseSearchResult withCurrentSearchTeacherNames(CourseSearchResult result) {
+        List<CourseSearchItem> items = result.getItems().stream().map(item -> new CourseSearchItem(
+                item.getCourseId(), item.getCourseCode(), item.getCourseName(),
+                item.getCredits(), item.getCourseType(), item.getDepartmentName(),
+                item.getOfferingId(), item.getClassNo(), currentTeacherNames(
+                        item.getOfferingId(), item.getTeacherNames()),
+                item.getSchedules(), item.getLocationName(), item.getCampusName(),
+                item.getTeachingLanguage(), item.getSelectedCount(), item.getCapacity(),
+                item.getRemainingCount())).toList();
+        return new CourseSearchResult(items, result.getPage(), result.getPageSize(),
+                result.getTotalCount(), result.getTotalPages());
+    }
+
+    List<EnrollmentInfo> withCurrentEnrollmentTeacherNames(List<EnrollmentInfo> items) {
+        return items.stream().map(item -> new EnrollmentInfo(
+                item.getEnrollmentId(), item.getOfferingId(), item.getCourseCode(),
+                item.getCourseName(), item.getClassNo(), currentTeacherNames(
+                        item.getOfferingId(), item.getTeacherNames()),
+                item.getSchedules(), item.getLocationName(), item.getCredits(),
+                item.getCourseType(), item.isCanDrop(), item.getDropUnavailableReason()))
+                .toList();
+    }
+
+    private OfferingInfo withCurrentTeacherNames(OfferingInfo offering) {
+        return new OfferingInfo(
+                offering.getOfferingId(), offering.getClassNo(),
+                currentTeacherNames(offering.getOfferingId(), offering.getTeacherNames()),
+                offering.getSchedules(), offering.getLocationName(), offering.getCampusName(),
+                offering.getTeachingLanguage(), offering.getSelectedCount(),
+                offering.getCapacity(), offering.getRemainingCount(), offering.isSelected(),
+                offering.getAvailabilityStatus());
+    }
+
+    private List<String> currentTeacherNames(long offeringId, List<String> fallback) {
+        if (teacherDirectory == null) return fallback;
+        List<String> names = assignmentRepository.findTeacherUserIds(offeringId).stream()
+                .map(teacherDirectory::findByUserId)
+                .flatMap(java.util.Optional::stream)
+                .map(identity -> identity.displayName())
+                .toList();
+        return names.isEmpty() ? fallback : names;
+    }
+
     /**
      * 查询教师负责教学班中的学生名单。
      */
     List<TeacherStudentInfo> listStudents(
-        String username,
+        String userId,
         long batchId,
         long offeringId) {
 
         if (!canManageOffering(
-            username,
+            userId,
             offeringId)) {
 
             return List.of();
@@ -150,15 +194,9 @@ final class CourseTeacherService {
      * 判断选课记录是否属于该教师负责的教学班。
      */
     boolean canManageEnrollment(
-        String username,
+        String userId,
         String studentId,
         long enrollmentId) {
-
-        if (!isTeacher(
-            username)) {
-
-            return false;
-        }
 
         if (studentId == null
             || studentId.isBlank()
@@ -185,8 +223,84 @@ final class CourseTeacherService {
         }
 
         return canManageOffering(
-            username,
+            userId,
             record.offeringId());
     }
+    /**
+     * 查询教学班绑定的教师 userId。
+     */
+    List<String> listTeacherUserIds(
+        long offeringId) {
 
+        return assignmentRepository
+            .findTeacherUserIds(
+                offeringId);
+    }
+
+    /**
+     * 给教学班分配教师。
+     */
+    boolean assignTeacher(
+        long offeringId,
+        String teacherUserId,
+        String teacherName) {
+
+        return assignmentRepository.assign(
+            offeringId,
+            teacherUserId,
+            teacherName);
+    }
+
+    /**
+     * 移除教学班任课教师。
+     */
+    boolean removeTeacher(
+        long offeringId,
+        String teacherUserId) {
+
+        return assignmentRepository.remove(
+            offeringId,
+            teacherUserId);
+    }
+    /**
+     * 判断学生是否属于教师负责的任一教学班。
+     */
+    boolean canViewStudent(
+        String teacherUserId,
+        String studentId) {
+
+        if (teacherUserId == null
+            || teacherUserId.isBlank()
+            || studentId == null
+            || studentId.isBlank()) {
+
+            return false;
+        }
+
+        String normalizedStudentId =
+            studentId.trim();
+
+        for (long offeringId
+            : assignmentRepository.findOfferingIds(
+            teacherUserId.trim())) {
+
+            boolean found =
+                enrollmentRepository
+                    .findSelectedEnrollmentsByOffering(
+                        offeringId)
+                    .stream()
+                    .anyMatch(record ->
+                        record.userId()
+                            .equalsIgnoreCase(normalizedStudentId)
+                        || record.studentId()
+                            .equalsIgnoreCase(normalizedStudentId));
+
+            if (found) {
+
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

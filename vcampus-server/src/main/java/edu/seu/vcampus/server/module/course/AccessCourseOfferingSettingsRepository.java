@@ -13,12 +13,18 @@ import java.util.Optional;
 
 /**
  * Access 教学班设置仓库。
+ *
+ * 教学班设置按照 offeringId 全局保存，
+ * 与选课批次无关。
  */
 final class AccessCourseOfferingSettingsRepository
     implements CourseOfferingSettingsRepository {
 
     private static final String TABLE =
         "tblCourseOfferingSettings";
+
+    private static final String LEGACY_BATCH_COLUMN =
+        "batchId";
 
     private final AccessDatabase database;
 
@@ -34,14 +40,12 @@ final class AccessCourseOfferingSettingsRepository
 
     @Override
     public Optional<CourseOfferingSettings> find(
-        long batchId,
         long offeringId) {
 
         String sql =
-            "SELECT batchId, offeringId, capacity, openFlag "
+            "SELECT offeringId, capacity, openFlag "
                 + "FROM tblCourseOfferingSettings "
-                + "WHERE batchId = ? "
-                + "AND offeringId = ?";
+                + "WHERE offeringId = ?";
 
         try (Connection connection =
                  database.openConnection();
@@ -51,10 +55,6 @@ final class AccessCourseOfferingSettingsRepository
 
             statement.setLong(
                 1,
-                batchId);
-
-            statement.setLong(
-                2,
                 offeringId);
 
             try (ResultSet result =
@@ -67,8 +67,6 @@ final class AccessCourseOfferingSettingsRepository
 
                 return Optional.of(
                     new CourseOfferingSettings(
-                        result.getLong(
-                            "batchId"),
                         result.getLong(
                             "offeringId"),
                         result.getInt(
@@ -89,8 +87,11 @@ final class AccessCourseOfferingSettingsRepository
     public synchronized void save(
         CourseOfferingSettings settings) {
 
+        Objects.requireNonNull(
+            settings,
+            "settings must not be null");
+
         if (find(
-            settings.batchId(),
             settings.offeringId())
             .isPresent()) {
 
@@ -107,34 +108,57 @@ final class AccessCourseOfferingSettingsRepository
     private void insert(
         CourseOfferingSettings settings) {
 
-        String sql =
-            "INSERT INTO tblCourseOfferingSettings "
-                + "(batchId, offeringId, capacity, openFlag) "
-                + "VALUES (?, ?, ?, ?)";
-
         try (Connection connection =
-                 database.openConnection();
-             PreparedStatement statement =
-                 connection.prepareStatement(
-                     sql)) {
+                 database.openConnection()) {
 
-            statement.setLong(
-                1,
-                settings.batchId());
+            boolean legacySchema =
+                columnExists(
+                    connection,
+                    TABLE,
+                    LEGACY_BATCH_COLUMN);
 
-            statement.setLong(
-                2,
-                settings.offeringId());
+            String sql =
+                legacySchema
+                    ? "INSERT INTO tblCourseOfferingSettings "
+                    + "(batchId, offeringId, "
+                    + "capacity, openFlag) "
+                    + "VALUES (?, ?, ?, ?)"
+                    : "INSERT INTO tblCourseOfferingSettings "
+                    + "(offeringId, capacity, openFlag) "
+                    + "VALUES (?, ?, ?)";
 
-            statement.setInt(
-                3,
-                settings.capacity());
+            try (PreparedStatement statement =
+                     connection.prepareStatement(
+                         sql)) {
 
-            statement.setBoolean(
-                4,
-                settings.open());
+                int index =
+                    1;
 
-            statement.executeUpdate();
+                if (legacySchema) {
+
+                    /*
+                     * 仅兼容旧数据库的 NOT NULL 字段。
+                     * 该值不参与任何业务判断。
+                     */
+                    statement.setLong(
+                        index++,
+                        0L);
+                }
+
+                statement.setLong(
+                    index++,
+                    settings.offeringId());
+
+                statement.setInt(
+                    index++,
+                    settings.capacity());
+
+                statement.setBoolean(
+                    index,
+                    settings.open());
+
+                statement.executeUpdate();
+            }
 
         } catch (SQLException exception) {
 
@@ -150,8 +174,7 @@ final class AccessCourseOfferingSettingsRepository
         String sql =
             "UPDATE tblCourseOfferingSettings "
                 + "SET capacity = ?, openFlag = ? "
-                + "WHERE batchId = ? "
-                + "AND offeringId = ?";
+                + "WHERE offeringId = ?";
 
         try (Connection connection =
                  database.openConnection();
@@ -169,10 +192,6 @@ final class AccessCourseOfferingSettingsRepository
 
             statement.setLong(
                 3,
-                settings.batchId());
-
-            statement.setLong(
-                4,
                 settings.offeringId());
 
             statement.executeUpdate();
@@ -202,16 +221,15 @@ final class AccessCourseOfferingSettingsRepository
 
                 statement.executeUpdate(
                     "CREATE TABLE tblCourseOfferingSettings ("
-                        + "batchId LONG NOT NULL, "
                         + "offeringId LONG NOT NULL, "
                         + "capacity LONG NOT NULL, "
                         + "openFlag YESNO NOT NULL)");
 
                 statement.executeUpdate(
                     "CREATE UNIQUE INDEX "
-                        + "ux_tblCourseOfferingSettings "
+                        + "ux_tblCourseOfferingSettings_offeringId "
                         + "ON tblCourseOfferingSettings "
-                        + "(batchId, offeringId)");
+                        + "(offeringId)");
             }
 
         } catch (SQLException exception) {
@@ -242,6 +260,39 @@ final class AccessCourseOfferingSettingsRepository
                 if (expected.equalsIgnoreCase(
                     tables.getString(
                         "TABLE_NAME"))) {
+
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private boolean columnExists(
+        Connection connection,
+        String expectedTable,
+        String expectedColumn)
+        throws SQLException {
+
+        DatabaseMetaData metadata =
+            connection.getMetaData();
+
+        try (ResultSet columns =
+                 metadata.getColumns(
+                     null,
+                     null,
+                     "%",
+                     "%")) {
+
+            while (columns.next()) {
+
+                if (expectedTable.equalsIgnoreCase(
+                    columns.getString(
+                        "TABLE_NAME"))
+                    && expectedColumn.equalsIgnoreCase(
+                    columns.getString(
+                        "COLUMN_NAME"))) {
 
                     return true;
                 }

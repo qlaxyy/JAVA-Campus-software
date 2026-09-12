@@ -10,6 +10,7 @@ import edu.seu.vcampus.common.hospital.EpisodeStatus;
 import edu.seu.vcampus.common.hospital.PaymentStatus;
 import edu.seu.vcampus.common.hospital.VisitType;
 import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
+import edu.seu.vcampus.server.security.UserDirectory;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -42,10 +43,16 @@ final class AccessHospitalRepository implements HospitalRepository {
 
     private final AccessDatabase database;
     private final Clock clock;
+    private final UserDirectory users;
 
     AccessHospitalRepository(AccessDatabase database, Clock clock) {
+        this(database, clock, null);
+    }
+
+    AccessHospitalRepository(AccessDatabase database, Clock clock, UserDirectory users) {
         this.database = database;
         this.clock = clock;
+        this.users = users;
         initializeSchema();
         seedReferenceData();
     }
@@ -84,7 +91,7 @@ final class AccessHospitalRepository implements HospitalRepository {
                         result.getString("doctorId"),
                         result.getString("userId"),
                         result.getString("departmentId"),
-                        result.getString("doctorName"),
+                        currentName(result.getString("userId"), result.getString("doctorName")),
                         result.getString("doctorTitle"),
                         true));
             }
@@ -105,7 +112,7 @@ final class AccessHospitalRepository implements HospitalRepository {
                         result.getString("doctorId"),
                         nullableText(result.getString("userId")),
                         result.getString("departmentId"),
-                        result.getString("doctorName"),
+                        currentName(nullableText(result.getString("userId")), result.getString("doctorName")),
                         result.getString("doctorTitle"),
                         true));
             }
@@ -127,7 +134,7 @@ final class AccessHospitalRepository implements HospitalRepository {
                         result.getString("doctorId"),
                         nullableText(result.getString("userId")),
                         result.getString("departmentId"),
-                        result.getString("doctorName"),
+                        currentName(nullableText(result.getString("userId")), result.getString("doctorName")),
                         result.getString("doctorTitle"),
                         result.getBoolean("active")));
             }
@@ -2073,7 +2080,7 @@ final class AccessHospitalRepository implements HospitalRepository {
 
     private String slotSelect() {
         return "SELECT s.scheduleId, s.departmentId, d.departmentName, "
-                + "s.doctorId, h.doctorName, h.doctorTitle, s.startTime, s.endTime, "
+                + "s.doctorId, h.userId AS doctorUserId, h.doctorName, h.doctorTitle, s.startTime, s.endTime, "
                 + "s.registrationFeeCents, s.capacity, s.status "
                 + "FROM (tblHospitalSchedule AS s INNER JOIN tblHospitalDepartment AS d "
                 + "ON s.departmentId = d.departmentId) "
@@ -2089,7 +2096,7 @@ final class AccessHospitalRepository implements HospitalRepository {
                         result.getString("departmentId"),
                         result.getString("departmentName"),
                         result.getString("doctorId"),
-                        result.getString("doctorName"),
+                        currentName(nullableText(result.getString("doctorUserId")), result.getString("doctorName")),
                         result.getString("doctorTitle"),
                         result.getTimestamp("startTime").toLocalDateTime(),
                         result.getTimestamp("endTime").toLocalDateTime(),
@@ -2100,6 +2107,15 @@ final class AccessHospitalRepository implements HospitalRepository {
             }
             return slots;
         }
+    }
+
+    private String currentName(String userId, String snapshot) {
+        if (users == null || userId == null) {
+            return snapshot;
+        }
+        return users.findByUserId(userId)
+                .map(identity -> identity.displayName())
+                .orElse(snapshot);
     }
 
     private boolean exists(Connection connection, String sql, String value) throws SQLException {

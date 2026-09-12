@@ -89,7 +89,7 @@
 
 #### 2.1.3 安全可行性
 
-当前实现不会把密码明文放入 `LoginRequest`，客户端先生成开发期 SHA-256 proof；服务器使用固定时间比较方式校验 proof，并用安全随机数产生 token。但该方案没有 TLS，也不是正式密码存储方案，只适合课程开发阶段。最终版本应使用加密传输和带盐慢哈希。
+当前实现不会把密码明文放入 `LoginRequest`，客户端先生成开发期 SHA-256 proof；服务器数据库再使用每账号独立随机盐的 PBKDF2-HMAC-SHA256 慢哈希保存该 proof，并用固定时间方式比较校验结果。旧数据库中的 proof 在首次成功登录后自动升级。安全随机数用于产生 token。由于 Socket 尚未使用 TLS，proof 仍可能在传输中被截获和重放，真实网络部署前还需增加加密传输。
 
 ### 2.2 需求分析
 
@@ -100,7 +100,7 @@
 | 用户 | 统一登录、会话、退出、账号与管理范围维护 | 登录、账号管理、CSV 批量导入和 Access 持久化已纳入 |
 | 学籍 | 学生资料查询与学籍管理 | 待负责人材料汇总 |
 | 选课 | 选课批次、课程查询、选课、退课与冲突校验 | 待负责人材料汇总 |
-| 图书馆 | 图书检索、借阅、归还与馆藏管理 | 待负责人材料汇总 |
+| 图书馆 | 线上检索预约、模拟借还、个人记录与馆藏管理 | [图书馆交付说明](../modules/library-borrow-return.md) |
 | 商店 | 商品、购物车、订单与库存管理 | 待负责人材料汇总 |
 | 医院 | 患者、医生、管理员模式，号源与预约管理 | 待负责人材料汇总 |
 
@@ -188,7 +188,7 @@ flowchart LR
 | 用户与公共架构 | 吴尚扬 | 登录、会话、账号管理、批量导入和 Access 持久化已纳入 |
 | 学籍 | 施天琦 | 待负责人材料汇总 |
 | 选课 | 杨凯涵 | 待负责人材料汇总 |
-| 图书馆 | 吴昊哲 | 待负责人材料汇总 |
+| 图书馆 | 吴昊哲 | 预约、模拟借还、管理维护、Access 事务与测试已纳入 |
 | 商店 | 葛丰玮 | 待负责人材料汇总 |
 | 医院 | 廖俊杰 | 待负责人材料汇总 |
 
@@ -207,7 +207,7 @@ flowchart LR
 
 ### 5.1 模块背景
 
-用户登录模块是所有业务模块的统一入口。它只确认“当前账号是谁、具有哪些账号级权限和模块管理范围”，不在全局判断教师、医生、读者等业务资格。各业务模块得到 `userId` 后，再查询本模块的数据完成专业身份判断。开发期的 `20260008` 是无管理范围的普通账号；它只有在选课子系统的教师名单中绑定对应 `userId` 后，才具备教师业务资格。
+用户登录模块是所有业务模块的统一入口。它确认“当前账号是谁、具有哪些账号级权限和模块管理范围”。学校统一维护的教师基础资格保存在 `tblTeacherProfile`，由超级管理员设置；选课和学籍服务器通过 `ServerContext.teachers()` 按 `userId` 查询。医生等专业资料仍由所属业务模块维护。最终种子库包含 8 名教师和 10 名医生，当前姓名统一从 `tblUser.displayName` 读取。
 
 ### 5.2 用例设计
 
@@ -247,6 +247,8 @@ flowchart LR
 ### 5.3 界面设计
 
 登录行为由 `LoginPanel` 实现，布局与样式集中在 `LoginPanelDesign`，避免视觉代码和网络登录逻辑混在一起。界面采用与主界面一致的青绿色主题，左侧仅保留系统英文标识，右侧提供登录表单和开发期测试账号。
+
+超级管理员的账号名单与教师名单统一使用 `UserUiTheme`：主操作、普通操作和危险操作采用不同视觉层级，表格以加高行距、交替底色和明显选中态提高可读性，启用、禁用及操作结果使用状态色区分。账号名单支持按一卡通号或姓名实时搜索，并可组合筛选启停状态与子系统管理范围；这些筛选只处理客户端已经取得的账号列表，不新增服务器查询接口。编辑、启停、重置密码、修改教师和取消教师资格等按钮必须先选中一条记录才可使用；写操作成功后页面自动重新加载，因此不额外设置手动刷新按钮。
 
 主要控件如下：
 
@@ -320,12 +322,15 @@ sequenceDiagram
     else 允许尝试
         AS->>UR: findByUsername(username)
         UR-->>AS: UserAccount / empty
-        AS->>AS: 检查 enabled 和 passwordProof
+        AS->>AS: 检查 enabled，并以盐值和迭代次数校验慢哈希
         alt 验证失败
             AS->>AL: recordFailure(username)
             AS-->>UM: Optional.empty
         else 验证成功
             AS->>AL: recordSuccess(username)
+            opt 旧数据库凭据
+                AS->>UR: 保存带盐 PBKDF2 凭据并清除旧 proof
+            end
             AS->>AS: 生成 token，保存 SessionInfo
             AS-->>UM: Optional<SessionInfo>
         end
@@ -415,6 +420,30 @@ classDiagram
         +findSession(String token) Optional~SessionInfo~
     }
 
+    class TeacherRegistryService {
+        -UserRepository users
+        -TeacherRepository teachers
+        +findByUserId(String userId) Optional~TeacherIdentity~
+        +findActiveTeachers() List~TeacherIdentity~
+        ~saveProfile(SaveTeacherProfileRequest request, String actorUserId) TeacherProfileView
+    }
+
+    class TeacherRepository {
+        <<interface>>
+        ~findByUserId(String userId) Optional~TeacherProfile~
+        ~findAll() List~TeacherProfile~
+        ~save(TeacherProfile profile) void
+    }
+
+    class AccessTeacherRepository
+    class InMemoryTeacherRepository
+    class TeacherProfile {
+        -String userId
+        -String department
+        -String title
+        -boolean active
+    }
+
     class LoginAttemptLimiter {
         -int maximumFailures
         -Duration failureWindow
@@ -454,8 +483,17 @@ classDiagram
         -String displayName
         -Role role
         -Set~AdminScope~ adminScopes
-        -String passwordProof
+        -PasswordCredential passwordCredential
         -boolean enabled
+    }
+
+    class PasswordCredential {
+        -String legacyProof
+        -String hash
+        -String salt
+        -int iterations
+        ~matches(String passwordProof) boolean
+        ~needsUpgrade() boolean
     }
 
     LoginPanel --> ClientContext : 持有并调用
@@ -465,11 +503,18 @@ classDiagram
     UserServerModule ..> ActionRouter : 注册处理器
     UserServerModule --> InMemoryAuthenticationService : 持有
     InMemoryAuthenticationService *-- LoginAttemptLimiter : 创建并管理
+    InMemoryAuthenticationService *-- TeacherRegistryService : 创建并管理
     InMemoryAuthenticationService --> UserRepository : 通过接口查询
+    TeacherRegistryService --> UserRepository : 合并账号基础信息
+    TeacherRegistryService --> TeacherRepository : 维护教师资格
+    TeacherRepository <|.. AccessTeacherRepository : 生产实现
+    TeacherRepository <|.. InMemoryTeacherRepository : 测试实现
+    TeacherRepository --> TeacherProfile : 保存
     UserRepository <|.. InMemoryUserRepository : 实现
     UserRepository <|.. AccessUserRepository : 生产实现
     InMemoryUserRepository "1" o-- "0..*" UserAccount : 保存账号
     AccessUserRepository --> UserAccount : 持久化
+    UserAccount *-- PasswordCredential : 保存校验凭据
 ```
 
 #### 5.6.2 网络 DTO 类图
@@ -531,10 +576,39 @@ classDiagram
         HOSPITAL
     }
 
+    class SaveTeacherProfileRequest {
+        -String userId
+        -String department
+        -String title
+        -boolean active
+    }
+
+    class BatchSaveTeacherProfilesRequest {
+        -List~SaveTeacherProfileRequest~ teachers
+    }
+
+    class TeacherProfileView {
+        -String userId
+        -String campusCardNumber
+        -String displayName
+        -String department
+        -String title
+        -boolean active
+    }
+
+    class TeacherProfileListResponse {
+        -List~TeacherProfileView~ teachers
+    }
+
     Request --> LoginRequest : data 为登录 DTO
     Response --> SessionInfo : 登录成功时作为 data
     SessionInfo --> Role : 使用
     SessionInfo "1" o-- "0..*" AdminScope : 包含管理范围
+    Request --> SaveTeacherProfileRequest : 管理教师档案时作为 data
+    Request --> BatchSaveTeacherProfilesRequest : 批量导入时作为 data
+    BatchSaveTeacherProfilesRequest "1" o-- "1..*" SaveTeacherProfileRequest : 包含教师资料
+    Response --> TeacherProfileView : 教师查询或保存成功时作为 data
+    TeacherProfileListResponse "1" o-- "0..*" TeacherProfileView : 包含教师档案
 ```
 
 本节使用的关系符号如下：
@@ -578,21 +652,23 @@ classDiagram
 
 负责人：杨凯涵。后续按 4.3 节结构补充选课批次、课程查询、选课退课、冲突与容量规则、接口、数据库、图表和测试。
 
-## 8. 图书馆子系统设计说明（V2 阶段 4 已实现）
+## 8. 图书馆子系统设计说明（预约与入口调整阶段 4 已实现）
 
-负责人：吴昊哲。当前已完成书目与实体单册分离、按馆藏地汇总、条码借还、个人记录、
-书目与单册维护、全馆借阅查询、Access Repository 和借还事务。
+负责人：吴昊哲。当前已完成书目与实体单册分离、按馆藏地汇总、线上预约、个人图书馆、
+模拟自助条码借还、服务器条码预检与合法操作按钮控制、书目与单册维护、全馆借阅查询、
+Access Repository 和跨 Repository 事务。
 
 当前实现及评审入口：[借阅归还交付说明](../modules/library-borrow-return.md)、
 [图书管理员维护设计与测试](../modules/library-admin-maintenance.md)。
 图书管理员是具有 `AdminScope.LIBRARY` 的 `Role.USER`，超级管理员也具备此能力；
 服务器从 token 取得会话，通过 `SessionInfo.canAdminister(ModuleNames.LIBRARY)` 判断。
-分类接口使用 `categoryId/categoryName`。正式启动时，书目、实体单册、分类和借阅记录均保存在
-`vCampus.accdb`；借书与归还的多个 Repository 通过 `AccessLibraryStore` 复用同一个 JDBC Connection。
+分类接口使用 `categoryId/categoryName`。正式启动时，书目、实体单册、分类、借阅记录和预约均保存在
+`vCampus.accdb`；预约分配、借书、归还等多表操作通过 `AccessLibraryStore` 复用同一个 JDBC Connection。
+仅在首次创建整套图书馆表且业务表为空时初始化一致演示状态，已有数据库不会补种或重置。
 
 ## 9. 商店子系统设计说明（已实现首条完整业务链路，其余待负责人材料汇总）
 
-负责人：葛丰玮。当前已有商品查询与发布、购物车、校园卡充值与支付、个人订单取消退款以及商家成交查询。服务器始终使用会话 `userId` 归属余额和订单；登录一卡通号同时作为界面展示的卡号，不再生成第二套编号。校园卡余额、商品和订单目前仍为内存实现，后续补充 Access DAO、库存并发验证以及完整图表。
+负责人：葛丰玮。当前已有商品查询与发布、服务器购物车、校园卡充值与支付、个人订单取消退款以及商家成交查询。服务器始终使用会话 `userId` 归属余额和订单；登录一卡通号同时作为界面展示的卡号，不再生成第二套编号。商品分类、商品与库存、购物车、订单及订单明细均已迁移至 Access；校园卡余额和流水由默认 TCP 8889 的独立入口提供，并与各模块共用同一 `vCampus.accdb`。商店支付仍将余额扣减、库存扣减和订单创建放在同一数据库事务中，避免部分成功。
 
 ## 10. 医院子系统设计说明（已补充医生申请链路，其余待负责人材料汇总）
 
@@ -629,6 +705,10 @@ classDiagram
 | `USER.ADMIN_UPDATE_STATUS` | 必填 | `UpdateUserStatusRequest` | `UserAccountView` | 启用或停用账号。 |
 | `USER.ADMIN_RESET_PASSWORD` | 必填 | `ResetUserPasswordRequest` | `UserAccountView` | 重置密码并清除该账号会话。 |
 | `USER.ADMIN_LIST_AUDIT_LOGS` | 必填 | `null` | `UserAuditLogResponse` | 超级管理员读取全部账号管理操作记录。 |
+| `USER.CURRENT_TEACHER_PROFILE` | 必填 | `null` | `TeacherProfileView` | 查询当前登录账号的有效教师档案；无教师资格时返回禁止访问。 |
+| `USER.ADMIN_LIST_TEACHERS` | 必填 | `null` | `TeacherProfileListResponse` | 超级管理员查看全部教师档案。 |
+| `USER.ADMIN_SAVE_TEACHER_PROFILE` | 必填 | `SaveTeacherProfileRequest` | `TeacherProfileView` | 超级管理员为已有账号创建或更新教师档案。 |
+| `USER.ADMIN_BATCH_SAVE_TEACHERS` | 必填 | `BatchSaveTeacherProfilesRequest` | `TeacherProfileListResponse` | 超级管理员批量新增或更新已有账号的教师档案。 |
 
 ### 11.2 Request
 
@@ -731,10 +811,12 @@ Swing 组件必须在事件分派线程中创建和更新。登录网络请求�
 - 会话：`ConcurrentHashMap<String, StoredSession>`，内部记录 `SessionInfo`、创建时间和最后访问时间；
 - 测试用内存账号：`ConcurrentHashMap<String, UserAccount>`；
 - 正式启动账号：Access DAO，每次操作使用独立 JDBC 连接，写入使用事务；
-- 正式启动图书馆：普通查询按次打开连接；借书和归还由事务上下文向多个 Repository 提供同一连接；
+- 正式启动图书馆：普通查询按次打开连接；预约、借书和归还由事务上下文向多个 Repository 提供同一连接；
 - Action 注册表：`ConcurrentHashMap<String, RequestHandler>`。
 
 `SessionInfo` 和 `UserAccount` 采用不可变对象设计，减少并发修改风险。
+
+竞争资源的校验与写入不能分散到两个无锁请求中。当前单服务器部署在业务 Service 层串行化同一资源，并使用 Access 事务和唯一索引兜底：用户自动编号在同一认证服务内串行生成；选课保存具有 `(userId, offeringId)` 唯一索引；图书借还使用同一事务连接；医院按 `scheduleId` 锁定号源并原子保存预约、账单和就诊 Episode。现有测试覆盖多客户端会话隔离、并发生成一卡通号、同一本图书竞争和医院号源竞争。选课最后名额、商店最后库存及跨模块同时写 Access 仍需专项集成测试。
 
 ## 14. 数据库设计说明
 
@@ -744,13 +826,13 @@ Swing 组件必须在事件分派线程中创建和更新。登录网络请求�
 
 - `AccessUserRepository` 首次连接时创建用户表；
 - `AccessUserAuditRepository` 首次连接时创建只追加的账号管理审计表；
-- `DemoUserAccounts` 在空库中初始化完整公开测试账号，并可在未占用 `20260008` 时为旧开发数据库补入普通教师演示账号；
+- `FinalDemoRoster` 定义 39 个最终演示账号；停服后的 `--rebuild-demo-database` 先备份旧库，再在临时文件中初始化并校验，成功后原子替换；
 - 账号资料和 `AdminScope` 修改会跨服务器重启保留；
 - `InMemoryAuthenticationService` 在内存中保存会话；
 - `AccessHospitalRepository` 保存医生新增申请和已审核医生档案；
-- `AccessLibraryStore` 创建图书馆四张表并协调跨 Repository 事务；
-- `AccessBookRepository`、`AccessBookCopyRepository`、`AccessBorrowRecordRepository` 和
-  `AccessBookCategoryRepository` 保存图书馆业务数据；
+- `AccessLibraryStore` 创建图书馆五张表并协调跨 Repository 事务；
+- `AccessBookRepository`、`AccessBookCopyRepository`、`AccessBorrowRecordRepository`、
+  `AccessBookCategoryRepository` 和 `AccessReservationRepository` 保存图书馆业务数据；
 - 服务器重启后全部 token 会失效，用户需要重新登录。
 
 自动化测试仍使用 `InMemoryUserRepository`，防止测试修改正式数据库。
@@ -781,6 +863,8 @@ flowchart LR
 | `username` | Short Text(50) | 是 | 唯一索引、8 位数字 | 技术字段名，保存一卡通号并用于登录。 |
 | `passwordHash` | Short Text(255) | 是 | 带盐慢哈希 | 校验正式密码。 |
 | `passwordSalt` | Short Text(255) | 是 | 每个账号独立 | 防止相同密码产生相同哈希。 |
+| `passwordIterations` | Long Integer | 是 | `120000` | PBKDF2 迭代次数，允许以后逐账号升级。 |
+| `passwordProof` | Short Text(64) | 兼容列 | 64 个 `0` | 旧库迁移使用；已升级账号不保存可登录的 proof。 |
 | `displayName` | Short Text(100) | 是 | 非空 | 写入会话供界面显示。 |
 | `roleCode` | Short Text(20) | 是 | `USER` / `SUPER_ADMIN` | 写入会话角色。 |
 | `status` | Short Text(20) | 是 | 默认 `ACTIVE` | 非启用账号拒绝登录。 |
@@ -816,9 +900,23 @@ flowchart LR
 | `successful` | Yes/No | 是 | 是否成功。 |
 | `detailText` | Short Text(255) | 是 | 响应码和简短说明，不含凭据。 |
 
+#### 14.3.4 `tblTeacherProfile`
+
+该表由用户模块维护全校共用的教师基础资格。它不重复保存姓名和一卡通号；其他服务器模块以 `teacherUserId` 通过 `TeacherDirectory` 取得合并后的只读信息。教师与教学班的任课关系仍由选课模块保存。
+
+| 字段 | Access 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `teacherUserId` | Short Text(36) | 是 | 主键，关联 `tblUser.userId`。 |
+| `department` | Short Text(100) | 是 | 所属院系。 |
+| `teacherTitle` | Short Text(50) | 是 | 教师职称。 |
+| `active` | Yes/No | 是 | 教师资格是否有效，不影响普通账号登录。 |
+| `createdByUserId` | Short Text(36) | 是 | 首次建立档案的超级管理员。 |
+| `createdAt` | Date/Time | 是 | 首次建立时间。 |
+| `updatedAt` | Date/Time | 是 | 最近修改时间。 |
+
 ### 14.4 会话存储
 
-会话不写入 Access，而由用户服务器进程中的 `ConcurrentHashMap` 保存。每条记录包含创建时间和最后访问时间，空闲超时为 30 分钟，绝对有效期为 8 小时；每次成功查询会话会更新最后访问时间，但不会延长绝对有效期。其他服务器模块通过 `ServerContext.sessions()` 提供的只读 `SessionLookup` 查询 token；需要确认任意已有账号时，通过 `ServerContext.users()` 提供的 `UserDirectory` 按 `userId` 或一卡通号查询，只能得到 `userId`、一卡通号、姓名和启用状态。客户端不能调用 `ServerContext`，也不能直接读取服务器会话表或用户 DAO。
+会话不写入 Access，而由用户服务器进程中的 `ConcurrentHashMap` 保存。每条记录包含创建时间和最后访问时间，空闲超时为 30 分钟，绝对有效期为 8 小时；每次成功查询会话会更新最后访问时间，但不会延长绝对有效期。其他服务器模块通过 `ServerContext.sessions()` 提供的只读 `SessionLookup` 查询 token；需要确认任意已有账号时，通过 `ServerContext.users()` 提供的 `UserDirectory` 按 `userId` 或一卡通号查询，只能得到 `userId`、一卡通号、姓名和启用状态；需要确认教师资格时，通过 `ServerContext.teachers()` 提供的 `TeacherDirectory` 查询。客户端不能调用 `ServerContext`，也不能直接读取服务器会话表或用户 DAO。
 
 如需跨进程共享或服务器重启后保持登录，应单独设计持久化方案，不能直接把完整 token 写入普通日志、数据库明文字段或审计表。
 
@@ -838,7 +936,7 @@ flowchart LR
 | 当前限制 | 后续改进 |
 |---|---|
 | Socket 未使用 TLS | 在真实网络部署前增加 TLS，防止凭据 proof 和 token 被窃听。 |
-| 开发期 proof 为确定性 SHA-256 | 数据库改用 PBKDF2 等带盐慢哈希；网络认证方案需结合 TLS 重新设计。 |
+| 开发期网络 proof 为确定性 SHA-256 | 数据库已经使用带独立盐值的 PBKDF2；网络认证方案仍需结合 TLS 重新设计。 |
 | 内存中过期 token 可能累积 | 查询时删除当前过期 token，创建会话时批量清理；若并发规模扩大再增加定时清理任务。 |
 | 登录失败没有限速与锁定 | 增加失败计数、短时限流和可审计的锁定/解锁流程。 |
 | 会话只存在内存 | 明确服务器重启后要求重新登录；需要持久化时另行评审。 |
@@ -852,8 +950,8 @@ flowchart LR
 | `AuthenticationIntegrationTest`、`InMemoryAuthenticationServiceTest` | 正确登录、会话查询、退出、错误密码、子系统管理员范围，以及空闲/绝对过期。 |
 | `LoginPanelTest` | 登录界面控件、开发测试账号展示、账号和密码非空校验。 |
 | `DoctorOnboardingIntegrationTest` | 医院管理员分类提交、越权拦截、已有账号精确绑定、外来医生账号自动生成、账号碰撞防护，以及 Access 重启后医生资格保留。 |
-| `AccessLibraryRepositoryTest` | 图书馆表和索引初始化、Repository 映射、唯一约束、借还事务回滚及 Repository 重建后的状态恢复。 |
-| `LibraryPersistenceIntegrationTest` | 真实 Socket 下借书、两次服务器重启、归还、管理员上架及库存汇总的 Access 持久化。 |
+| `AccessLibraryRepositoryTest` | 图书馆表和索引初始化、Repository 映射、唯一约束、借还/预约事务回滚，以及新库演示种子不变量。 |
+| `LibraryPersistenceIntegrationTest` | 真实 Socket 下演示借阅与预约跨重启保留、已有库不重复补种，以及借书、归还、管理员上架。 |
 | `UserAdministrationIntegrationTest`、`AccessUserAuditRepositoryTest` | 超级管理员账号维护、越权拦截、成功/失败审计记录及 Access 重启后记录保留。 |
 
 ### 16.2 登录模块验收条件
@@ -874,6 +972,7 @@ flowchart LR
 |---|---|
 | 登录行为 | `vcampus-client/src/main/java/edu/seu/vcampus/client/module/user/LoginPanel.java` |
 | 登录界面布局与样式 | `vcampus-client/src/main/java/edu/seu/vcampus/client/module/user/LoginPanelDesign.java` |
+| 用户与教师管理样式 | `vcampus-client/src/main/java/edu/seu/vcampus/client/module/user/UserUiTheme.java` |
 | 登录后主界面与模块导航 | `vcampus-client/src/main/java/edu/seu/vcampus/client/view/MainFrame.java` |
 | 客户端登录与会话入口 | `vcampus-client/src/main/java/edu/seu/vcampus/client/application/ClientContext.java` |
 | 客户端会话保存 | `vcampus-client/src/main/java/edu/seu/vcampus/client/application/ClientSession.java` |

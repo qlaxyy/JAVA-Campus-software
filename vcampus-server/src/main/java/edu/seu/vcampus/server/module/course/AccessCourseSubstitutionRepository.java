@@ -56,7 +56,8 @@ final class AccessCourseSubstitutionRepository
 
         String sql =
             "SELECT c.courseId, c.courseCode, "
-                + "c.courseName, c.credits, c.courseType "
+                + "c.courseName, c.credits, c.courseType, "
+                + "c.departmentName "
                 + "FROM tblCourse AS c "
                 + "INNER JOIN tblCourseSubstitution AS s "
                 + "ON c.courseId = s.substituteCourseId "
@@ -96,10 +97,12 @@ final class AccessCourseSubstitutionRepository
                                 "credits"),
                             result.getString(
                                 "courseType"),
+                            result.getString(
+                                "departmentName"),
                             false,
                             findOfferings(
                                 connection,
-                                courseId)));
+                                courseId)) );
                 }
 
                 return List.copyOf(
@@ -434,8 +437,9 @@ final class AccessCourseSubstitutionRepository
         String courseSql =
             "INSERT INTO tblCourse "
                 + "(courseId, courseCode, courseName, "
-                + "credits, courseType, courseGroup) "
-                + "VALUES (?, ?, ?, ?, ?, ?)";
+                + "credits, courseType, departmentName, "
+                + "courseGroup) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?)";
 
         try (PreparedStatement statement =
                  connection.prepareStatement(
@@ -463,6 +467,10 @@ final class AccessCourseSubstitutionRepository
 
             statement.setString(
                 6,
+                course.getDepartmentName());
+
+            statement.setString(
+                7,
                 COURSE_GROUP);
 
             statement.executeUpdate();

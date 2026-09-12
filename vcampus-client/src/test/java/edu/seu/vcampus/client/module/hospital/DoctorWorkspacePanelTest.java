@@ -302,7 +302,7 @@ class DoctorWorkspacePanelTest {
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(context.login(
-                    "20260001", "123456".toCharArray()).isSuccess());
+                    "20260006", "123456".toCharArray()).isSuccess());
             AppointmentBookingView booking = assertInstanceOf(
                     AppointmentBookingView.class,
                     context.send(
@@ -310,7 +310,7 @@ class DoctorWorkspacePanelTest {
                             BookAppointmentRequest.firstVisit("slot-general-1")).getData());
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
-                    "20260002", "123456".toCharArray()).isSuccess());
+                    "20260029", "123456".toCharArray()).isSuccess());
 
             DoctorWorkspacePanel[] panel = new DoctorWorkspacePanel[1];
             SwingUtilities.invokeAndWait(() -> {
@@ -319,7 +319,7 @@ class DoctorWorkspacePanelTest {
             });
 
             assertTrue(awaitCondition(() -> labelTexts(panel[0]).stream()
-                    .anyMatch(text -> text.contains("陈医生") && text.contains("全科门诊"))));
+                    .anyMatch(text -> text.contains("陈安") && text.contains("全科门诊"))));
             List<JButton> schedules = namedButtons(panel[0], "doctorScheduleButton");
             assertEquals(3, schedules.size());
             assertTrue(schedules.getFirst().getParent() instanceof Container);
@@ -382,7 +382,7 @@ class DoctorWorkspacePanelTest {
             ClientContext patientUpdater = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(patientUpdater.login(
-                    "20260001", "123456".toCharArray()).isSuccess());
+                    "20260006", "123456".toCharArray()).isSuccess());
             assertTrue(patientUpdater.send(
                     HospitalActions.UPDATE_MY_HEALTH_PROFILE,
                     new UpdatePatientHealthProfileRequest(

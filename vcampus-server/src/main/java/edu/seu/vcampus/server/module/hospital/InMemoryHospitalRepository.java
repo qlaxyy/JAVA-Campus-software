@@ -79,39 +79,37 @@ final class InMemoryHospitalRepository implements HospitalRepository {
         doctors = new ArrayList<>(List.of(
                 new HospitalDoctor(
                         "doctor-chen",
-                        "U-TEACHER-001",
+                        "U-DOCTOR-001",
                         "dept-general",
-                        "陈医生",
+                        "陈安",
                         "主治医师",
                         true),
                 new HospitalDoctor(
-                        "doctor-liu", "U-TEACHER-002", "dept-general",
-                        "刘医生", "副主任医师", true),
+                        "doctor-liu", "U-DOCTOR-002", "dept-respiratory",
+                        "刘宁", "副主任医师", true),
                 new HospitalDoctor(
-                        "doctor-zhou", null, "dept-respiratory", "周医生", "主治医师", true),
+                        "doctor-zhou", "U-DOCTOR-003", "dept-gastroenterology", "周岚", "主治医师", true),
                 new HospitalDoctor(
-                        "doctor-qian", null, "dept-gastroenterology", "钱医生", "副主任医师", true),
+                        "doctor-qian", "U-DOCTOR-004", "dept-joint-surgery", "何远", "副主任医师", true),
                 new HospitalDoctor(
-                        "doctor-lin", null, "dept-joint-surgery", "林医生", "副主任医师", true),
+                        "doctor-lin", "U-DOCTOR-005", "dept-sports-medicine", "王清", "主治医师", true),
                 new HospitalDoctor(
-                        "doctor-he", null, "dept-joint-surgery", "何医生", "主治医师", true),
+                        "doctor-he", "U-DOCTOR-006", "dept-psychology", "赵健", "医师", true),
                 new HospitalDoctor(
-                        "doctor-wu", null, "dept-sports-medicine", "吴医生", "主治医师", true),
+                        "doctor-wu", "U-DOCTOR-007", "dept-dental", "孙悦", "主治医师", true),
                 new HospitalDoctor(
-                        "doctor-zhang", null, "dept-psychology", "张医生", "主治医师", true),
+                        "doctor-zhang", "U-DOCTOR-008", "dept-eye", "林川", "主治医师", true),
                 new HospitalDoctor(
-                        "doctor-wang", null, "dept-psychology", "王医生", "副主任医师", true),
+                        "doctor-wang", "U-DOCTOR-009", "dept-general", "钱宁", "医师", true),
                 new HospitalDoctor(
-                        "doctor-zhao", null, "dept-dental", "赵医生", "主治医师", true),
-                new HospitalDoctor(
-                        "doctor-sun", null, "dept-eye", "孙医生", "主任医师", true)));
-        doctorProfiles.put("U-TEACHER-001",
+                        "doctor-zhao", "U-DOCTOR-010", "dept-respiratory", "吴凡", "医师", true)));
+        doctorProfiles.put("U-DOCTOR-001",
                 new DoctorProfile(
-                        "U-TEACHER-001", "dept-general", "陈医生",
+                        "U-DOCTOR-001", "dept-general", "陈安",
                         "主治医师", true));
-        doctorProfiles.put("U-TEACHER-002",
+        doctorProfiles.put("U-DOCTOR-002",
                 new DoctorProfile(
-                        "U-TEACHER-002", "dept-general", "刘医生",
+                        "U-DOCTOR-002", "dept-respiratory", "刘宁",
                         "副主任医师", true));
         LocalDateTime profileUpdatedAt = LocalDateTime.now(clock).minusDays(2);
         patientProfiles.put("U-STUDENT-001",
@@ -123,9 +121,9 @@ final class InMemoryHospitalRepository implements HospitalRepository {
                         "无长期用药（演示）",
                         "校园联系人 000-0000（演示）",
                         profileUpdatedAt));
-        patientProfiles.put("U-DEMO-PATIENT-001",
+        patientProfiles.put("U-STUDENT-002",
                 new HospitalPatientProfile(
-                        "U-DEMO-PATIENT-001",
+                        "U-STUDENT-002",
                         "A型（演示）",
                         "青霉素过敏（虚构）",
                         "季节性鼻炎（虚构）",
@@ -176,14 +174,14 @@ final class InMemoryHospitalRepository implements HospitalRepository {
                         "doctor-zhao", "赵医生", "主治医师",
                         today.plusDays(6), 13, 30, 1_500, 8, 1, true),
                 slot("slot-eye-1", "dept-eye", "眼科门诊",
-                        "doctor-sun", "孙医生", "主任医师",
+                        "doctor-zhang", "林川", "主治医师",
                         today.plusDays(5), 8, 30, 2_200, 10, 6, true),
                 slot("slot-eye-closed", "dept-eye", "眼科门诊",
-                        "doctor-sun", "孙医生", "主任医师",
+                        "doctor-zhang", "林川", "主治医师",
                         today.plusDays(3), 8, 30, 2_200, 10, 1, false)));
         LocalDateTime seededAt = LocalDateTime.now(clock).minusDays(1);
-        seedBookings("slot-general-1", 4, 1_200, 1, seededAt);
-        seedBookings("slot-general-2", 10, 1_200, 101, seededAt);
+        seedBookings("slot-general-1", 4, 1_200, 2, seededAt);
+        seedBookings("slot-general-2", 10, 1_200, 6, seededAt);
     }
 
     @Override
@@ -821,7 +819,7 @@ final class InMemoryHospitalRepository implements HospitalRepository {
             String billId = "seed-bill-" + suffix;
             HospitalAppointment appointment = new HospitalAppointment(
                     appointmentId,
-                    "U-DEMO-PATIENT-" + String.format("%03d", patientNumber),
+                    "U-STUDENT-" + String.format("%03d", patientNumber),
                     scheduleId,
                     queueNumber,
                     createdAt.plusMinutes(queueNumber),

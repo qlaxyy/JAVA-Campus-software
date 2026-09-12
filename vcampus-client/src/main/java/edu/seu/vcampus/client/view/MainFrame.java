@@ -5,12 +5,14 @@ import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.application.ModuleAccessPolicy;
 import edu.seu.vcampus.client.module.ClientModule;
 import edu.seu.vcampus.client.module.ClientModules;
+import edu.seu.vcampus.client.module.ModuleViewLifecycle;
 import edu.seu.vcampus.client.module.user.LoginPanel;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.user.SessionInfo;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -58,6 +60,7 @@ public final class MainFrame extends JFrame {
     private static final Color BORDER = new Color(218, 226, 225);
 
     private final CampusClient client;
+    private final CampusClient cardClient;
     private final ClientContext context;
     private final CardLayout applicationLayout = new CardLayout();
     private final JPanel applicationPanel = new JPanel(applicationLayout);
@@ -75,9 +78,20 @@ public final class MainFrame extends JFrame {
      * @param client network client used by the connectivity button
      */
     public MainFrame(CampusClient client) {
+        this(client, client);
+    }
+
+    /**
+     * Creates the shared client window.
+     *
+     * @param client campus services client
+     * @param cardClient campus-card gateway client
+     */
+    public MainFrame(CampusClient client, CampusClient cardClient) {
         super("虚拟校园系统");
         this.client = client;
-        this.context = new ClientContext(client);
+        this.cardClient = cardClient;
+        this.context = new ClientContext(client, cardClient);
         initializeWindow();
     }
 
@@ -262,9 +276,15 @@ public final class MainFrame extends JFrame {
             CardLayout moduleLayout) {
         JPanel page = new JPanel(new BorderLayout());
         page.setBackground(SURFACE);
+        JComponent moduleView = module.createView(context);
         JButton backButton = new JButton("←  返回校园服务");
         backButton.setName("module.back." + module.id());
-        backButton.addActionListener(event -> moduleLayout.show(modulePanel, MODULE_HOME_CARD));
+        backButton.addActionListener(event -> {
+            if (moduleView instanceof ModuleViewLifecycle lifecycle) {
+                lifecycle.onModuleExit();
+            }
+            moduleLayout.show(modulePanel, MODULE_HOME_CARD);
+        });
         styleOutlineButton(backButton);
 
         JPanel toolbar = new JPanel(new BorderLayout());
@@ -279,7 +299,7 @@ public final class MainFrame extends JFrame {
         toolbar.add(moduleTitle, BorderLayout.EAST);
 
         page.add(toolbar, BorderLayout.NORTH);
-        page.add(module.createView(context), BorderLayout.CENTER);
+        page.add(moduleView, BorderLayout.CENTER);
         return page;
     }
 
@@ -317,7 +337,18 @@ public final class MainFrame extends JFrame {
         new SwingWorker<Response, Void>() {
             @Override
             protected Response doInBackground() throws Exception {
-                return client.ping();
+                Response campus = client.ping();
+                if (!campus.isSuccess()) {
+                    return campus;
+                }
+                if (cardClient == client) {
+                    return campus;
+                }
+                Response card = cardClient.ping();
+                if (!card.isSuccess()) {
+                    return card;
+                }
+                return campus;
             }
 
             @Override
@@ -325,7 +356,9 @@ public final class MainFrame extends JFrame {
                 try {
                     Response response = get();
                     if (response.isSuccess()) {
-                        statusLabel.setText("连接成功：" + response.getData());
+                        statusLabel.setText(cardClient == client
+                                ? "连接成功：" + response.getData()
+                                : "校园服务与校园卡网关均可达");
                     } else {
                         statusLabel.setText("服务器拒绝请求：" + response.getCode());
                     }

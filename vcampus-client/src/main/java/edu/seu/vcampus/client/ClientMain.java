@@ -19,17 +19,20 @@ public final class ClientMain {
 
     /**
      * Opens the Swing client for localhost:8888 or the supplied server host and port.
+     * A third argument may set the campus-card gateway port; it defaults to campus port + 1.
      *
-     * @param args optional host followed by optional port
+     * @param args optional host, campus port, and card port
      */
     public static void main(String[] args) {
         String host = args.length > 0 ? args[0] : DEFAULT_HOST;
         int port = args.length > 1 ? Integer.parseInt(args[1]) : DEFAULT_PORT;
+        int cardPort = args.length > 2 ? Integer.parseInt(args[2]) : port + 1;
 
         useSystemLookAndFeel();
         SwingUtilities.invokeLater(() -> {
             CampusClient client = new CampusClient(host, port);
-            MainFrame mainFrame = new MainFrame(client);
+            CampusClient cardClient = new CampusClient(host, cardPort);
+            MainFrame mainFrame = new MainFrame(client, cardClient);
             mainFrame.setVisible(true);
         });
     }

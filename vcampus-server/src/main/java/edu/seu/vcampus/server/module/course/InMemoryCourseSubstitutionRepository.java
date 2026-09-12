@@ -33,9 +33,7 @@ final class InMemoryCourseSubstitutionRepository
     public List<CourseInfo> findSubstituteCourses(
         long batchId) {
 
-        return List.of(
-            createAnalysisCourse()
-        );
+        return List.of();
     }
 
     @Override
@@ -57,7 +55,7 @@ final class InMemoryCourseSubstitutionRepository
                 9001L,
                 "01",
                 List.of(
-                    "赵老师"
+
                 ),
                 List.of(
                     new ScheduleInfo(
@@ -84,7 +82,7 @@ final class InMemoryCourseSubstitutionRepository
                 2002L,
                 "02",
                 List.of(
-                    "孙老师"
+
                 ),
                 List.of(
                     new ScheduleInfo(
@@ -112,11 +110,9 @@ final class InMemoryCourseSubstitutionRepository
             "数学分析基础",
             3.5,
             "任选",
+            "数学学院",
             false,
-            List.of(
-                firstOffering,
-                secondOffering
-            )
+            List.of()
         );
     }
 }

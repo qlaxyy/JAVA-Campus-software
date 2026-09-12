@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.Statement;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -158,6 +160,7 @@ class AccessHospitalRepositoryTest {
         assertEquals("海鲜过敏", reloaded.allergies());
         assertEquals("", reloaded.longTermMedication());
         assertEquals(firstUpdate, reloaded.updatedAt());
+        assertEquals(0L, reloaded.version());
 
         LocalDateTime secondUpdate = firstUpdate.plusHours(2);
         reloaded = new HospitalPatientProfile(
@@ -177,6 +180,51 @@ class AccessHospitalRepositoryTest {
         assertEquals("无已知过敏", updated.allergies());
         assertEquals("维生素（演示）", updated.longTermMedication());
         assertEquals(secondUpdate, updated.updatedAt());
+    }
+
+    @Test
+    void conditionallySavesPatientProfileByVersion() {
+        Path path = temporaryDirectory.resolve("patient-profile-version.accdb");
+        AccessHospitalRepository repository = repository(path);
+        LocalDateTime updatedAt = LocalDateTime.of(2026, 9, 4, 12, 0);
+        HospitalPatientProfile first = new HospitalPatientProfile(
+                "U-PATIENT-VERSION-001", "A型", "无", "", "", "",
+                updatedAt, 1L);
+
+        assertEquals(true, repository.savePatientProfileIfVersion(first, 0L));
+        HospitalPatientProfile second = new HospitalPatientProfile(
+                first.patientUserId(), "B型", "无", "", "", "",
+                updatedAt.plusMinutes(1), 2L);
+        assertEquals(true, repository.savePatientProfileIfVersion(second, 1L));
+        assertEquals(false, repository.savePatientProfileIfVersion(first, 0L));
+        assertEquals("B型", repository(path)
+                .findPatientProfile(first.patientUserId()).orElseThrow().bloodType());
+        assertEquals(2L, repository(path)
+                .findPatientProfile(first.patientUserId()).orElseThrow().version());
+    }
+
+    @Test
+    void migratesLegacyPatientProfileWithoutLosingItsContent() throws Exception {
+        Path path = temporaryDirectory.resolve("patient-profile-legacy.accdb");
+        AccessDatabase database = new AccessDatabase(path);
+        try (Connection connection = database.openConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("CREATE TABLE tblHospitalPatientProfile ("
+                    + "patientUserId TEXT(36) PRIMARY KEY, bloodType TEXT(10), "
+                    + "allergies MEMO, medicalHistory MEMO, longTermMedication MEMO, "
+                    + "emergencyContact TEXT(100), updatedAt DATETIME NOT NULL)");
+            statement.executeUpdate("INSERT INTO tblHospitalPatientProfile "
+                    + "(patientUserId, bloodType, allergies, updatedAt) VALUES "
+                    + "('U-LEGACY-PATIENT', 'O型', '青霉素过敏', #2026-09-04 09:15:00#)");
+        }
+
+        HospitalPatientProfile migrated = repository(path)
+                .findPatientProfile("U-LEGACY-PATIENT")
+                .orElseThrow();
+
+        assertEquals("O型", migrated.bloodType());
+        assertEquals("青霉素过敏", migrated.allergies());
+        assertEquals(0L, migrated.version());
     }
 
     @Test

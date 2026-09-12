@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
@@ -68,9 +69,9 @@ class ConsultationRecordsPanelTest {
                     panel[0], "openConsultationRecordButton").getFirst();
             SwingUtilities.invokeAndWait(open::doClick);
 
-            List<String> details = namedLabels(
+            List<String> details = namedTextAreas(
                     panel[0], "consultationRecordDetail").stream()
-                    .map(JLabel::getText)
+                    .map(JTextArea::getText)
                     .toList();
             assertEquals(7, details.size());
             assertTrue(details.stream()
@@ -95,6 +96,12 @@ class ConsultationRecordsPanelTest {
     private static List<JLabel> namedLabels(Container root, String name) {
         return components(root, JLabel.class).stream()
                 .filter(label -> name.equals(label.getName()))
+                .toList();
+    }
+
+    private static List<JTextArea> namedTextAreas(Container root, String name) {
+        return components(root, JTextArea.class).stream()
+                .filter(area -> name.equals(area.getName()))
                 .toList();
     }
 

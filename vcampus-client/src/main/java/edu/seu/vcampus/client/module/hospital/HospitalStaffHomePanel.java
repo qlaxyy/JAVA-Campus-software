@@ -70,9 +70,9 @@ final class HospitalStaffHomePanel extends JPanel {
         JLabel title = new JLabel(feature.title());
         title.setFont(title.getFont().deriveFont(Font.BOLD, 18F));
         title.setForeground(HospitalTheme.TEXT);
-        JLabel detail = new JLabel("<html><body style='width:220px'>"
-                + feature.description() + "</body></html>");
-        detail.setForeground(HospitalTheme.MUTED);
+        javax.swing.JTextArea detail = HospitalResponsiveLayout.wrappingText(
+                feature.description(), HospitalTheme.uiFont(Font.PLAIN, 13F),
+                HospitalTheme.MUTED);
         boolean available = feature.action() != null;
         JButton state = available
                 ? HospitalTheme.primaryButton(feature.actionText())

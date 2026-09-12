@@ -19,20 +19,24 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.SwingWorker;
+import javax.swing.Timer;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.event.HierarchyEvent;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Predicate;
 
 /** Patient-owned hospital fee statement and simulated payment workflow. */
 final class PatientBillsPanel extends JPanel {
 
+    private static final int AUTO_REFRESH_MILLIS = 15_000;
     private static final DateTimeFormatter DATE_TIME_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
@@ -44,10 +48,13 @@ final class PatientBillsPanel extends JPanel {
     private final JButton unpaidButton = HospitalTheme.quietButton("待缴费");
     private final JButton historyButton = HospitalTheme.quietButton("已支付 / 已退款");
     private final JButton retryButton = HospitalTheme.quietButton("重试");
+    private final Timer autoRefreshTimer = new Timer(
+            AUTO_REFRESH_MILLIS, event -> loadBills(false));
 
     private List<PatientBillView> bills = List.of();
     private BillFilter filter = BillFilter.ALL;
     private boolean busy;
+    private int requestVersion;
 
     PatientBillsPanel(ClientContext context, Runnable back) {
         this.context = context;
@@ -69,10 +76,28 @@ final class PatientBillsPanel extends JPanel {
         retryButton.addActionListener(event -> loadBills());
         retryButton.setVisible(false);
         updateFilterStyles();
+        autoRefreshTimer.setCoalesce(true);
+        addHierarchyListener(event -> {
+            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0) {
+                return;
+            }
+            if (isShowing()) {
+                autoRefreshTimer.restart();
+            } else {
+                autoRefreshTimer.stop();
+                requestVersion++;
+                busy = false;
+            }
+        });
     }
 
     void activate() {
-        loadBills();
+        bills = List.of();
+        summaryLabel.setText("正在读取费用……");
+        billList.removeAll();
+        billList.revalidate();
+        billList.repaint();
+        loadBills(true);
     }
 
     private JComponent createHeader(Runnable back) {
@@ -147,9 +172,15 @@ final class PatientBillsPanel extends JPanel {
     }
 
     private void loadBills() {
-        if (busy) {
+        loadBills(false);
+    }
+
+    private void loadBills(boolean supersedeCurrentRequest) {
+        if (busy && !supersedeCurrentRequest) {
             return;
         }
+        int version = ++requestVersion;
+        String requestedUserId = currentUserId();
         busy = true;
         statusLabel.setText("正在更新……");
         statusLabel.setForeground(HospitalTheme.MUTED);
@@ -162,6 +193,10 @@ final class PatientBillsPanel extends JPanel {
 
             @Override
             protected void done() {
+                if (version != requestVersion
+                        || !Objects.equals(requestedUserId, currentUserId())) {
+                    return;
+                }
                 try {
                     Response response = get();
                     if (response.isSuccess()
@@ -179,7 +214,9 @@ final class PatientBillsPanel extends JPanel {
                 } catch (ExecutionException exception) {
                     showLoadError("无法连接服务器，请确认服务器已经启动。");
                 } finally {
-                    busy = false;
+                    if (version == requestVersion) {
+                        busy = false;
+                    }
                 }
             }
         }.execute();
@@ -237,7 +274,7 @@ final class PatientBillsPanel extends JPanel {
             for (PatientBillView bill : visible) {
                 JComponent card = billCard(bill);
                 card.setAlignmentX(Component.LEFT_ALIGNMENT);
-                card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 164));
+                card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 220));
                 billList.add(card);
                 billList.add(Box.createVerticalStrut(10));
             }
@@ -309,8 +346,8 @@ final class PatientBillsPanel extends JPanel {
         }
 
         card.add(rail, BorderLayout.WEST);
-        card.add(copy, BorderLayout.CENTER);
-        card.add(amount, BorderLayout.EAST);
+        card.add(HospitalResponsiveLayout.adaptiveRow(copy, amount, 600, 16),
+                BorderLayout.CENTER);
         return card;
     }
 
@@ -332,6 +369,8 @@ final class PatientBillsPanel extends JPanel {
     }
 
     private void payBill(PatientBillView bill) {
+        int version = ++requestVersion;
+        String requestedUserId = currentUserId();
         busy = true;
         statusLabel.setText("正在完成模拟缴费……");
         new SwingWorker<Response, Void>() {
@@ -344,6 +383,10 @@ final class PatientBillsPanel extends JPanel {
 
             @Override
             protected void done() {
+                if (version != requestVersion
+                        || !Objects.equals(requestedUserId, currentUserId())) {
+                    return;
+                }
                 try {
                     Response response = get();
                     if (response.isSuccess()) {
@@ -413,6 +456,12 @@ final class PatientBillsPanel extends JPanel {
 
     private static String safeMessage(String message) {
         return message == null || message.isBlank() ? "服务器未返回具体原因。" : message;
+    }
+
+    private String currentUserId() {
+        return context.currentSession()
+                .map(session -> session.getUserId())
+                .orElse(null);
     }
 
     private enum BillFilter {

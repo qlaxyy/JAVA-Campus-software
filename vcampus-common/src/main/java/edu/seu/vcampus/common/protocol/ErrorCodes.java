@@ -81,6 +81,8 @@ public final class ErrorCodes {
             "HOSPITAL_DEPARTMENT_CONFLICT";
     public static final String HOSPITAL_DEPARTMENT_IN_USE =
             "HOSPITAL_DEPARTMENT_IN_USE";
+    public static final String HOSPITAL_HEALTH_PROFILE_CONFLICT =
+            "HOSPITAL_HEALTH_PROFILE_CONFLICT";
     public static final String CARD_INSUFFICIENT_BALANCE = "CARD_INSUFFICIENT_BALANCE";
     public static final String SHOP_INSUFFICIENT_BALANCE = "SHOP_INSUFFICIENT_BALANCE";
     public static final String SHOP_OUT_OF_STOCK = "SHOP_OUT_OF_STOCK";

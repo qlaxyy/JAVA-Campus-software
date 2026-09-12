@@ -417,6 +417,20 @@ final class InMemoryHospitalRepository implements HospitalRepository {
         patientProfiles.put(profile.patientUserId(), profile);
     }
 
+    @Override
+    public synchronized boolean savePatientProfileIfVersion(
+            HospitalPatientProfile profile,
+            long expectedVersion) {
+        Objects.requireNonNull(profile, "profile must not be null");
+        HospitalPatientProfile current = patientProfiles.get(profile.patientUserId());
+        long currentVersion = current == null ? 0L : current.version();
+        if (currentVersion != expectedVersion) {
+            return false;
+        }
+        patientProfiles.put(profile.patientUserId(), profile);
+        return true;
+    }
+
     List<HospitalPatientProfile> findAllPatientProfiles() {
         return List.copyOf(patientProfiles.values());
     }

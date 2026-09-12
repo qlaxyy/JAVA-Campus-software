@@ -88,12 +88,12 @@ final class AdminDepartmentPanel extends JPanel {
     }
 
     private JPanel content() {
-        JPanel content = new JPanel(new BorderLayout(18, 0));
+        JPanel content = HospitalResponsiveLayout.grid(2, 360, 18, 18);
+        content.setName("adminDepartmentResponsiveBody");
         content.setOpaque(false);
-        content.add(catalog(), BorderLayout.CENTER);
+        content.add(catalog());
         JScrollPane editorScroll = HospitalResponsiveLayout.verticalScroll(editor());
-        editorScroll.setPreferredSize(new Dimension(390, 0));
-        content.add(editorScroll, BorderLayout.EAST);
+        content.add(editorScroll);
         return content;
     }
 
@@ -127,7 +127,6 @@ final class AdminDepartmentPanel extends JPanel {
                 HospitalTheme.PRIMARY_LIGHT, 14);
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(BorderFactory.createEmptyBorder(22, 22, 22, 22));
-        panel.setPreferredSize(new Dimension(370, 560));
         JLabel title = new JLabel("科室资料");
         title.setFont(HospitalTheme.uiFont(Font.BOLD, 20F));
         title.setForeground(HospitalTheme.PRIMARY_DARK);
@@ -373,10 +372,9 @@ final class AdminDepartmentPanel extends JPanel {
         return field;
     }
 
-    private static JLabel note(String text) {
-        JLabel label = new JLabel("<html><body style='width:300px'>" + text + "</body></html>");
-        label.setForeground(HospitalTheme.MUTED);
-        return label;
+    private static javax.swing.JTextArea note(String text) {
+        return HospitalResponsiveLayout.wrappingText(
+                text, HospitalTheme.uiFont(Font.PLAIN, 13F), HospitalTheme.MUTED);
     }
 
     private static JPanel verticalList() {

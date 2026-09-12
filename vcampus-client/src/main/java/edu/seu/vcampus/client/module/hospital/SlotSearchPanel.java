@@ -27,6 +27,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.ScrollPaneConstants;
@@ -302,14 +303,14 @@ final class SlotSearchPanel extends JPanel {
     }
 
     private JComponent createDepartmentPage() {
-        JPanel page = new JPanel(new BorderLayout(18, 0));
+        JPanel page = HospitalResponsiveLayout.grid(2, 300, 18, 18);
+        page.setName("departmentBrowserResponsiveBody");
         page.setOpaque(false);
 
         HospitalTheme.SurfacePanel majorArea = new HospitalTheme.SurfacePanel(
                 HospitalTheme.NAVIGATION, 16);
         majorArea.setLayout(new BorderLayout(0, 14));
         majorArea.setBorder(BorderFactory.createEmptyBorder(20, 14, 18, 14));
-        majorArea.setPreferredSize(new Dimension(238, 0));
         JPanel majorHeading = new JPanel();
         majorHeading.setOpaque(false);
         majorHeading.setLayout(new BoxLayout(majorHeading, BoxLayout.Y_AXIS));
@@ -343,7 +344,7 @@ final class SlotSearchPanel extends JPanel {
                 majorDepartmentPanel);
         majorArea.add(majorHeading, BorderLayout.NORTH);
         majorArea.add(majorScroll, BorderLayout.CENTER);
-        page.add(majorArea, BorderLayout.WEST);
+        page.add(majorArea);
 
         HospitalTheme.SurfacePanel details = new HospitalTheme.SurfacePanel(
                 HospitalTheme.SURFACE, 14, HospitalTheme.BORDER);
@@ -363,7 +364,7 @@ final class SlotSearchPanel extends JPanel {
                 departmentDetailPanel);
         details.add(detailHeading, BorderLayout.NORTH);
         details.add(detailScroll, BorderLayout.CENTER);
-        page.add(details, BorderLayout.CENTER);
+        page.add(details);
         return page;
     }
 
@@ -839,10 +840,8 @@ final class SlotSearchPanel extends JPanel {
         departmentButtons.removeIf(button -> !(button instanceof JToggleButton));
         departmentDetailTitle.setText(title);
         departmentDetailPanel.removeAll();
-        JLabel message = new JLabel(
-                "<html><body style='width:420px'>" + detail + "</body></html>");
-        message.setFont(HospitalTheme.uiFont(Font.PLAIN, 14F));
-        message.setForeground(HospitalTheme.MUTED);
+        JTextArea message = HospitalResponsiveLayout.wrappingText(
+                detail, HospitalTheme.uiFont(Font.PLAIN, 14F), HospitalTheme.MUTED);
         message.setBorder(BorderFactory.createEmptyBorder(18, 4, 0, 4));
         departmentDetailPanel.add(message);
         departmentDetailPanel.revalidate();
@@ -1062,7 +1061,7 @@ final class SlotSearchPanel extends JPanel {
                 HospitalTheme.SURFACE, 12, HospitalTheme.BORDER);
         card.setLayout(new BorderLayout(18, 0));
         card.setBorder(BorderFactory.createEmptyBorder(13, 14, 13, 14));
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 124));
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 210));
 
         HospitalTheme.SurfacePanel time = new HospitalTheme.SurfacePanel(
                 HospitalTheme.PRIMARY_LIGHT, 10);
@@ -1106,14 +1105,12 @@ final class SlotSearchPanel extends JPanel {
         doctor.add(doctorTitle);
         doctor.add(Box.createVerticalStrut(8));
         doctor.add(department);
-        card.add(doctor, BorderLayout.CENTER);
 
         boolean booked = slot.isBookedByCurrentUser();
         boolean available = slot.getAvailability() == SlotAvailability.AVAILABLE && !booked;
         JPanel action = new JPanel();
         action.setOpaque(false);
         action.setLayout(new BoxLayout(action, BoxLayout.X_AXIS));
-        action.setPreferredSize(new Dimension(258, 92));
 
         JPanel bookingInfo = new JPanel();
         bookingInfo.setOpaque(false);
@@ -1168,7 +1165,10 @@ final class SlotSearchPanel extends JPanel {
         action.add(bookingInfo);
         action.add(Box.createHorizontalStrut(14));
         action.add(reserve);
-        card.add(action, BorderLayout.EAST);
+        JPanel adaptiveContent = HospitalResponsiveLayout.adaptiveRow(
+                doctor, action, 560, 14);
+        adaptiveContent.setName("slotAdaptiveContent");
+        card.add(adaptiveContent, BorderLayout.CENTER);
         return card;
     }
 

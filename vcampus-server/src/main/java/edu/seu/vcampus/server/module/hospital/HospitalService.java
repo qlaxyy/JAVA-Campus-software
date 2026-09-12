@@ -88,7 +88,7 @@ final class HospitalService {
 
     private final HospitalRepository repository;
     private final Clock clock;
-    private final HospitalTriageEngine triageEngine = new HospitalTriageEngine();
+    private final HybridHospitalTriageEngine triageEngine;
     private final ConcurrentMap<String, Object> scheduleLocks = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Object> doctorScheduleLocks =
             new ConcurrentHashMap<>();
@@ -96,8 +96,18 @@ final class HospitalService {
     private final ConcurrentMap<String, Object> billLocks = new ConcurrentHashMap<>();
 
     HospitalService(HospitalRepository repository, Clock clock) {
+        this(repository, clock, HospitalAiTriageClient.disabled());
+    }
+
+    HospitalService(
+            HospitalRepository repository,
+            Clock clock,
+            HospitalAiTriageClient aiTriageClient) {
         this.repository = Objects.requireNonNull(repository, "repository must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.triageEngine = new HybridHospitalTriageEngine(
+                new HospitalTriageEngine(),
+                Objects.requireNonNull(aiTriageClient, "aiTriageClient must not be null"));
     }
 
     HospitalModeAccessView getModeAccess(SessionInfo session) {
@@ -1295,16 +1305,22 @@ final class HospitalService {
             Object scheduleLock = scheduleLocks.computeIfAbsent(
                     selectedSlot.scheduleId(), ignored -> new Object());
             synchronized (scheduleLock) {
+                HospitalSlot confirmedSlot = repository
+                        .findSlotById(selectedSlot.scheduleId())
+                        .orElseThrow(() -> businessFailure(
+                                ErrorCodes.HOSPITAL_SCHEDULE_NOT_FOUND,
+                                "The selected result-review schedule no longer exists."));
+                validateBookableSlot(confirmedSlot);
                 List<HospitalAppointment> appointments = repository
-                        .findAppointmentsByScheduleId(selectedSlot.scheduleId());
-                int queueNumber = allocateQueueNumber(selectedSlot, appointments);
+                        .findAppointmentsByScheduleId(confirmedSlot.scheduleId());
+                int queueNumber = allocateQueueNumber(confirmedSlot, appointments);
                 LocalDateTime now = LocalDateTime.now(clock);
                 String appointmentId = "appointment-" + UUID.randomUUID();
                 String billId = "bill-" + UUID.randomUUID();
                 HospitalAppointment appointment = new HospitalAppointment(
                         appointmentId,
                         session.getUserId(),
-                        selectedSlot.scheduleId(),
+                        confirmedSlot.scheduleId(),
                         queueNumber,
                         now,
                         null,
@@ -1325,8 +1341,8 @@ final class HospitalService {
                 return new AppointmentBookingView(
                         appointmentId, queueNumber, AppointmentStatus.BOOKED,
                         billId, PaymentStatus.PAID, 0,
-                        selectedSlot.doctorName(), selectedSlot.departmentName(),
-                        selectedSlot.startTime(), selectedSlot.endTime(), now, now);
+                        confirmedSlot.doctorName(), confirmedSlot.departmentName(),
+                        confirmedSlot.startTime(), confirmedSlot.endTime(), now, now);
             }
         }
     }
@@ -1377,8 +1393,14 @@ final class HospitalService {
                 request.getMedicalHistory(),
                 request.getLongTermMedication(),
                 request.getEmergencyContact(),
-                LocalDateTime.now(clock));
-        repository.savePatientProfile(profile);
+                LocalDateTime.now(clock),
+                request.getExpectedVersion() + 1L);
+        if (!repository.savePatientProfileIfVersion(
+                profile, request.getExpectedVersion())) {
+            throw businessFailure(
+                    ErrorCodes.HOSPITAL_HEALTH_PROFILE_CONFLICT,
+                    "健康档案已在其他窗口更新，请重新载入最新内容后再编辑。");
+        }
         return toProfileView(profile);
     }
 
@@ -1802,7 +1824,7 @@ final class HospitalService {
 
     private HospitalPatientProfile emptyProfile(String patientUserId) {
         return new HospitalPatientProfile(
-                patientUserId, "", "", "", "", "", LocalDateTime.now(clock));
+                patientUserId, "", "", "", "", "", LocalDateTime.now(clock), 0L);
     }
 
     private static PatientHealthProfileView toProfileView(
@@ -1813,7 +1835,8 @@ final class HospitalService {
                 profile.medicalHistory(),
                 profile.longTermMedication(),
                 profile.emergencyContact(),
-                profile.updatedAt());
+                profile.updatedAt(),
+                profile.version());
     }
 
     private static void validateConsultationRequest(SubmitConsultationRequest request) {

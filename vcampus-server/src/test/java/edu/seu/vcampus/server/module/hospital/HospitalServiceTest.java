@@ -789,6 +789,7 @@ class HospitalServiceTest {
                         "家属 13800000000"));
 
         assertEquals("AB型", updated.getBloodType());
+        assertEquals(1L, updated.getVersion());
         assertEquals("花粉过敏",
                 service.getMyHealthRecord(patient).getHealthProfile().getAllergies());
         assertEquals("花粉过敏", service.getDoctorConsultationContext(
@@ -803,6 +804,25 @@ class HospitalServiceTest {
                         patient,
                         new UpdatePatientHealthProfileRequest(
                                 "A".repeat(31), "", "", "", "")));
+    }
+
+    @Test
+    void rejectsAStalePatientHealthProfileUpdateInsteadOfOverwritingIt() {
+        SessionInfo patient = session("U-STUDENT-001", Role.USER);
+        var first = service.updateMyHealthProfile(
+                patient,
+                new UpdatePatientHealthProfileRequest(
+                        "A型", "无", "", "", "", 0L));
+
+        assertEquals(1L, first.getVersion());
+        assertBusinessFailure(
+                ErrorCodes.HOSPITAL_HEALTH_PROFILE_CONFLICT,
+                () -> service.updateMyHealthProfile(
+                        patient,
+                        new UpdatePatientHealthProfileRequest(
+                                "B型", "花粉过敏", "", "", "", 0L)));
+        assertEquals("A型",
+                service.getMyHealthRecord(patient).getHealthProfile().getBloodType());
     }
 
     @Test
@@ -1112,6 +1132,53 @@ class HospitalServiceTest {
             start.countDown();
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    void rechecksSelectedResultReviewScheduleAfterAcquiringItsLock() {
+        InMemoryHospitalRepository repository =
+                new InMemoryHospitalRepository(FIXED_CLOCK);
+        HospitalService setupService = new HospitalService(repository, FIXED_CLOCK);
+        SessionInfo patient = session("U-RESULT-REVIEW-CLOSED-RACE", Role.USER);
+        AppointmentBookingView firstVisit = setupService.bookAppointment(
+                patient, BookAppointmentRequest.firstVisit("slot-general-1"));
+        ExaminationOrderView order = setupService.submitExaminationPlan(
+                session("U-TEACHER-001", Role.USER),
+                new SubmitExaminationPlanRequest(
+                        firstVisit.getAppointmentId(), "待查", "血常规", "", ""));
+        setupService.publishDemoExaminationReport(
+                patient, new PublishDemoExaminationReportRequest(order.getOrderId()));
+        HospitalSlot candidate = repository.findSlotById("slot-general-3").orElseThrow();
+        HospitalSlot closedCandidate = new HospitalSlot(
+                candidate.scheduleId(), candidate.departmentId(), candidate.departmentName(),
+                candidate.doctorId(), candidate.doctorName(), candidate.doctorTitle(),
+                candidate.startTime(), candidate.endTime(), candidate.priceCents(),
+                candidate.capacity(), candidate.bookedCount(), false);
+        HospitalRepository changingRepository = (HospitalRepository) Proxy.newProxyInstance(
+                HospitalRepository.class.getClassLoader(),
+                new Class<?>[]{HospitalRepository.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("findSlots")) {
+                        return List.of(candidate);
+                    }
+                    if (method.getName().equals("findSlotById")
+                            && candidate.scheduleId().equals(arguments[0])) {
+                        return java.util.Optional.of(closedCandidate);
+                    }
+                    try {
+                        return method.invoke(repository, arguments);
+                    } catch (InvocationTargetException exception) {
+                        throw exception.getCause();
+                    }
+                });
+
+        HospitalService changingService = new HospitalService(
+                changingRepository, FIXED_CLOCK);
+
+        assertBusinessFailure(
+                ErrorCodes.HOSPITAL_SCHEDULE_CLOSED,
+                () -> changingService.bookResultReview(
+                        patient, new BookResultReviewRequest(order.getOrderId())));
     }
 
     @Test

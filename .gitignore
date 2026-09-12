@@ -24,3 +24,6 @@ Thumbs.db
 # Keep acceptance databases out of ad-hoc commits; release artifacts are added intentionally.
 *.accdb
 !release/**/*.accdb
+
+# Local AI credentials. Commit only the adjacent example file.
+config/hospital-ai.properties

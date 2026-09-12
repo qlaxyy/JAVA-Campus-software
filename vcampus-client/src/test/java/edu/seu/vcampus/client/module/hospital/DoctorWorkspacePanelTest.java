@@ -329,6 +329,8 @@ class DoctorWorkspacePanelTest {
 
             assertTrue(awaitCondition(() -> namedButtons(
                     panel[0], "doctorAppointmentButton").size() == 5));
+            assertEquals(5, namedComponents(
+                    panel[0], JPanel.class, "doctorAppointmentAdaptiveContent").size());
             JButton patient = namedButtons(panel[0], "doctorAppointmentButton").stream()
                     .filter(button -> {
                         Container card = namedAncestor(button, "doctorAppointmentCard");
@@ -365,6 +367,8 @@ class DoctorWorkspacePanelTest {
                     panel[0], "submitConsultationButton").size());
             assertEquals(1, namedButtons(
                     panel[0], "submitExaminationPlanButton").size());
+            assertEquals(1, namedComponents(
+                    panel[0], JPanel.class, "doctorCurrentVisitResponsiveColumns").size());
             assertTrue(labelTexts(panel[0]).stream()
                     .anyMatch(text -> text.contains("患者自述健康档案")));
             JPanel consultationForm = namedComponents(
@@ -417,9 +421,13 @@ class DoctorWorkspacePanelTest {
     }
 
     private static List<String> labelTexts(Container root) {
-        return components(root, JLabel.class).stream()
+        List<String> texts = new ArrayList<>(components(root, JLabel.class).stream()
                 .map(JLabel::getText)
-                .toList();
+                .toList());
+        texts.addAll(components(root, JTextArea.class).stream()
+                .map(JTextArea::getText)
+                .toList());
+        return texts;
     }
 
     private static DoctorConsultationContextView consultationContext(

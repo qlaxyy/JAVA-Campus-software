@@ -11,7 +11,20 @@ record HospitalPatientProfile(
         String medicalHistory,
         String longTermMedication,
         String emergencyContact,
-        LocalDateTime updatedAt) {
+        LocalDateTime updatedAt,
+        long version) {
+
+    HospitalPatientProfile(
+            String patientUserId,
+            String bloodType,
+            String allergies,
+            String medicalHistory,
+            String longTermMedication,
+            String emergencyContact,
+            LocalDateTime updatedAt) {
+        this(patientUserId, bloodType, allergies, medicalHistory,
+                longTermMedication, emergencyContact, updatedAt, 0L);
+    }
 
     HospitalPatientProfile {
         patientUserId = requireText(patientUserId, "patientUserId");
@@ -21,6 +34,9 @@ record HospitalPatientProfile(
         longTermMedication = normalize(longTermMedication);
         emergencyContact = normalize(emergencyContact);
         Objects.requireNonNull(updatedAt, "updatedAt must not be null");
+        if (version < 0L) {
+            throw new IllegalArgumentException("version must not be negative");
+        }
     }
 
     private static String requireText(String value, String fieldName) {

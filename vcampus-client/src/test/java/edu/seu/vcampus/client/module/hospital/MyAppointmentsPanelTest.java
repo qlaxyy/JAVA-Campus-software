@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import javax.swing.JLabel;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
@@ -64,6 +65,10 @@ class MyAppointmentsPanelTest {
             assertTrue(labelTexts(panel[0]).contains("候诊 5 号"));
             assertTrue(labelTexts(panel[0]).contains("挂号费 ¥12.00  ·  已支付"));
             assertEquals(2, appointmentCards(panel[0]).size());
+            assertEquals(2, components(panel[0], JPanel.class).stream()
+                    .filter(component -> "appointmentAdaptiveContent"
+                            .equals(component.getName()))
+                    .count());
             assertTrue(labelTexts(appointmentCards(panel[0]).getFirst())
                     .contains(nearDate));
 

@@ -366,9 +366,8 @@ final class HospitalHomePanel extends JPanel {
         heading.add(numberLabel, BorderLayout.WEST);
         heading.add(title, BorderLayout.CENTER);
 
-        JLabel detail = new JLabel(
-                "<html><body style='width:150px'>" + description + "</body></html>");
-        detail.setForeground(HospitalTheme.MUTED);
+        javax.swing.JTextArea detail = HospitalResponsiveLayout.wrappingText(
+                description, HospitalTheme.uiFont(Font.PLAIN, 13F), HospitalTheme.MUTED);
         card.add(heading, BorderLayout.NORTH);
         card.add(detail, BorderLayout.CENTER);
         return card;
@@ -386,9 +385,8 @@ final class HospitalHomePanel extends JPanel {
         JLabel title = new JLabel(titleText);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 16F));
         title.setForeground(available ? HospitalTheme.PRIMARY_DARK : HospitalTheme.TEXT);
-        JLabel detail = new JLabel("<html><body style='width:150px'>" + description
-                + "</body></html>");
-        detail.setForeground(HospitalTheme.MUTED);
+        javax.swing.JTextArea detail = HospitalResponsiveLayout.wrappingText(
+                description, HospitalTheme.uiFont(Font.PLAIN, 13F), HospitalTheme.MUTED);
 
         JButton state = new JButton(available ? "立即使用" : "后续开放");
         state.setEnabled(available);

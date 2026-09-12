@@ -278,8 +278,9 @@ BOOKED ─────→ COMPLETED
 | `longTermMedication` | Long Text | 否 | `null` | 长期用药自述 |
 | `emergencyContact` | Short Text(100) | 否 | `null` | 课程演示数据，不使用真实联系方式 |
 | `updatedAt` | Date/Time | 是 | 新建时间 | 最近修改时间 |
+| `profileVersion` | Long Integer | 是 | `0` | 乐观并发版本；每次成功保存加 1 |
 
-该表由患者本人维护，医生只能在拥有合法待接诊预约时读取。空字符串入库前统一转为 `null`，避免两种“未填写”表示。
+该表由患者本人维护，医生只能在拥有合法待接诊预约时读取。空字符串入库前统一转为 `null`，避免两种“未填写”表示。客户端保存时提交其读取到的 `profileVersion`；版本不一致时服务器拒绝覆盖并要求重新载入。旧数据库启动时以增量迁移补列，历史记录从版本 `0` 开始。
 
 ### 4.7 `tblHospitalConsultation`：诊断与处置
 

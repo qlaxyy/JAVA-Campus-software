@@ -120,13 +120,13 @@ final class AdminSchedulePanel extends JPanel {
     }
 
     private JComponent createBody() {
-        JPanel body = new JPanel(new BorderLayout(18, 0));
+        JPanel body = HospitalResponsiveLayout.grid(2, 360, 18, 18);
+        body.setName("adminScheduleResponsiveBody");
         body.setOpaque(false);
         JComponent form = createForm();
         JScrollPane formScroll = HospitalResponsiveLayout.verticalScroll(form);
-        formScroll.setPreferredSize(new Dimension(390, 0));
-        body.add(formScroll, BorderLayout.WEST);
-        body.add(createScheduleArea(), BorderLayout.CENTER);
+        body.add(formScroll);
+        body.add(createScheduleArea());
         return body;
     }
 
@@ -304,7 +304,7 @@ final class AdminSchedulePanel extends JPanel {
             for (SlotView schedule : schedules) {
                 JComponent card = createScheduleCard(schedule);
                 card.setAlignmentX(Component.LEFT_ALIGNMENT);
-                card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 134));
+                card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 184));
                 scheduleList.add(card);
                 scheduleList.add(Box.createVerticalStrut(10));
             }
@@ -383,8 +383,8 @@ final class AdminSchedulePanel extends JPanel {
         actions.add(toggle);
 
         card.add(rail, BorderLayout.WEST);
-        card.add(copy, BorderLayout.CENTER);
-        card.add(actions, BorderLayout.EAST);
+        card.add(HospitalResponsiveLayout.adaptiveRow(copy, actions, 540, 15),
+                BorderLayout.CENTER);
         return card;
     }
 

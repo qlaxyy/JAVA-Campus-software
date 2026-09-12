@@ -76,7 +76,7 @@ class PatientHealthRecordPanelTest {
                     panel[0], "openPatientProfileButton").size() == 1));
             assertEquals(1, namedButtons(
                     panel[0], "openPatientHistoryButton").size());
-            assertTrue(labelTexts(panel[0]).stream()
+            assertTrue(copyTexts(panel[0]).stream()
                     .anyMatch(text -> text.contains("1 次就诊记录")));
 
             SwingUtilities.invokeAndWait(() -> namedButtons(
@@ -93,9 +93,9 @@ class PatientHealthRecordPanelTest {
                 namedButtons(panel[0], "savePatientHealthProfileButton")
                         .getFirst().doClick();
             });
-            assertTrue(awaitCondition(() -> namedLabels(
+            assertTrue(awaitCondition(() -> namedTextAreas(
                     panel[0], "patientHealthRecordDetail").stream()
-                    .map(JLabel::getText)
+                    .map(JTextArea::getText)
                     .anyMatch(text -> text.contains("花粉过敏（课程演示）"))));
 
             SwingUtilities.invokeAndWait(panel[0]::activate);
@@ -108,8 +108,8 @@ class PatientHealthRecordPanelTest {
                     panel[0], "openHealthHistoryDetailButton").size());
             SwingUtilities.invokeAndWait(() -> namedButtons(
                     panel[0], "openHealthHistoryDetailButton").getFirst().doClick());
-            assertTrue(namedLabels(panel[0], "patientHealthRecordDetail").stream()
-                    .map(JLabel::getText)
+            assertTrue(namedTextAreas(panel[0], "patientHealthRecordDetail").stream()
+                    .map(JTextArea::getText)
                     .anyMatch(text -> text.contains("对症处置并休息")));
             assertEquals(1, namedButtons(
                     panel[0], "bookOrdinaryFollowUpButton").size());
@@ -200,6 +200,14 @@ class PatientHealthRecordPanelTest {
                 .toList();
     }
 
+    private static List<String> copyTexts(Container root) {
+        List<String> texts = new ArrayList<>(labelTexts(root));
+        texts.addAll(components(root, JTextArea.class).stream()
+                .map(JTextArea::getText)
+                .toList());
+        return texts;
+    }
+
     private static List<JButton> namedButtons(Container root, String name) {
         return components(root, JButton.class).stream()
                 .filter(button -> name.equals(button.getName()))
@@ -210,6 +218,10 @@ class PatientHealthRecordPanelTest {
         return components(root, JLabel.class).stream()
                 .filter(label -> name.equals(label.getName()))
                 .toList();
+    }
+
+    private static List<JTextArea> namedTextAreas(Container root, String name) {
+        return namedComponents(root, JTextArea.class, name);
     }
 
     private static <T extends Component> List<T> namedComponents(

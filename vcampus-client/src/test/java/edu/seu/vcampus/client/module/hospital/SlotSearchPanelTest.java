@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import javax.swing.AbstractButton;
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
@@ -129,6 +130,13 @@ class SlotSearchPanelTest {
             });
             assertEquals(2, labels.get().size());
             assertFalse(labels.get().stream().anyMatch(text -> text.contains(" / ")));
+            assertEquals(2, components(panel[0], JPanel.class).stream()
+                    .filter(component -> "slotAdaptiveContent".equals(component.getName()))
+                    .count());
+            assertEquals(1, components(panel[0], JPanel.class).stream()
+                    .filter(component -> "departmentBrowserResponsiveBody"
+                            .equals(component.getName()))
+                    .count());
 
             SwingUtilities.invokeAndWait(() -> visibleTextField(panel[0]).setText("不存在"));
             assertTrue(awaitCondition(() -> enabledBookingButtons(panel[0]).isEmpty()));

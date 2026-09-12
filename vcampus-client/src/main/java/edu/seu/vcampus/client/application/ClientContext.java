@@ -69,7 +69,21 @@ public final class ClientContext {
      * @throws IOException when the server cannot be reached
      */
     public Response send(String action, Serializable data) throws IOException {
-        Response response = client.send(Request.create(action, session.tokenOrNull(), data));
+        return handleAuthenticatedResponse(
+                client.send(Request.create(action, session.tokenOrNull(), data)));
+    }
+
+    /** Sends an operation that needs a longer response timeout than ordinary actions. */
+    public Response send(
+            String action,
+            Serializable data,
+            int operationTimeoutMillis) throws IOException {
+        return handleAuthenticatedResponse(client.send(
+                Request.create(action, session.tokenOrNull(), data),
+                operationTimeoutMillis));
+    }
+
+    private Response handleAuthenticatedResponse(Response response) {
         if (ErrorCodes.AUTH_REQUIRED.equals(response.getCode())
                 && session.current().isPresent()) {
             session.clear();

@@ -33,6 +33,7 @@ import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingConstants;
 import javax.swing.SwingWorker;
+import javax.swing.Timer;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.event.DocumentEvent;
@@ -45,6 +46,7 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
+import java.awt.event.HierarchyEvent;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
@@ -53,11 +55,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 
 /** Page-based doctor flow from schedule to queue to one patient's visit context. */
 final class DoctorWorkspacePanel extends JPanel {
 
+    private static final int AUTO_REFRESH_MILLIS = 15_000;
     private static final String SCHEDULES_PAGE = "schedules";
     private static final String QUEUE_PAGE = "queue";
     private static final String APPOINTMENT_PAGE = "appointment";
@@ -117,12 +121,15 @@ final class DoctorWorkspacePanel extends JPanel {
     private final JLabel examinationsTitle = new JLabel("检查报告");
     private final JLabel examinationsSubtitle = new JLabel(" ");
     private final JPanel examinationsList = verticalList();
+    private final Timer autoRefreshTimer = new Timer(
+            AUTO_REFRESH_MILLIS, event -> refreshWorkspaceData());
     private DoctorConsultationContextView currentConsultationContext;
     private String currentAppointmentId;
     private DoctorWorkspaceView workspace;
     private DoctorScheduleView currentSchedule;
     private final Map<String, ConsultationDraft> consultationDrafts = new HashMap<>();
     private int requestVersion;
+    private int workspaceRefreshVersion;
 
     DoctorWorkspacePanel(ClientContext context, Runnable switchMode) {
         this.context = context;
@@ -144,10 +151,23 @@ final class DoctorWorkspacePanel extends JPanel {
         pages.add(createFollowUpDetailPage(), FOLLOW_UP_DETAIL_PAGE);
         add(pages, BorderLayout.CENTER);
         showLoading();
+        autoRefreshTimer.setCoalesce(true);
+        addHierarchyListener(event -> {
+            if ((event.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0) {
+                return;
+            }
+            if (isShowing()) {
+                autoRefreshTimer.restart();
+            } else {
+                autoRefreshTimer.stop();
+                workspaceRefreshVersion++;
+            }
+        });
     }
 
     void activate() {
         int version = ++requestVersion;
+        workspaceRefreshVersion++;
         showLoading();
         new SwingWorker<Response, Void>() {
             @Override
@@ -464,7 +484,7 @@ final class DoctorWorkspacePanel extends JPanel {
                 HospitalTheme.SURFACE, 14, HospitalTheme.BORDER);
         card.setLayout(new BorderLayout(18, 0));
         card.setBorder(BorderFactory.createEmptyBorder(16, 18, 16, 18));
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 154));
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 210));
         JPanel copy = verticalList();
         JLabel title = new JLabel(record.getPatientUserId() + "  ·  "
                 + record.getDepartmentName() + "  ·  "
@@ -478,8 +498,8 @@ final class DoctorWorkspacePanel extends JPanel {
         JButton open = HospitalTheme.primaryButton("查看完整记录");
         open.setName("openDoctorSignedRecordDetailButton");
         open.addActionListener(event -> showSignedRecordDetail(clinicalRecord));
-        card.add(copy, BorderLayout.CENTER);
-        card.add(open, BorderLayout.EAST);
+        card.add(HospitalResponsiveLayout.adaptiveRow(copy, open, 540, 14),
+                BorderLayout.CENTER);
         return card;
     }
 
@@ -577,7 +597,7 @@ final class DoctorWorkspacePanel extends JPanel {
         card.setName("doctorFollowUpCard");
         card.setLayout(new BorderLayout(18, 0));
         card.setBorder(BorderFactory.createEmptyBorder(16, 18, 16, 18));
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 154));
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 220));
         JPanel copy = verticalList();
         JLabel title = new JLabel(followUp.getPatientUserId() + "  ·  "
                 + followUp.getExaminationItem());
@@ -617,8 +637,8 @@ final class DoctorWorkspacePanel extends JPanel {
         details.setName("openDoctorFollowUpDetailButton");
         details.addActionListener(event -> showFollowUpDetail(followUp));
         state.add(details);
-        card.add(copy, BorderLayout.CENTER);
-        card.add(state, BorderLayout.EAST);
+        card.add(HospitalResponsiveLayout.adaptiveRow(copy, state, 560, 14),
+                BorderLayout.CENTER);
         return card;
     }
 
@@ -717,8 +737,7 @@ final class DoctorWorkspacePanel extends JPanel {
         card.setName("doctorAppointmentCard");
         card.setLayout(new BorderLayout(18, 0));
         card.setBorder(BorderFactory.createEmptyBorder(15, 16, 15, 18));
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 112));
-        card.setPreferredSize(new Dimension(760, 112));
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 190));
 
         HospitalTheme.SurfacePanel queue = new HospitalTheme.SurfacePanel(
                 resultReview
@@ -774,8 +793,10 @@ final class DoctorWorkspacePanel extends JPanel {
             actions.add(noShow);
         }
         card.add(queue, BorderLayout.WEST);
-        card.add(copy, BorderLayout.CENTER);
-        card.add(actions, BorderLayout.EAST);
+        JPanel adaptiveContent = HospitalResponsiveLayout.adaptiveRow(
+                copy, actions, 500, 14);
+        adaptiveContent.setName("doctorAppointmentAdaptiveContent");
+        card.add(adaptiveContent, BorderLayout.CENTER);
         return card;
     }
 
@@ -1028,7 +1049,7 @@ final class DoctorWorkspacePanel extends JPanel {
         JLabel heading = new JLabel("普通复诊 · 已关联上次诊疗");
         heading.setFont(HospitalTheme.uiFont(Font.BOLD, 16F));
         heading.setForeground(HospitalTheme.WARNING);
-        JLabel summary = message(
+        JTextArea summary = message(
                 DATE_TIME_FORMAT.format(source.getCreatedAt()) + "  ·  "
                         + source.getDoctorName() + "  ·  诊断："
                         + source.getDiagnosisOpinion(),
@@ -1040,8 +1061,8 @@ final class DoctorWorkspacePanel extends JPanel {
         JButton open = HospitalTheme.quietButton("查看关联记录");
         open.setName("openFollowUpSourceButton");
         open.addActionListener(event -> showHistoryDetail(source));
-        card.add(copy, BorderLayout.CENTER);
-        card.add(open, BorderLayout.EAST);
+        card.add(HospitalResponsiveLayout.adaptiveRow(copy, open, 540, 14),
+                BorderLayout.CENTER);
         return card;
     }
 
@@ -1101,13 +1122,11 @@ final class DoctorWorkspacePanel extends JPanel {
         booking.add(detailRow("候诊序号", appointment.getQueueNumber() + " 号", false));
         booking.add(Box.createVerticalStrut(14));
         booking.add(detailRow("就诊类型", visitTypeText(appointment.getVisitType()), false));
-        Dimension bookingSize = booking.getPreferredSize();
-        booking.setPreferredSize(new Dimension(430, bookingSize.height));
-
-        JPanel columns = new JPanel(new BorderLayout(16, 0));
+        JPanel columns = HospitalResponsiveLayout.grid(2, 360, 16, 16);
+        columns.setName("doctorCurrentVisitResponsiveColumns");
         columns.setOpaque(false);
-        columns.add(booking, BorderLayout.WEST);
-        columns.add(consultationForm(contextView), BorderLayout.CENTER);
+        columns.add(booking);
+        columns.add(consultationForm(contextView));
         if (appointment.getVisitType() == VisitType.RESULT_REVIEW
                 && !contextView.getEpisodeExaminations().isEmpty()) {
             ExaminationOrderView examination = contextView
@@ -1232,7 +1251,7 @@ final class DoctorWorkspacePanel extends JPanel {
             DoctorConsultationContextView consultationContext) {
         HospitalTheme.SurfacePanel form = informationCard("本次诊疗记录");
         form.setName("doctorConsultationForm");
-        JLabel explanation = message(
+        JTextArea explanation = message(
                 consultationContext.getAppointment().getVisitType() == VisitType.RESULT_REVIEW
                         ? "请先解读本轮检查报告；可以完成诊疗，也可以再次开检查并等待下次回诊。"
                         : "可以直接完成诊疗，也可以开具一项检查并等待患者回诊。",
@@ -1387,8 +1406,7 @@ final class DoctorWorkspacePanel extends JPanel {
                 HospitalTheme.SURFACE, 14, HospitalTheme.BORDER);
         card.setLayout(new BorderLayout(18, 0));
         card.setBorder(BorderFactory.createEmptyBorder(16, 18, 16, 18));
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 126));
-        card.setPreferredSize(new Dimension(820, 126));
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 190));
         JPanel copy = verticalList();
         JLabel heading = new JLabel(DATE_TIME_FORMAT.format(record.getCreatedAt())
                 + (record.getOutcome() == ConsultationOutcome.WAITING_FOR_RESULTS
@@ -1398,7 +1416,7 @@ final class DoctorWorkspacePanel extends JPanel {
                 + record.getDoctorName());
         heading.setFont(HospitalTheme.uiFont(Font.BOLD, 16F));
         heading.setForeground(HospitalTheme.TEXT);
-        JLabel diagnosis = message(
+        JTextArea diagnosis = message(
                 "诊断：" + record.getDiagnosisOpinion(),
                 HospitalTheme.MUTED,
                 560);
@@ -1408,8 +1426,8 @@ final class DoctorWorkspacePanel extends JPanel {
         JButton open = HospitalTheme.primaryButton("查看记录详情");
         open.setName("openDoctorHistoryDetailButton");
         open.addActionListener(event -> showHistoryDetail(record));
-        card.add(copy, BorderLayout.CENTER);
-        card.add(open, BorderLayout.EAST);
+        card.add(HospitalResponsiveLayout.adaptiveRow(copy, open, 540, 14),
+                BorderLayout.CENTER);
         return card;
     }
 
@@ -2041,7 +2059,8 @@ final class DoctorWorkspacePanel extends JPanel {
     }
 
     private void refreshWorkspaceData() {
-        int version = ++requestVersion;
+        int version = ++workspaceRefreshVersion;
+        String requestedUserId = currentUserId();
         new SwingWorker<Response, Void>() {
             @Override
             protected Response doInBackground() throws Exception {
@@ -2050,7 +2069,8 @@ final class DoctorWorkspacePanel extends JPanel {
 
             @Override
             protected void done() {
-                if (version != requestVersion) {
+                if (version != workspaceRefreshVersion
+                        || !Objects.equals(requestedUserId, currentUserId())) {
                     return;
                 }
                 try {
@@ -2080,6 +2100,12 @@ final class DoctorWorkspacePanel extends JPanel {
                 }
             }
         }.execute();
+    }
+
+    private String currentUserId() {
+        return context.currentSession()
+                .map(session -> session.getUserId())
+                .orElse(null);
     }
 
     private void showConsultationError(Response response) {
@@ -2162,7 +2188,6 @@ final class DoctorWorkspacePanel extends JPanel {
                 HospitalTheme.SURFACE, 16, HospitalTheme.BORDER);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(BorderFactory.createEmptyBorder(22, 24, 22, 24));
-        card.setMinimumSize(new Dimension(430, 0));
         JLabel title = new JLabel(titleText);
         title.setFont(HospitalTheme.uiFont(Font.BOLD, 20F));
         title.setForeground(HospitalTheme.TEXT);
@@ -2337,12 +2362,9 @@ final class DoctorWorkspacePanel extends JPanel {
         return label;
     }
 
-    private static JLabel message(String text, Color color, int width) {
-        JLabel label = new JLabel("<html><body style='width:" + width + "px'>"
-                + html(text) + "</body></html>");
-        label.setFont(HospitalTheme.uiFont(Font.PLAIN, 13F));
-        label.setForeground(color);
-        return label;
+    private static JTextArea message(String text, Color color, int ignoredWidth) {
+        return HospitalResponsiveLayout.wrappingText(
+                text, HospitalTheme.uiFont(Font.PLAIN, 13F), color);
     }
 
     private static String visitTypeText(VisitType visitType) {

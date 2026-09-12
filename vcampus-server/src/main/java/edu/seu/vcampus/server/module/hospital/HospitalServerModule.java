@@ -48,7 +48,9 @@ public final class HospitalServerModule implements ServerModule {
     public static HospitalServerModule createAccessBacked(Path databasePath) {
         Clock clock = Clock.systemDefaultZone();
         return new HospitalServerModule(new HospitalService(
-                new AccessHospitalRepository(new AccessDatabase(databasePath), clock), clock));
+                new AccessHospitalRepository(new AccessDatabase(databasePath), clock),
+                clock,
+                DashScopeHospitalAiTriageClient.fromEnvironment()));
     }
 
     HospitalServerModule(HospitalService service) {
@@ -372,6 +374,9 @@ public final class HospitalServerModule implements ServerModule {
                     request,
                     "Patient-authored health profile updated.",
                     service.updateMyHealthProfile(session.get(), profileRequest));
+        } catch (HospitalBusinessException exception) {
+            return Response.failure(
+                    request.getRequestId(), exception.errorCode(), exception.getMessage());
         } catch (IllegalArgumentException exception) {
             return invalidRequest(request, exception.getMessage());
         }
@@ -747,6 +752,9 @@ public final class HospitalServerModule implements ServerModule {
 
     private static HospitalService createDefaultService() {
         Clock clock = Clock.systemDefaultZone();
-        return new HospitalService(new InMemoryHospitalRepository(clock), clock);
+        return new HospitalService(
+                new InMemoryHospitalRepository(clock),
+                clock,
+                DashScopeHospitalAiTriageClient.fromEnvironment());
     }
 }

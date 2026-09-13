@@ -39,7 +39,7 @@ import java.util.stream.Collectors;
 public final class LibraryPanel extends JPanel {
 
     private static final String[] COLUMNS = {
-        "ISBN", "书名", "作者", "分类", "出版社 / 出版年", "语种", "馆藏地（可借/馆藏）"
+        "ISBN", "书名", "作者", "分类", "出版社 / 出版年", "语种", "馆藏", "可借"
     };
 
     private final ClientContext context;
@@ -75,19 +75,40 @@ public final class LibraryPanel extends JPanel {
 
     private void initializeView() {
         setLayout(new BorderLayout(12, 12));
-        setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        LibraryUiTheme.installPage(this);
+        setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
 
-        JPanel searchPanel = new JPanel(new BorderLayout(12, 0));
-        searchPanel.add(new JLabel("检索关键词："), BorderLayout.WEST);
         keywordField.setName("library.search.keyword");
-        searchPanel.add(keywordField, BorderLayout.CENTER);
-        searchPanel.add(searchButton, BorderLayout.EAST);
+        LibraryUiTheme.styleTextField(keywordField);
+        LibraryUiTheme.stylePrimaryButton(searchButton);
+        searchButton.setPreferredSize(new java.awt.Dimension(92, 38));
         categoryFilter.addItem(null);
         categoryFilter.setName("library.categoryFilter");
         LibraryCategories.render(categoryFilter);
-        JPanel searchArea = new JPanel(new BorderLayout(8, 8));
+        LibraryUiTheme.styleComboBox(categoryFilter);
+        categoryFilter.setPreferredSize(new java.awt.Dimension(190, 38));
+
+        JPanel searchCard = new JPanel(new BorderLayout(12, 0));
+        LibraryUiTheme.styleCard(searchCard);
+        searchCard.setBorder(LibraryUiTheme.cardBorder(7, 10));
+        JPanel searchPanel = new JPanel(new BorderLayout(12, 0));
+        searchPanel.setOpaque(false);
+        JLabel keywordLabel = new JLabel("检索关键词");
+        keywordLabel.setForeground(LibraryUiTheme.TEXT);
+        searchPanel.add(keywordLabel, BorderLayout.WEST);
+        searchPanel.add(keywordField, BorderLayout.CENTER);
+        searchPanel.add(searchButton, BorderLayout.EAST);
+        JPanel searchArea = new JPanel(new BorderLayout(12, 0));
+        searchArea.setOpaque(false);
         searchArea.add(searchPanel, BorderLayout.CENTER);
-        searchArea.add(categoryFilter, BorderLayout.EAST);
+        JPanel categoryArea = new JPanel(new BorderLayout(8, 0));
+        categoryArea.setOpaque(false);
+        JLabel categoryLabel = new JLabel("分类");
+        categoryLabel.setForeground(LibraryUiTheme.TEXT);
+        categoryArea.add(categoryLabel, BorderLayout.WEST);
+        categoryArea.add(categoryFilter, BorderLayout.CENTER);
+        searchArea.add(categoryArea, BorderLayout.EAST);
+        searchCard.add(searchArea, BorderLayout.CENTER);
 
         resultTable.setName("library.searchResults");
         resultTable.setFillsViewportHeight(true);
@@ -95,7 +116,9 @@ public final class LibraryPanel extends JPanel {
         resultTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         resultTable.getTableHeader().setReorderingAllowed(false);
         resultTable.getTableHeader().setResizingAllowed(false);
-        resultTable.getColumnModel().getColumn(6).setPreferredWidth(320);
+        LibraryUiTheme.styleTable(resultTable);
+        LibraryUiTheme.setColumnWidths(resultTable,
+                125, 230, 125, 90, 170, 70, 55, 55);
         resultTable.getSelectionModel().addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
                 showSelectedHoldingDetails();
@@ -107,8 +130,9 @@ public final class LibraryPanel extends JPanel {
         holdingDetails.setLineWrap(true);
         holdingDetails.setWrapStyleWord(true);
         holdingDetails.setText("请选择一条书目查看完整馆藏地和数量");
+        LibraryUiTheme.styleTextArea(holdingDetails);
         JScrollPane holdingScroll = new JScrollPane(holdingDetails);
-        holdingScroll.setBorder(BorderFactory.createTitledBorder("馆藏详情"));
+        holdingScroll.setBorder(BorderFactory.createLineBorder(LibraryUiTheme.BORDER));
 
         reservationLocation.setName("library.reservation.location");
         reservationLocation.setRenderer(new DefaultListCellRenderer() {
@@ -123,29 +147,56 @@ public final class LibraryPanel extends JPanel {
                 return component;
             }
         });
+        LibraryUiTheme.styleComboBox(reservationLocation);
         reservationButton.setName("library.reservation.create");
+        LibraryUiTheme.stylePrimaryButton(reservationButton);
         reservationHint.setName("library.reservation.hint");
-        JPanel reservationControls = new JPanel(new BorderLayout(8, 6));
+        reservationHint.setForeground(LibraryUiTheme.MUTED);
+        JPanel reservationControls = new JPanel(new BorderLayout(8, 8));
+        reservationControls.setOpaque(false);
         JPanel reservationInput = new JPanel(new BorderLayout(8, 0));
-        reservationInput.add(new JLabel("取书馆藏地："), BorderLayout.WEST);
+        reservationInput.setOpaque(false);
+        JLabel pickupLabel = new JLabel("取书馆藏地");
+        pickupLabel.setForeground(LibraryUiTheme.TEXT);
+        reservationInput.add(pickupLabel, BorderLayout.NORTH);
         reservationInput.add(reservationLocation, BorderLayout.CENTER);
-        reservationInput.add(reservationButton, BorderLayout.EAST);
         reservationControls.add(reservationInput, BorderLayout.NORTH);
-        reservationControls.add(reservationHint, BorderLayout.SOUTH);
-        reservationControls.setBorder(BorderFactory.createTitledBorder("线上预约"));
+        reservationControls.add(reservationHint, BorderLayout.CENTER);
+        reservationControls.add(reservationButton, BorderLayout.SOUTH);
 
-        JPanel detailsArea = new JPanel(new BorderLayout(8, 8));
+        JPanel detailsArea = new JPanel(new BorderLayout(8, 12));
+        detailsArea.setName("library.catalog.details");
+        LibraryUiTheme.styleCard(detailsArea);
+        JLabel detailTitle = new JLabel("馆藏详情与线上预约");
+        detailTitle.setForeground(LibraryUiTheme.TEXT);
+        detailTitle.setFont(detailTitle.getFont().deriveFont(java.awt.Font.BOLD, 16F));
+        detailsArea.add(detailTitle, BorderLayout.NORTH);
         detailsArea.add(holdingScroll, BorderLayout.CENTER);
         detailsArea.add(reservationControls, BorderLayout.SOUTH);
+        detailsArea.setMinimumSize(new java.awt.Dimension(275, 0));
+        detailsArea.setPreferredSize(new java.awt.Dimension(320, 0));
 
         JPanel resultArea = new JPanel(new BorderLayout(8, 8));
-        resultArea.add(new JScrollPane(resultTable), BorderLayout.CENTER);
-        resultArea.add(detailsArea, BorderLayout.SOUTH);
+        resultArea.setName("library.catalog.results");
+        LibraryUiTheme.styleCard(resultArea);
+        JLabel resultTitle = new JLabel("检索结果");
+        resultTitle.setForeground(LibraryUiTheme.TEXT);
+        resultTitle.setFont(resultTitle.getFont().deriveFont(java.awt.Font.BOLD, 16F));
+        resultArea.add(resultTitle, BorderLayout.NORTH);
+        resultArea.add(LibraryUiTheme.tableScrollPane(resultTable), BorderLayout.CENTER);
+
+        JPanel workspace = new JPanel(new BorderLayout(10, 0));
+        workspace.setName("library.catalog.workspace");
+        workspace.setOpaque(false);
+        workspace.add(resultArea, BorderLayout.CENTER);
+        workspace.add(detailsArea, BorderLayout.EAST);
+
         statusLabel.setName("library.searchStatus");
         statusLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        LibraryUiTheme.styleStatusLabel(statusLabel);
 
-        add(searchArea, BorderLayout.NORTH);
-        add(resultArea, BorderLayout.CENTER);
+        add(searchCard, BorderLayout.NORTH);
+        add(workspace, BorderLayout.CENTER);
         add(statusLabel, BorderLayout.SOUTH);
 
         searchButton.addActionListener(event -> search());
@@ -214,7 +265,8 @@ public final class LibraryPanel extends JPanel {
         for (BookDTO book : books) {
             tableModel.addRow(new Object[] {
                 book.getIsbn(), book.getTitle(), book.getAuthor(), book.getCategoryName(),
-                publication(book), blankAsDash(book.getLanguage()), formatLocations(book)
+                publication(book), blankAsDash(book.getLanguage()),
+                book.getTotalCount(), book.getAvailableCount()
             });
         }
         statusLabel.setText("找到 " + result.getBooks().size()
@@ -225,19 +277,6 @@ public final class LibraryPanel extends JPanel {
         String publisher = blankAsDash(book.getPublisher());
         return book.getPublicationYear() == null
                 ? publisher : publisher + " / " + book.getPublicationYear();
-    }
-
-    private static String formatLocations(BookDTO book) {
-        if (book.getLocations().isEmpty()) {
-            return "暂无馆藏";
-        }
-        return book.getLocations().stream().map(LibraryPanel::formatLocation)
-                .collect(Collectors.joining("；"));
-    }
-
-    private static String formatLocation(BookLocationDTO location) {
-        return location.getLocation() + " " + location.getAvailableCount()
-                + "/" + location.getTotalCount();
     }
 
     private void showSelectedHoldingDetails() {

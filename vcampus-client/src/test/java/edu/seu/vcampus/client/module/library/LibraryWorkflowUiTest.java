@@ -115,6 +115,12 @@ class LibraryWorkflowUiTest {
             awaitUi(() -> current.getRowCount() == 1 && current.isEnabled()
                     && "已借阅".equals(reservations.getValueAt(0, 2)));
             assertEquals("SEU-B001-001", current.getValueAt(0, 1));
+            JButton renew = button(records, "续借选中图书");
+            onEdt(() -> current.setRowSelectionInterval(0, 0));
+            awaitUi(renew::isEnabled);
+            onEdt(renew::doClick);
+            awaitUi(() -> current.getRowCount() == 1
+                    && Integer.valueOf(1).equals(current.getValueAt(0, 4)));
             onEdt(() -> reservations.setRowSelectionInterval(0, 0));
             assertFalse(cancelReservation.isEnabled());
 
@@ -134,7 +140,7 @@ class LibraryWorkflowUiTest {
             });
             JTable history = named(records, JTable.class, "library.borrowHistory");
             awaitUi(() -> current.getRowCount() == 0 && history.getRowCount() == 1);
-            assertEquals("已归还", history.getValueAt(0, 5));
+            assertEquals("已归还", history.getValueAt(0, 6));
         }
     }
 

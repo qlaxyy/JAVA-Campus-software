@@ -24,6 +24,7 @@ public final class LibraryModePanel extends JPanel implements ModuleViewLifecycl
 
     private static final String MODE_SELECTION = "modeSelection";
     private static final String ONLINE_LIBRARY = "onlineLibrary";
+    private static final String ADMIN_LIBRARY = "adminLibrary";
     private static final String SELF_SERVICE_TERMINAL = "selfServiceTerminal";
 
     private final CardLayout cards = new CardLayout();
@@ -38,8 +39,11 @@ public final class LibraryModePanel extends JPanel implements ModuleViewLifecycl
                 .map(session -> new LibraryAdminPanel(context)).orElse(null);
         setName("library.modeRoot");
         setLayout(cards);
-        add(createModeSelection(), MODE_SELECTION);
-        add(createOnlineLibrary(catalog, myLibrary, admin), ONLINE_LIBRARY);
+        add(createModeSelection(admin), MODE_SELECTION);
+        add(createOnlineLibrary(catalog, myLibrary), ONLINE_LIBRARY);
+        if (admin != null) {
+            add(createAdminLibrary(admin), ADMIN_LIBRARY);
+        }
         add(createTerminal(context, () -> {
             catalog.reservationStateChanged();
             myLibrary.refresh();
@@ -47,69 +51,123 @@ public final class LibraryModePanel extends JPanel implements ModuleViewLifecycl
         showModeSelection();
     }
 
-    private JPanel createModeSelection() {
+    private JPanel createModeSelection(LibraryAdminPanel admin) {
         JPanel selection = new JPanel(new BorderLayout(24, 24));
         selection.setName("library.modeSelection");
-        selection.setBorder(BorderFactory.createEmptyBorder(48, 72, 64, 72));
+        LibraryUiTheme.installPage(selection);
+        selection.setBorder(BorderFactory.createEmptyBorder(18, 36, 24, 36));
 
         JPanel heading = new JPanel();
+        heading.setOpaque(false);
         heading.setLayout(new BoxLayout(heading, BoxLayout.Y_AXIS));
-        JLabel title = new JLabel("欢迎使用图书馆", SwingConstants.CENTER);
+        JLabel eyebrow = new JLabel("VIRTUAL CAMPUS LIBRARY", SwingConstants.CENTER);
+        eyebrow.setAlignmentX(Component.CENTER_ALIGNMENT);
+        eyebrow.setForeground(LibraryUiTheme.PRIMARY);
+        eyebrow.setFont(eyebrow.getFont().deriveFont(Font.BOLD, 11F));
+        JLabel title = new JLabel("校园图书馆", SwingConstants.CENTER);
         title.setAlignmentX(Component.CENTER_ALIGNMENT);
-        title.setFont(title.getFont().deriveFont(Font.BOLD, 26F));
-        JLabel description = new JLabel("请选择本次要使用的服务模式", SwingConstants.CENTER);
+        title.setForeground(LibraryUiTheme.TEXT);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 25F));
+        JLabel description = new JLabel(
+                "在线完成检索与预约，或进入模拟终端办理实体书借还",
+                SwingConstants.CENTER);
         description.setAlignmentX(Component.CENTER_ALIGNMENT);
+        description.setForeground(LibraryUiTheme.MUTED);
+        description.setFont(description.getFont().deriveFont(14F));
+        heading.add(eyebrow);
+        heading.add(Box.createVerticalStrut(8));
         heading.add(title);
         heading.add(Box.createVerticalStrut(10));
         heading.add(description);
         selection.add(heading, BorderLayout.NORTH);
 
-        JPanel choices = new JPanel(new GridLayout(1, 2, 32, 0));
+        JPanel choices = new JPanel(new GridLayout(1, admin == null ? 2 : 3, 20, 0));
+        choices.setOpaque(false);
         choices.add(createModeChoice("线上图书馆", "library.mode.online",
-                "查询与预约馆藏、查看个人借阅和预约，模块管理员可维护图书。",
+                "ONLINE SERVICES",
+                "以读者身份查询、预约馆藏，并查看个人借阅和预约。",
+                "进入线上图书馆  →", true,
                 () -> cards.show(this, ONLINE_LIBRARY)));
+        if (admin != null) {
+            choices.add(createModeChoice("图书管理", "library.mode.admin",
+                    "LIBRARIAN WORKSPACE",
+                    "切换到图书管理员身份，维护书目、单册、分类并查询全馆记录。",
+                    "进入管理工作台  →", false,
+                    () -> {
+                        cards.show(this, ADMIN_LIBRARY);
+                        admin.refresh();
+                    }));
+        }
         choices.add(createModeChoice("模拟自助终端", "library.mode.terminal",
+                "SELF-SERVICE TERMINAL",
                 "模拟扫描实体单册条码，完成借书或归还登记。",
+                "进入模拟终端  →", false,
                 () -> cards.show(this, SELF_SERVICE_TERMINAL)));
         selection.add(choices, BorderLayout.CENTER);
+
+        JLabel footnote = LibraryUiTheme.createMutedLabel(
+                "借阅身份来自当前登录会话，所有预约与借还操作均由服务器再次校验");
+        footnote.setHorizontalAlignment(SwingConstants.CENTER);
+        selection.add(footnote, BorderLayout.SOUTH);
         return selection;
     }
 
-    private JPanel createModeChoice(String title, String name, String description,
-            Runnable action) {
-        JPanel choice = new JPanel(new BorderLayout(12, 18));
-        choice.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createEtchedBorder(),
-                BorderFactory.createEmptyBorder(32, 28, 32, 28)));
-        JButton button = new JButton(title);
+    private JPanel createModeChoice(String title, String name, String eyebrow,
+            String description, String actionText, boolean primary, Runnable action) {
+        JPanel choice = new JPanel(new BorderLayout(12, 22));
+        LibraryUiTheme.styleCard(choice);
+        choice.setBorder(LibraryUiTheme.cardBorder(20, 20));
+
+        JPanel copy = new JPanel();
+        copy.setOpaque(false);
+        copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
+        JLabel kind = new JLabel(eyebrow);
+        kind.setAlignmentX(Component.LEFT_ALIGNMENT);
+        kind.setForeground(LibraryUiTheme.PRIMARY);
+        kind.setFont(kind.getFont().deriveFont(Font.BOLD, 11F));
+        JLabel heading = new JLabel(title);
+        heading.setAlignmentX(Component.LEFT_ALIGNMENT);
+        heading.setForeground(LibraryUiTheme.TEXT);
+        heading.setFont(heading.getFont().deriveFont(Font.BOLD, 22F));
+        JLabel detail = new JLabel("<html><div style='width:260px'>"
+                + description + "</div></html>");
+        detail.setAlignmentX(Component.LEFT_ALIGNMENT);
+        detail.setForeground(LibraryUiTheme.MUTED);
+        detail.setFont(detail.getFont().deriveFont(14F));
+        copy.add(kind);
+        copy.add(Box.createVerticalStrut(14));
+        copy.add(heading);
+        copy.add(Box.createVerticalStrut(14));
+        copy.add(detail);
+
+        JButton button = new JButton(actionText);
         button.setName(name);
-        button.setFont(button.getFont().deriveFont(Font.BOLD, 20F));
-        button.setPreferredSize(new Dimension(260, 64));
+        if (primary) {
+            LibraryUiTheme.stylePrimaryButton(button);
+        } else {
+            LibraryUiTheme.styleSecondaryButton(button);
+        }
+        LibraryUiTheme.makeLargeButton(button);
+        button.setPreferredSize(new Dimension(260, 50));
         button.addActionListener(event -> action.run());
-        JLabel detail = new JLabel("<html><div style='text-align:center'>"
-                + description + "</div></html>", SwingConstants.CENTER);
-        choice.add(button, BorderLayout.NORTH);
-        choice.add(detail, BorderLayout.CENTER);
+        choice.add(copy, BorderLayout.CENTER);
+        choice.add(button, BorderLayout.SOUTH);
         return choice;
     }
 
     private JPanel createOnlineLibrary(LibraryPanel catalog,
-            MyLibraryPanel myLibrary, LibraryAdminPanel admin) {
+            MyLibraryPanel myLibrary) {
         JPanel online = createModeContainer("线上图书馆", "library.mode.back.online");
         online.setName("library.online");
 
         JTabbedPane tabs = new JTabbedPane();
         tabs.setName("library.navigation");
+        LibraryUiTheme.styleTabbedPane(tabs);
         tabs.addTab("馆藏查询", catalog);
         tabs.addTab("我的图书馆", myLibrary);
 
-        if (admin != null) {
-            tabs.addTab("图书管理", admin);
-        }
         tabs.addChangeListener(event -> {
-            if (admin != null && tabs.getSelectedComponent() == admin) {
-                admin.refresh();
-            } else if (tabs.getSelectedComponent() == myLibrary) {
+            if (tabs.getSelectedComponent() == myLibrary) {
                 myLibrary.refresh();
             } else if (tabs.getSelectedComponent() == catalog) {
                 catalog.refreshIfSearched();
@@ -117,6 +175,13 @@ public final class LibraryModePanel extends JPanel implements ModuleViewLifecycl
         });
         online.add(tabs, BorderLayout.CENTER);
         return online;
+    }
+
+    private JPanel createAdminLibrary(LibraryAdminPanel admin) {
+        JPanel panel = createModeContainer("图书管理员工作台", "library.mode.back.admin");
+        panel.setName("library.adminMode");
+        panel.add(admin, BorderLayout.CENTER);
+        return panel;
     }
 
     private JPanel createTerminal(ClientContext context, Runnable circulationChanged) {
@@ -128,14 +193,19 @@ public final class LibraryModePanel extends JPanel implements ModuleViewLifecycl
     }
 
     private JPanel createModeContainer(String title, String backButtonName) {
-        JPanel container = new JPanel(new BorderLayout(0, 12));
-        container.setBorder(BorderFactory.createEmptyBorder(12, 16, 16, 16));
+        JPanel container = new JPanel(new BorderLayout(0, 6));
+        LibraryUiTheme.installPage(container);
+        container.setBorder(BorderFactory.createEmptyBorder(6, 12, 10, 12));
         JPanel header = new JPanel(new BorderLayout());
+        LibraryUiTheme.styleCard(header);
+        header.setBorder(LibraryUiTheme.cardBorder(5, 8));
         JButton back = new JButton("← 返回模式选择");
         back.setName(backButtonName);
+        LibraryUiTheme.styleSecondaryButton(back);
         back.addActionListener(event -> showModeSelection());
         JLabel heading = new JLabel(title, SwingConstants.CENTER);
-        heading.setFont(heading.getFont().deriveFont(Font.BOLD, 18F));
+        heading.setForeground(LibraryUiTheme.TEXT);
+        heading.setFont(heading.getFont().deriveFont(Font.BOLD, 16F));
         header.add(back, BorderLayout.WEST);
         header.add(heading, BorderLayout.CENTER);
         header.add(Box.createHorizontalStrut(back.getPreferredSize().width), BorderLayout.EAST);

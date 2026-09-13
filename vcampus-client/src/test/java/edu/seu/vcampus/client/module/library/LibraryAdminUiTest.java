@@ -27,8 +27,11 @@ class LibraryAdminUiTest {
             server.start();
             assertEquals(2, onlineTabCount(login(server, "20260001")));
             assertEquals(2, onlineTabCount(login(server, "20260006")));
-            assertEquals(3, onlineTabCount(login(server, "20260005")));
-            assertEquals(3, onlineTabCount(login(server, "20260000")));
+            assertEquals(2, onlineTabCount(login(server, "20260005")));
+            assertEquals(2, onlineTabCount(login(server, "20260000")));
+            assertTrue(hasManagementMode(login(server, "20260005")));
+            assertTrue(hasManagementMode(login(server, "20260000")));
+            assertFalse(hasManagementMode(login(server, "20260001")));
         }
     }
 
@@ -40,12 +43,10 @@ class LibraryAdminUiTest {
             AtomicReference<LibraryModePanel> root = new AtomicReference<>();
             onEdt(() -> root.set((LibraryModePanel)
                     new LibraryClientModule().createView(context)));
-            JTabbedPane navigation = named(root.get(), JTabbedPane.class,
-                    "library.navigation");
-            LibraryAdminPanel admin = (LibraryAdminPanel) navigation.getComponentAt(2);
+            LibraryAdminPanel admin = named(root.get(), LibraryAdminPanel.class, "library.admin");
             onEdt(() -> {
-                named(root.get(), JButton.class, "library.mode.online").doClick();
-                navigation.setSelectedIndex(2);
+                named(root.get(), JButton.class, "library.mode.admin").doClick();
+                admin.refresh();
             });
 
             JTable books = named(admin, JTable.class, "library.admin.books");
@@ -124,12 +125,10 @@ class LibraryAdminUiTest {
             AtomicReference<LibraryModePanel> root = new AtomicReference<>();
             onEdt(() -> root.set((LibraryModePanel)
                     new LibraryClientModule().createView(librarian)));
-            JTabbedPane navigation = named(
-                    root.get(), JTabbedPane.class, "library.navigation");
-            LibraryAdminPanel admin = (LibraryAdminPanel) navigation.getComponentAt(2);
+            LibraryAdminPanel admin = named(root.get(), LibraryAdminPanel.class, "library.admin");
             onEdt(() -> {
-                named(root.get(), JButton.class, "library.mode.online").doClick();
-                navigation.setSelectedIndex(2);
+                named(root.get(), JButton.class, "library.mode.admin").doClick();
+                admin.refresh();
             });
             JTable books = named(admin, JTable.class, "library.admin.books");
             awaitUi(() -> books.getRowCount() > 0 && books.isEnabled());
@@ -159,6 +158,18 @@ class LibraryAdminUiTest {
             count.set(named(root, JTabbedPane.class, "library.navigation").getTabCount());
         });
         return count.get();
+    }
+
+    private static boolean hasManagementMode(ClientContext context) throws Exception {
+        AtomicReference<Boolean> result = new AtomicReference<>();
+        onEdt(() -> {
+            LibraryModePanel root = (LibraryModePanel)
+                    new LibraryClientModule().createView(context);
+            result.set(descendants(root).stream().filter(JButton.class::isInstance)
+                    .map(JButton.class::cast)
+                    .anyMatch(button -> "library.mode.admin".equals(button.getName())));
+        });
+        return result.get();
     }
 
     private static ClientContext login(CampusServer server, String username) throws Exception {

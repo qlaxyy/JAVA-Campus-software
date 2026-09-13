@@ -2,6 +2,7 @@ package edu.seu.vcampus.client.module.library;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.common.library.BorrowRecordDTO;
+import edu.seu.vcampus.common.library.BorrowRecordIdRequest;
 import edu.seu.vcampus.common.library.LibraryActions;
 import edu.seu.vcampus.common.library.ReservationDTO;
 import edu.seu.vcampus.common.library.ReservationIdRequest;
@@ -30,7 +31,7 @@ import java.util.concurrent.ExecutionException;
 public final class MyLibraryPanel extends JPanel {
 
     private static final String[] BORROW_COLUMNS = {
-        "书名", "馆藏条码", "借阅时间", "到期时间", "归还时间", "状态", "是否逾期"
+        "书名", "馆藏条码", "借阅时间", "到期时间", "续借次数", "归还时间", "状态"
     };
     private static final String[] RESERVATION_COLUMNS = {
         "书名", "取书馆藏地", "预约状态", "排队位次", "馆藏条码", "取书截止时间"
@@ -48,9 +49,12 @@ public final class MyLibraryPanel extends JPanel {
     private final JTable reservationTable = createTable(
             reservationModel, "library.myReservations");
     private final JButton refreshButton = new JButton("刷新全部记录");
+    private final JButton renewBorrow = new JButton("续借选中图书");
     private final JButton cancelReservation = new JButton("取消选中预约");
     private final JLabel reservationHint = new JLabel("只有“排队中”和“待取书”预约可以取消");
     private final JLabel statusLabel = new JLabel("打开此页后加载本人的借阅与预约记录");
+    private final JLabel renewHint = new JLabel("每次借阅最多续借 1 次；逾期或已有预约时不能续借");
+    private List<BorrowRecordDTO> currentBorrows = List.of();
     private List<ReservationDTO> reservations = List.of();
     private boolean working;
 
@@ -64,37 +68,76 @@ public final class MyLibraryPanel extends JPanel {
         this.reservationChanged = Objects.requireNonNull(
                 reservationChanged, "reservationChanged must not be null");
         setLayout(new BorderLayout(12, 12));
-        setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        LibraryUiTheme.installPage(this);
+        setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
         statusLabel.setName("library.recordsStatus");
         cancelReservation.setName("library.reservation.cancel");
         reservationHint.setName("library.reservation.cancelHint");
+        reservationHint.setForeground(LibraryUiTheme.MUTED);
+        LibraryUiTheme.styleSecondaryButton(refreshButton);
+        LibraryUiTheme.stylePrimaryButton(renewBorrow);
+        LibraryUiTheme.styleDangerButton(cancelReservation);
+        LibraryUiTheme.styleStatusLabel(statusLabel);
 
-        JPanel header = new JPanel(new BorderLayout(12, 0));
-        header.add(statusLabel, BorderLayout.CENTER);
-        header.add(refreshButton, BorderLayout.EAST);
+        JPanel overview = new JPanel(new BorderLayout(10, 0));
+        LibraryUiTheme.styleCard(overview);
+        overview.setBorder(LibraryUiTheme.cardBorder(6, 10));
+        overview.add(statusLabel, BorderLayout.CENTER);
+        overview.add(refreshButton, BorderLayout.EAST);
+
         JTabbedPane records = new JTabbedPane();
         records.setName("library.recordTabs");
-        records.addTab("当前借阅", new JScrollPane(currentTable));
-        records.addTab("历史借阅", new JScrollPane(historyTable));
+        LibraryUiTheme.styleTabbedPane(records);
+        records.addTab("当前借阅", createCurrentBorrowArea());
+        records.addTab("历史借阅", LibraryUiTheme.tableScrollPane(historyTable));
         records.addTab("我的预约", createReservationArea());
-        add(header, BorderLayout.NORTH);
+        add(overview, BorderLayout.NORTH);
         add(records, BorderLayout.CENTER);
-        add(new JLabel("借还实体书请返回模式选择，进入“模拟自助终端”"), BorderLayout.SOUTH);
+        JLabel terminalHint = LibraryUiTheme.createMutedLabel(
+                "借还实体书请返回模式选择，进入“模拟自助终端”");
+        add(terminalHint, BorderLayout.SOUTH);
 
         refreshButton.addActionListener(event -> refresh());
+        renewBorrow.addActionListener(event -> renewSelectedBorrow());
         cancelReservation.addActionListener(event -> cancelSelectedReservation());
         reservationTable.getSelectionModel().addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
                 updateCancelButton();
             }
         });
+        currentTable.getSelectionModel().addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting()) {
+                updateRenewButton();
+            }
+        });
+        LibraryUiTheme.setColumnWidths(currentTable, 210, 125, 145, 145, 80, 145, 105);
+        LibraryUiTheme.setColumnWidths(historyTable, 210, 125, 145, 145, 80, 145, 105);
+        LibraryUiTheme.setColumnWidths(reservationTable, 210, 230, 100, 90, 125, 145);
         updateCancelButton();
+        updateRenewButton();
+    }
+
+    private JPanel createCurrentBorrowArea() {
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.setBackground(LibraryUiTheme.PAGE);
+        panel.add(LibraryUiTheme.tableScrollPane(currentTable), BorderLayout.CENTER);
+        JPanel actions = new JPanel(new BorderLayout(8, 0));
+        LibraryUiTheme.styleCard(actions);
+        actions.setBorder(LibraryUiTheme.cardBorder(7, 10));
+        renewHint.setForeground(LibraryUiTheme.MUTED);
+        actions.add(renewHint, BorderLayout.CENTER);
+        actions.add(renewBorrow, BorderLayout.EAST);
+        panel.add(actions, BorderLayout.SOUTH);
+        return panel;
     }
 
     private JPanel createReservationArea() {
         JPanel panel = new JPanel(new BorderLayout(8, 8));
-        panel.add(new JScrollPane(reservationTable), BorderLayout.CENTER);
+        panel.setBackground(LibraryUiTheme.PAGE);
+        panel.add(LibraryUiTheme.tableScrollPane(reservationTable), BorderLayout.CENTER);
         JPanel actions = new JPanel(new BorderLayout(8, 0));
+        LibraryUiTheme.styleCard(actions);
+        actions.setBorder(LibraryUiTheme.cardBorder(9, 12));
         actions.add(reservationHint, BorderLayout.CENTER);
         actions.add(cancelReservation, BorderLayout.EAST);
         panel.add(actions, BorderLayout.SOUTH);
@@ -152,7 +195,8 @@ public final class MyLibraryPanel extends JPanel {
                 .filter(record -> "BORROWED".equals(record.getStatus())).toList();
         List<BorrowRecordDTO> history = borrows.stream()
                 .filter(record -> "RETURNED".equals(record.getStatus())).toList();
-        current.forEach(record -> currentModel.addRow(borrowRow(record)));
+        currentBorrows = List.copyOf(current);
+        currentBorrows.forEach(record -> currentModel.addRow(borrowRow(record)));
         history.forEach(record -> historyModel.addRow(borrowRow(record)));
         reservations = List.copyOf(loadedReservations);
         reservations.forEach(reservation -> reservationModel.addRow(reservationRow(reservation)));
@@ -164,6 +208,53 @@ public final class MyLibraryPanel extends JPanel {
                 .count();
         statusLabel.setText("当前借阅 " + current.size() + " 本，历史 " + history.size()
                 + " 条，逾期 " + overdue + " 本，有效预约 " + activeReservations + " 条");
+        updateRenewButton();
+    }
+
+    private void renewSelectedBorrow() {
+        BorrowRecordDTO record = selectedCurrentBorrow();
+        if (working || record == null || record.isOverdue() || record.getRenewalCount() >= 1) {
+            return;
+        }
+        setWorking(true);
+        statusLabel.setText("正在续借《" + record.getBookTitle() + "》……");
+        new SwingWorker<Response, Void>() {
+            @Override
+            protected Response doInBackground() throws Exception {
+                return context.send(LibraryActions.RENEW_BORROW,
+                        new BorrowRecordIdRequest(record.getRecordId()));
+            }
+
+            @Override
+            protected void done() {
+                boolean reload = false;
+                try {
+                    Response response = get();
+                    if (response == null || !response.isSuccess()) {
+                        statusLabel.setText("续借失败：" + (response == null
+                                ? "服务器未返回结果" : LibraryMessages.failure(response)));
+                        return;
+                    }
+                    statusLabel.setText("续借成功，正在刷新到期时间……");
+                    reload = true;
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    statusLabel.setText("续借结果未确认，请刷新后核对");
+                } catch (ExecutionException exception) {
+                    statusLabel.setText("续借结果未确认，请刷新后核对");
+                } finally {
+                    setWorking(false);
+                    if (reload) SwingUtilities.invokeLater(MyLibraryPanel.this::refresh);
+                }
+            }
+        }.execute();
+    }
+
+    private BorrowRecordDTO selectedCurrentBorrow() {
+        int viewRow = currentTable.getSelectedRow();
+        if (viewRow < 0) return null;
+        int modelRow = currentTable.convertRowIndexToModel(viewRow);
+        return modelRow >= currentBorrows.size() ? null : currentBorrows.get(modelRow);
     }
 
     private void cancelSelectedReservation() {
@@ -226,7 +317,9 @@ public final class MyLibraryPanel extends JPanel {
         historyModel.setRowCount(0);
         reservationModel.setRowCount(0);
         reservations = List.of();
+        currentBorrows = List.of();
         updateCancelButton();
+        updateRenewButton();
     }
 
     private void setWorking(boolean value) {
@@ -236,6 +329,23 @@ public final class MyLibraryPanel extends JPanel {
         historyTable.setEnabled(!value);
         reservationTable.setEnabled(!value);
         updateCancelButton();
+        updateRenewButton();
+    }
+
+    private void updateRenewButton() {
+        BorrowRecordDTO selected = selectedCurrentBorrow();
+        boolean allowed = !working && selected != null && !selected.isOverdue()
+                && selected.getRenewalCount() < 1;
+        renewBorrow.setEnabled(allowed);
+        if (selected == null) {
+            renewHint.setText("选择当前借阅后可以续借；服务器会再次检查预约与逾期状态");
+        } else if (selected.isOverdue()) {
+            renewHint.setText("该借阅已经逾期，不能续借");
+        } else if (selected.getRenewalCount() >= 1) {
+            renewHint.setText("该借阅已续借 1 次，不能再次续借");
+        } else {
+            renewHint.setText("续借后从当前到期日顺延 30 天；有人预约时服务器会拒绝");
+        }
     }
 
     private void updateCancelButton() {
@@ -265,9 +375,9 @@ public final class MyLibraryPanel extends JPanel {
     private static Object[] borrowRow(BorrowRecordDTO record) {
         return new Object[] {record.getBookTitle(), record.getBarcode(),
                 format(record.getBorrowTime()), format(record.getDueTime()),
-                format(record.getReturnTime()),
-                "BORROWED".equals(record.getStatus()) ? "借阅中" : "已归还",
-                record.isOverdue() ? "已逾期，请尽快归还" : "否"};
+                record.getRenewalCount(), format(record.getReturnTime()),
+                record.isOverdue() ? "已逾期" :
+                        ("BORROWED".equals(record.getStatus()) ? "借阅中" : "已归还")};
     }
 
     private static Object[] reservationRow(ReservationDTO reservation) {
@@ -315,7 +425,7 @@ public final class MyLibraryPanel extends JPanel {
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.getTableHeader().setReorderingAllowed(false);
         table.getTableHeader().setResizingAllowed(false);
-        table.setRowHeight(26);
+        LibraryUiTheme.styleTable(table);
         return table;
     }
 

@@ -148,6 +148,7 @@ final class AccessLibraryStore implements LibraryTransactionManager {
                         + "copyId TEXT(36) NOT NULL, "
                         + "borrowTime DATETIME NOT NULL, "
                         + "dueTime DATETIME NOT NULL, "
+                        + "renewalCount LONG DEFAULT 0 NOT NULL, "
                         + "returnTime DATETIME, "
                         + "[status] TEXT(20) NOT NULL, "
                         + "CONSTRAINT fk_tblBorrowRecord_copy FOREIGN KEY (copyId) "
@@ -156,6 +157,9 @@ final class AccessLibraryStore implements LibraryTransactionManager {
                         + "ON tblBorrowRecord (userId, [status])");
                 executeSql(connection, "CREATE INDEX ix_tblBorrowRecord_copy_status "
                         + "ON tblBorrowRecord (copyId, [status])");
+            } else if (!columnExists(connection, BORROW_TABLE, "renewalCount")) {
+                executeSql(connection,
+                        "ALTER TABLE tblBorrowRecord ADD COLUMN renewalCount LONG DEFAULT 0");
             }
             if (!reservationExists) {
                 executeSql(connection, "CREATE TABLE tblReservation ("
@@ -299,6 +303,20 @@ final class AccessLibraryStore implements LibraryTransactionManager {
         try (ResultSet tables = metadata.getTables(null, null, "%", new String[]{"TABLE"})) {
             while (tables.next()) {
                 if (expected.equalsIgnoreCase(tables.getString("TABLE_NAME"))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean columnExists(Connection connection, String table, String column)
+            throws SQLException {
+        DatabaseMetaData metadata = connection.getMetaData();
+        try (ResultSet columns = metadata.getColumns(null, null, "%", "%")) {
+            while (columns.next()) {
+                if (table.equalsIgnoreCase(columns.getString("TABLE_NAME"))
+                        && column.equalsIgnoreCase(columns.getString("COLUMN_NAME"))) {
                     return true;
                 }
             }

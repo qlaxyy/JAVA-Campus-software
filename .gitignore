@@ -21,6 +21,9 @@ logs/
 .DS_Store
 Thumbs.db
 
+# Local agent worktrees
+.codex-worktrees/
+
 # Keep acceptance databases out of ad-hoc commits; release artifacts are added intentionally.
 *.accdb
 !release/**/*.accdb

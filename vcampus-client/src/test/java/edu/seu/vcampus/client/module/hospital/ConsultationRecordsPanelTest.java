@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
@@ -31,7 +32,7 @@ class ConsultationRecordsPanelTest {
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(context.login(
-                    "20260001", "123456".toCharArray()).isSuccess());
+                    "20260006", "123456".toCharArray()).isSuccess());
             AppointmentBookingView booking = assertInstanceOf(
                     AppointmentBookingView.class,
                     context.send(
@@ -40,7 +41,7 @@ class ConsultationRecordsPanelTest {
                             .getData());
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
-                    "20260002", "123456".toCharArray()).isSuccess());
+                    "20260029", "123456".toCharArray()).isSuccess());
             assertTrue(context.send(
                     HospitalActions.SUBMIT_CONSULTATION,
                     new SubmitConsultationRequest(
@@ -52,7 +53,7 @@ class ConsultationRecordsPanelTest {
                             "3天后未缓解时复诊。")).isSuccess());
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
-                    "20260001", "123456".toCharArray()).isSuccess());
+                    "20260006", "123456".toCharArray()).isSuccess());
 
             ConsultationRecordsPanel[] panel = new ConsultationRecordsPanel[1];
             SwingUtilities.invokeAndWait(() -> {
@@ -68,9 +69,9 @@ class ConsultationRecordsPanelTest {
                     panel[0], "openConsultationRecordButton").getFirst();
             SwingUtilities.invokeAndWait(open::doClick);
 
-            List<String> details = namedLabels(
+            List<String> details = namedTextAreas(
                     panel[0], "consultationRecordDetail").stream()
-                    .map(JLabel::getText)
+                    .map(JTextArea::getText)
                     .toList();
             assertEquals(7, details.size());
             assertTrue(details.stream()
@@ -95,6 +96,12 @@ class ConsultationRecordsPanelTest {
     private static List<JLabel> namedLabels(Container root, String name) {
         return components(root, JLabel.class).stream()
                 .filter(label -> name.equals(label.getName()))
+                .toList();
+    }
+
+    private static List<JTextArea> namedTextAreas(Container root, String name) {
+        return components(root, JTextArea.class).stream()
+                .filter(area -> name.equals(area.getName()))
                 .toList();
     }
 

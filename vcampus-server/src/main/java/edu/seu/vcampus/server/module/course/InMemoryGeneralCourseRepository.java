@@ -18,10 +18,8 @@ final class InMemoryGeneralCourseRepository
 
         return List.of(
             createNaturalScience(),
-            createHumanities(),
-            createInnovation(),
-            createMentalHealth(),
-            createAesthetic()
+            createHumanities()
+
         );
     }
 
@@ -38,7 +36,6 @@ final class InMemoryGeneralCourseRepository
                 15001L,
                 "01",
                 List.of(
-                    "刘老师"
                 ),
                 List.of(
                     new ScheduleInfo(
@@ -67,6 +64,7 @@ final class InMemoryGeneralCourseRepository
                 "宇宙与文明",
                 2.0,
                 "任选",
+                "通识教育中心",
                 false,
                 List.of(
                     offering
@@ -170,9 +168,7 @@ final class InMemoryGeneralCourseRepository
                 2.0,
                 "任选",
                 false,
-                List.of(
-                    offering
-                )
+                List.of()
             );
 
         return new GeneralCourseRecord(
@@ -221,9 +217,7 @@ final class InMemoryGeneralCourseRepository
                 2.0,
                 "任选",
                 false,
-                List.of(
-                    offering
-                )
+                List.of()
             );
 
         return new GeneralCourseRecord(
@@ -275,9 +269,7 @@ final class InMemoryGeneralCourseRepository
                 2.0,
                 "任选",
                 false,
-                List.of(
-                    offering
-                )
+                List.of()
             );
 
         return new GeneralCourseRecord(

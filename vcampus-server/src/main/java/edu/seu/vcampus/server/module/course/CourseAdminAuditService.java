@@ -103,12 +103,11 @@ final class CourseAdminAuditService {
     }
 
     /**
-     * 记录强制选课。
+     * 记录教务强制选课。
      */
     synchronized void recordForceSelect(
         String operatorUsername,
         String studentId,
-        long batchId,
         long offeringId,
         String reason) {
 
@@ -116,7 +115,7 @@ final class CourseAdminAuditService {
             operatorUsername,
             studentId,
             CourseAdminOperationType.FORCE_SELECT,
-            batchId,
+            null,
             offeringId,
             null,
             optionalText(
@@ -199,7 +198,6 @@ final class CourseAdminAuditService {
      */
     synchronized void recordUpdateOffering(
         String operatorUsername,
-        long batchId,
         long offeringId,
         int capacity,
         boolean open,
@@ -219,6 +217,32 @@ final class CourseAdminAuditService {
             operatorUsername,
             "-",
             CourseAdminOperationType.UPDATE_OFFERING,
+            null,
+            offeringId,
+            null,
+            details);
+    }
+    /**
+     * 记录新增教学班。
+     */
+    synchronized void recordCreateOffering(
+        String operatorUsername,
+        long batchId,
+        long offeringId,
+        long courseId,
+        String classNo,
+        String reason) {
+
+        String details = optionalText(reason)
+            + "；课程ID="
+            + courseId
+            + "；班号="
+            + requiredText(classNo, "classNo");
+
+        append(
+            operatorUsername,
+            "-",
+            CourseAdminOperationType.CREATE_OFFERING,
             batchId,
             offeringId,
             null,
@@ -230,7 +254,6 @@ final class CourseAdminAuditService {
      */
     synchronized void recordUpdateCourse(
         String operatorUsername,
-        long batchId,
         long courseId,
         String courseCode,
         String courseName,
@@ -262,7 +285,7 @@ final class CourseAdminAuditService {
             operatorUsername,
             "-",
             CourseAdminOperationType.UPDATE_COURSE,
-            batchId,
+            null,
             null,
             null,
             details);
@@ -397,6 +420,7 @@ enum CourseAdminOperationType {
 
     FORCE_SELECT,
     FORCE_DROP,
+    CREATE_OFFERING,
     UPDATE_OFFERING,
     UPDATE_COURSE,
     UPDATE_BATCH,

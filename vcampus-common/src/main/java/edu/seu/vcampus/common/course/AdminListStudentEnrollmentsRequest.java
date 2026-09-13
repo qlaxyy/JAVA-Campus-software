@@ -17,7 +17,7 @@ public final class AdminListStudentEnrollmentsRequest
     /**
      * 学号。
      *
-     * 当前演示数据示例：student001。
+     * 当前演示数据示例：20260006。
      */
     private final String studentId;
 

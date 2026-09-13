@@ -13,9 +13,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class UserAdminPanelFilterTest {
 
     private final UserAccountView student = account(
-            "U-STUDENT", "20260001", "演示学生", Role.USER, Set.of(), true);
+            "U-STUDENT", "20260006", "周一", Role.USER, Set.of(), true);
     private final UserAccountView courseAdministrator = account(
-            "U-COURSE", "20260004", "选课管理员", Role.USER,
+            "U-COURSE", "20260002", "选课管理员", Role.USER,
             Set.of(AdminScope.COURSE), true);
     private final UserAccountView disabledAccount = account(
             "U-DISABLED", "20260011", "吴上祥", Role.USER, Set.of(), false);
@@ -25,7 +25,7 @@ class UserAdminPanelFilterTest {
 
     @Test
     void searchesCampusCardNumberAndDisplayName() {
-        assertTrue(matches(student, "60001", "全部状态", "全部管理范围"));
+        assertTrue(matches(student, "60006", "全部状态", "全部管理范围"));
         assertTrue(matches(disabledAccount, "吴上", "全部状态", "全部管理范围"));
         assertFalse(matches(student, "医生", "全部状态", "全部管理范围"));
     }

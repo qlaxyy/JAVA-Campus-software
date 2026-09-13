@@ -18,9 +18,6 @@ import java.util.Optional;
 /** Owns teacher qualifications and exposes only read-only identities to other modules. */
 final class TeacherRegistryService implements TeacherDirectory {
 
-    private static final String DEMO_TEACHER_USER_ID = "U-COURSE-TEACHER-001";
-    private static final String SYSTEM_ADMIN_USER_ID = "U-ADMIN-001";
-
     private final UserRepository users;
     private final TeacherRepository teachers;
     private final Clock clock;
@@ -33,7 +30,6 @@ final class TeacherRegistryService implements TeacherDirectory {
         this.users = Objects.requireNonNull(users, "users must not be null");
         this.teachers = Objects.requireNonNull(teachers, "teachers must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
-        seedDemoTeacherIfPossible();
     }
 
     @Override
@@ -128,22 +124,6 @@ final class TeacherRegistryService implements TeacherDirectory {
         return teachers.findByUserId(userId)
                 .flatMap(profile -> users.findById(userId)
                         .map(account -> toView(profile, account)));
-    }
-
-    private void seedDemoTeacherIfPossible() {
-        if (teachers.findByUserId(DEMO_TEACHER_USER_ID).isPresent()
-                || users.findById(DEMO_TEACHER_USER_ID).isEmpty()) {
-            return;
-        }
-        Instant now = clock.instant();
-        teachers.save(new TeacherProfile(
-                DEMO_TEACHER_USER_ID,
-                "计算机科学与工程学院",
-                "讲师",
-                true,
-                SYSTEM_ADMIN_USER_ID,
-                now,
-                now));
     }
 
     private static TeacherIdentity toIdentity(TeacherProfile profile, UserAccount account) {

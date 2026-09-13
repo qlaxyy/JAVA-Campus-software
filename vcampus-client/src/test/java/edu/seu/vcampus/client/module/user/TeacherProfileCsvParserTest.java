@@ -25,12 +25,12 @@ class TeacherProfileCsvParserTest {
     @Test
     void mapsCampusCardNumbersToExistingUserIds() throws IOException {
         Path csv = write("\uFEFFcampusCardNumber,department,title\n"
-                + "20260001,计算机学院,讲师\n"
-                + "20260002,医学院,副教授\n");
+                + "20260006,计算机学院,讲师\n"
+                + "20260029,医学院,副教授\n");
 
         List<SaveTeacherProfileRequest> profiles = TeacherProfileCsvParser.parse(
                 csv,
-                List.of(account("U-1", "20260001"), account("U-2", "20260002")));
+                List.of(account("U-1", "20260006"), account("U-2", "20260029")));
 
         assertEquals(2, profiles.size());
         assertEquals("U-1", profiles.getFirst().getUserId());
@@ -45,7 +45,7 @@ class TeacherProfileCsvParserTest {
 
         IllegalArgumentException exception = assertThrows(
                 IllegalArgumentException.class,
-                () -> TeacherProfileCsvParser.parse(csv, List.of(account("U-1", "20260001"))));
+                () -> TeacherProfileCsvParser.parse(csv, List.of(account("U-1", "20260006"))));
 
         assertTrue(exception.getMessage().contains("不存在于账号名单"));
     }

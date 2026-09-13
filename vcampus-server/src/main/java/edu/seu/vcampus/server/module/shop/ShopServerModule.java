@@ -9,22 +9,55 @@ import edu.seu.vcampus.common.shop.CreateOrderRequest;
 import edu.seu.vcampus.common.shop.ListOrdersResponse;
 import edu.seu.vcampus.common.shop.RechargeCampusCardRequest;
 import edu.seu.vcampus.common.shop.ShopActions;
+import edu.seu.vcampus.common.shop.SetCartItemRequest;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.infrastructure.ActionRouter;
+import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
 import edu.seu.vcampus.server.module.ServerContext;
 import edu.seu.vcampus.server.module.ServerModule;
 
 import java.util.Optional;
+import java.nio.file.Path;
 
 /**
  * Server entry point owned by the campus-shop module.
  */
 public final class ShopServerModule implements ServerModule {
 
-    private final InMemoryShopCatalog catalog = new InMemoryShopCatalog();
-    private final ShopCatalogService catalogService = new ShopCatalogService(catalog);
-    private final ShopCheckoutService checkoutService = new ShopCheckoutService(
-            catalog, new InMemoryCampusCardStore(), new InMemoryShopOrderStore());
+    private final ShopCatalogService catalogService;
+    private final ShopCheckoutService checkoutService;
+    private final ShoppingCartRepository carts;
+
+    public ShopServerModule() {
+        InMemoryShopCatalog catalog = new InMemoryShopCatalog();
+        this.catalogService = new ShopCatalogService(catalog);
+        this.checkoutService = new ShopCheckoutService(catalog, new InMemoryCampusCardStore(), new InMemoryShopOrderStore());
+        this.carts = new InMemoryShoppingCartStore(catalog);
+    }
+
+    private ShopServerModule(
+            ShopCatalogRepository catalog,
+            CampusCardRepository cards,
+            ShopOrderRepository orders,
+            ShoppingCartRepository carts,
+            AccessShopCheckoutTransaction accessCheckout) {
+        this.catalogService = new ShopCatalogService(catalog);
+        this.checkoutService = new ShopCheckoutService(
+                catalog, cards, orders, accessCheckout);
+        this.carts = carts;
+    }
+
+    /** Builds the shop module with shared Access persistence. */
+    public static ShopServerModule createAccessBacked(Path databasePath) {
+        AccessDatabase database = new AccessDatabase(databasePath);
+        AccessShopCatalog catalog = new AccessShopCatalog(database);
+        return new ShopServerModule(
+                catalog,
+                new AccessCampusCardStore(database),
+                new AccessShopOrderStore(database),
+                new AccessShoppingCartStore(database, catalog),
+                new AccessShopCheckoutTransaction(database));
+    }
 
     @Override
     public String id() {
@@ -39,6 +72,17 @@ public final class ShopServerModule implements ServerModule {
         router.register(ShopActions.PUBLISH_PRODUCT, request -> catalogService.publishProduct(request, context));
         router.register(ShopActions.UPDATE_PRODUCT, request -> catalogService.updateProduct(request, context));
         router.register(ShopActions.LIST_LISTINGS, request -> catalogService.listListings(request, context));
+        router.register(ShopActions.GET_CART, request -> requireSession(request, context,
+                session -> Response.success(request, "已返回购物车。", carts.view(session.getUserId()))));
+        router.register(ShopActions.SET_CART_ITEM, request -> requireSession(request, context, session -> {
+            if (!(request.getData() instanceof SetCartItemRequest payload)) {
+                return Response.failure(request.getRequestId(), ErrorCodes.COMMON_INVALID_REQUEST, "购物车参数无效。");
+            }
+            return Response.success(request, "购物车已更新。",
+                    carts.setQuantity(session.getUserId(), payload.getProductId(), payload.getQuantity()));
+        }));
+        router.register(ShopActions.CLEAR_CART, request -> requireSession(request, context,
+                session -> Response.success(request, "购物车已清空。", carts.clear(session.getUserId()))));
         router.register(ShopActions.GET_CAMPUS_CARD, request -> requireSession(request, context,
                 session -> Response.success(request, "已返回校园卡余额。", checkoutService.card(session))));
         router.register(ShopActions.RECHARGE_CAMPUS_CARD, request -> requireSession(request, context, session -> {

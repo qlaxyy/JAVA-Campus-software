@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import javax.swing.AbstractButton;
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
@@ -52,7 +53,7 @@ class SlotSearchPanelTest {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260006", "123456".toCharArray()).isSuccess());
             AppointmentBookingView booking = assertInstanceOf(
                     AppointmentBookingView.class,
                     context.send(
@@ -60,7 +61,7 @@ class SlotSearchPanelTest {
                             BookAppointmentRequest.firstVisit("slot-general-1"))
                             .getData());
             assertTrue(context.logout().isSuccess());
-            assertTrue(context.login("20260002", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260029", "123456".toCharArray()).isSuccess());
             ConsultationRecordView consultation = assertInstanceOf(
                     ConsultationRecordView.class,
                     context.send(
@@ -74,7 +75,7 @@ class SlotSearchPanelTest {
                                     "症状反复时普通复诊。"))
                             .getData());
             assertTrue(context.logout().isSuccess());
-            assertTrue(context.login("20260001", "123456".toCharArray()).isSuccess());
+            assertTrue(context.login("20260006", "123456".toCharArray()).isSuccess());
 
             SlotSearchPanel[] panel = new SlotSearchPanel[1];
             SwingUtilities.invokeAndWait(() -> {
@@ -100,7 +101,7 @@ class SlotSearchPanelTest {
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(context.login(
-                    "20260001", "123456".toCharArray()).isSuccess());
+                    "20260006", "123456".toCharArray()).isSuccess());
 
             SlotSearchPanel[] panel = new SlotSearchPanel[1];
             SwingUtilities.invokeAndWait(() -> {
@@ -129,6 +130,13 @@ class SlotSearchPanelTest {
             });
             assertEquals(2, labels.get().size());
             assertFalse(labels.get().stream().anyMatch(text -> text.contains(" / ")));
+            assertEquals(2, components(panel[0], JPanel.class).stream()
+                    .filter(component -> "slotAdaptiveContent".equals(component.getName()))
+                    .count());
+            assertEquals(1, components(panel[0], JPanel.class).stream()
+                    .filter(component -> "departmentBrowserResponsiveBody"
+                            .equals(component.getName()))
+                    .count());
 
             SwingUtilities.invokeAndWait(() -> visibleTextField(panel[0]).setText("不存在"));
             assertTrue(awaitCondition(() -> enabledBookingButtons(panel[0]).isEmpty()));
@@ -166,7 +174,7 @@ class SlotSearchPanelTest {
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(context.login(
-                    "20260001", "123456".toCharArray()).isSuccess());
+                    "20260006", "123456".toCharArray()).isSuccess());
 
             SlotSearchPanel[] panel = new SlotSearchPanel[1];
             SwingUtilities.invokeAndWait(() -> {

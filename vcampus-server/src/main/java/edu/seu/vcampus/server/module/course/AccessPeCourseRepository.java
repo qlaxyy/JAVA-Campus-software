@@ -61,7 +61,8 @@ final class AccessPeCourseRepository
         String sql =
             "SELECT c.courseId, c.courseCode, "
                 + "c.courseName, c.credits, "
-                + "c.courseType, p.sportProject "
+                + "c.courseType, c.departmentName, "
+                + "p.sportProject "
                 + "FROM tblCourse AS c "
                 + "INNER JOIN tblPeCourse AS p "
                 + "ON c.courseId = p.courseId "
@@ -106,8 +107,11 @@ final class AccessPeCourseRepository
                                 "credits"),
                             result.getString(
                                 "courseType"),
+                            result.getString(
+                                "departmentName"),
                             false,
                             offerings);
+
 
                     records.add(
                         new PeCourseRecord(
@@ -509,8 +513,9 @@ final class AccessPeCourseRepository
         String courseSql =
             "INSERT INTO tblCourse "
                 + "(courseId, courseCode, courseName, "
-                + "credits, courseType, courseGroup) "
-                + "VALUES (?, ?, ?, ?, ?, ?)";
+                + "credits, courseType, departmentName, "
+                + "courseGroup) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?)";
 
         try (PreparedStatement statement =
                  connection.prepareStatement(
@@ -538,6 +543,10 @@ final class AccessPeCourseRepository
 
             statement.setString(
                 6,
+                course.getDepartmentName());
+
+            statement.setString(
+                7,
                 COURSE_GROUP);
 
             statement.executeUpdate();

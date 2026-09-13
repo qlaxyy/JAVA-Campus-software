@@ -345,11 +345,9 @@ final class ConsultationRecordsPanel extends JPanel {
         JLabel label = new JLabel(labelText);
         label.setFont(HospitalTheme.uiFont(Font.PLAIN, 12F));
         label.setForeground(HospitalTheme.MUTED);
-        JLabel value = new JLabel("<html><body style='width:390px'>"
-                + html(valueText) + "</body></html>");
+        javax.swing.JTextArea value = HospitalResponsiveLayout.wrappingText(
+                valueText, HospitalTheme.uiFont(Font.BOLD, 14F), HospitalTheme.TEXT);
         value.setName("consultationRecordDetail");
-        value.setFont(HospitalTheme.uiFont(Font.BOLD, 14F));
-        value.setForeground(HospitalTheme.TEXT);
         row.add(label);
         row.add(Box.createVerticalStrut(4));
         row.add(value);
@@ -374,19 +372,10 @@ final class ConsultationRecordsPanel extends JPanel {
         return panel;
     }
 
-    private static JLabel message(String text, Color color, int width) {
-        JLabel label = new JLabel("<html><body style='width:" + width + "px'>"
-                + html(text) + "</body></html>");
-        label.setFont(HospitalTheme.uiFont(Font.PLAIN, 13F));
-        label.setForeground(color);
-        return label;
-    }
-
-    private static String html(String value) {
-        return value.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;");
+    private static javax.swing.JTextArea message(
+            String text, Color color, int ignoredWidth) {
+        return HospitalResponsiveLayout.wrappingText(
+                text, HospitalTheme.uiFont(Font.PLAIN, 13F), color);
     }
 
     private static void refresh(JPanel panel) {

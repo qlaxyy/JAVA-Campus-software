@@ -5,9 +5,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * 教学班管理设置 Repository。
+ * 教学班管理设置仓库。
  *
- * 保存教务修改后的容量和开放状态。
+ * 教学班容量和开放状态按照 offeringId
+ * 全局保存，与选课批次无关。
  */
 interface CourseOfferingSettingsRepository {
 
@@ -15,7 +16,6 @@ interface CourseOfferingSettingsRepository {
      * 查询教学班设置。
      */
     Optional<CourseOfferingSettings> find(
-        long batchId,
         long offeringId);
 
     /**
@@ -29,18 +29,11 @@ interface CourseOfferingSettingsRepository {
  * 教学班管理设置。
  */
 record CourseOfferingSettings(
-    long batchId,
     long offeringId,
     int capacity,
     boolean open) {
 
     CourseOfferingSettings {
-
-        if (batchId <= 0) {
-
-            throw new IllegalArgumentException(
-                "batchId must be positive");
-        }
 
         if (offeringId <= 0) {
 
@@ -63,20 +56,17 @@ final class InMemoryCourseOfferingSettingsRepository
     implements CourseOfferingSettingsRepository {
 
     private final ConcurrentMap<
-        OfferingSettingsKey,
+        Long,
         CourseOfferingSettings> settings =
         new ConcurrentHashMap<>();
 
     @Override
     public Optional<CourseOfferingSettings> find(
-        long batchId,
         long offeringId) {
 
         return Optional.ofNullable(
             settings.get(
-                new OfferingSettingsKey(
-                    batchId,
-                    offeringId)));
+                offeringId));
     }
 
     @Override
@@ -90,17 +80,7 @@ final class InMemoryCourseOfferingSettingsRepository
         }
 
         settings.put(
-            new OfferingSettingsKey(
-                value.batchId(),
-                value.offeringId()),
+            value.offeringId(),
             value);
-    }
-
-    /**
-     * 批次和教学班共同确定一条设置。
-     */
-    private record OfferingSettingsKey(
-        long batchId,
-        long offeringId) {
     }
 }

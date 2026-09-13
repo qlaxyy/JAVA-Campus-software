@@ -618,9 +618,13 @@ final class CourseSelectionService {
         return List.copyOf(
             courses);
     }
+    /**
+     * 教务为学生强制选择指定教学班。
+     *
+     * 教务操作不属于具体选课批次。
+     */
     synchronized CourseSelectionResult forceSelectCourse(
         String studentId,
-        long batchId,
         long offeringId) {
 
         if (studentId == null
@@ -633,50 +637,40 @@ final class CourseSelectionService {
         String cleanStudentId =
             studentId.trim();
 
-        SelectionBatchInfo batch =
-            batchService.findBatch(
-                batchId);
-
-        if (batch == null) {
-
-            return CourseSelectionResult.failure(
-                "选课批次不存在。");
-        }
-
         /*
-         * 汇总该批次的全部课程。
+         * 各课程 Repository 当前仍保留批次参数，
+         * 但课程数据本身不按照批次区分。
          */
+        long repositoryScope =
+            0L;
+
         List<CourseInfo> courses =
             new ArrayList<>();
 
         courses.addAll(
             planRepository.findPlanCourses(
-                batchId));
+                repositoryScope));
 
         courses.addAll(
             substitutionRepository
                 .findSubstituteCourses(
-                    batchId));
+                    repositoryScope));
 
         courses.addAll(
             peCourseService.findRawCourses(
-                batchId));
+                repositoryScope));
 
         courses.addAll(
             generalCourseService.findRawCourses(
-                batchId));
+                repositoryScope));
 
-        /*
-         * 查找目标课程和教学班。
-         */
         CourseInfo targetCourse =
             null;
 
         OfferingInfo targetOffering =
             null;
 
-        for (CourseInfo course
-            : courses) {
+        for (CourseInfo course : courses) {
 
             for (OfferingInfo offering
                 : course.getOfferings()) {
@@ -725,12 +719,13 @@ final class CourseSelectionService {
         }
 
         /*
-         * 学号作为课程模块内部的学生标识。
+         * 0 表示该记录由教务直接添加，
+         * 不属于任何真实选课批次。
          */
         enrollmentRepository.select(
             cleanStudentId,
             cleanStudentId,
-            batchId,
+            0L,
             offeringId);
 
         return CourseSelectionResult.success(

@@ -235,8 +235,7 @@ final class MyAppointmentsPanel extends JPanel {
         card.setLayout(new BorderLayout(18, 0));
         card.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 20));
         card.setAlignmentX(LEFT_ALIGNMENT);
-        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 166));
-        card.setPreferredSize(new Dimension(760, 166));
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 220));
 
         HospitalTheme.SurfacePanel dateBlock = new HospitalTheme.SurfacePanel(
                 HospitalTheme.PRIMARY_LIGHT, 12);
@@ -294,7 +293,6 @@ final class MyAppointmentsPanel extends JPanel {
         JPanel actions = new JPanel();
         actions.setOpaque(false);
         actions.setLayout(new BoxLayout(actions, BoxLayout.Y_AXIS));
-        actions.setPreferredSize(new Dimension(112, 130));
         JLabel status = statusLabel(appointment.getAppointmentStatus());
         status.setAlignmentX(CENTER_ALIGNMENT);
         actions.add(status);
@@ -310,8 +308,10 @@ final class MyAppointmentsPanel extends JPanel {
         }
 
         card.add(dateBlock, BorderLayout.WEST);
-        card.add(details, BorderLayout.CENTER);
-        card.add(actions, BorderLayout.EAST);
+        JPanel adaptiveContent = HospitalResponsiveLayout.adaptiveRow(
+                details, actions, 520, 14);
+        adaptiveContent.setName("appointmentAdaptiveContent");
+        card.add(adaptiveContent, BorderLayout.CENTER);
         return card;
     }
 

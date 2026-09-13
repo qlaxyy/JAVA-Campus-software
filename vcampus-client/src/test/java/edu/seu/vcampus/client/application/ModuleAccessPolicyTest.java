@@ -30,6 +30,7 @@ class ModuleAccessPolicyTest {
 
         assertTrue(ModuleAccessPolicy.isVisible(session, ModuleNames.HOSPITAL));
         assertTrue(ModuleAccessPolicy.isVisible(session, ModuleNames.SHOP));
+        assertTrue(ModuleAccessPolicy.isVisible(session, ModuleNames.CARD));
         assertFalse(ModuleAccessPolicy.isVisible(session, ModuleNames.COMMON));
         assertFalse(ModuleAccessPolicy.isVisible(session, "UNKNOWN"));
     }

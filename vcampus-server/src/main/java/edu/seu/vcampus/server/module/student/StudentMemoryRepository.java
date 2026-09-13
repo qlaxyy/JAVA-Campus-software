@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 
-public final class StudentMemoryRepository {
+public final class StudentMemoryRepository implements StudentRepository {
 
     private final Map<String, StudentProfileDto> store = new ConcurrentHashMap<>();
     private final List<StatusChangeDto> statusChangeStore = new CopyOnWriteArrayList<>();
@@ -22,11 +22,11 @@ public final class StudentMemoryRepository {
     }
 
     private void initDefaultData() {
-        // 学生 1：张三
+        // 最终演示学生 1：周一
         StudentProfileDto s1 = new StudentProfileDto();
         s1.setId(1L);
-        s1.setStudentId("student001");
-        s1.setName("张三");
+        s1.setStudentId("20260006");
+        s1.setName("周一");
         s1.setGender("男");
         s1.setEthnicity("汉族");
         s1.setNativePlace("江苏省南京市");
@@ -44,17 +44,17 @@ public final class StudentMemoryRepository {
         s1.setCampusId(1L);
         s1.setPoliticalStatus("共青团员");
         s1.setPhone("13800138000");
-        s1.setEmail("student001@seu.edu.cn");
+        s1.setEmail("20260006@seu.edu.cn");
         s1.setHomeAddress("江苏省南京市江宁区东南大学九龙湖校区");
         s1.setEmergencyContact("张父");
         s1.setEmergencyPhone("13900139000");
         store.put(normalize(s1.getStudentId()), s1);
 
-        // 学生 2：李四
+        // 最终演示学生 2：周二
         StudentProfileDto s2 = new StudentProfileDto();
         s2.setId(2L);
-        s2.setStudentId("student002");
-        s2.setName("李四");
+        s2.setStudentId("20260007");
+        s2.setName("周二");
         s2.setGender("女");
         s2.setEthnicity("汉族");
         s2.setNativePlace("江苏省苏州市");
@@ -72,7 +72,7 @@ public final class StudentMemoryRepository {
         s2.setCampusId(1L);
         s2.setPoliticalStatus("群众");
         s2.setPhone("13800138001");
-        s2.setEmail("student002@seu.edu.cn");
+        s2.setEmail("20260007@seu.edu.cn");
         s2.setHomeAddress("江苏省南京市江宁区东南大学九龙湖校区");
         s2.setEmergencyContact("李母");
         s2.setEmergencyPhone("13900139001");
@@ -92,6 +92,7 @@ public final class StudentMemoryRepository {
         return findByStudentId(studentId);
     }
 
+    @Override
     public Optional<StudentProfileDto> findByStudentId(String studentId) {
         if (studentId == null || studentId.trim().isEmpty()) {
             return Optional.empty();
@@ -99,6 +100,7 @@ public final class StudentMemoryRepository {
         return Optional.ofNullable(store.get(normalize(studentId)));
     }
 
+    @Override
     public boolean updateProfile(StudentUpdateProfileRequest req) {
         if (req == null || req.getStudentId() == null) return false;
         StudentProfileDto profile = store.get(normalize(req.getStudentId()));
@@ -116,6 +118,7 @@ public final class StudentMemoryRepository {
 
     // ================= 异动相关方法 =================
 
+    @Override
     public StatusChangeDto createStatusChange(ApplyStatusChangeRequest req) {
         String key = normalize(req.getStudentId());
         StudentProfileDto profile = store.get(key);
@@ -135,6 +138,7 @@ public final class StudentMemoryRepository {
         return change;
     }
 
+    @Override
     public List<StatusChangeDto> listStatusChanges(String studentId) {
         if (studentId == null || studentId.trim().isEmpty()) {
             return new ArrayList<>(statusChangeStore);
@@ -149,6 +153,7 @@ public final class StudentMemoryRepository {
         return result;
     }
 
+    @Override
     public boolean auditStatusChange(Long changeId, boolean approved, String operator) {
         for (StatusChangeDto item : statusChangeStore) {
             if (Objects.equals(item.getChangeId(), changeId)) {

@@ -164,9 +164,8 @@ class InMemoryAuthenticationServiceTest {
         InMemoryAuthenticationService authentication = new InMemoryAuthenticationService();
 
         assertTrue(authentication.teacherDirectory()
-                .findByUserId("U-COURSE-TEACHER-001").isPresent());
-        assertTrue(authentication.teacherDirectory()
-                .findByUserId("U-TEACHER-001").isEmpty());
+                .findByUserId("U-TEACHER-001").isPresent());
+        assertEquals(8, authentication.teacherDirectory().findActiveTeachers().size());
 
         authentication.teachers().saveProfile(
                 new SaveTeacherProfileRequest(

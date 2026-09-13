@@ -1,13 +1,20 @@
 package edu.seu.vcampus.client.module.shop;
 
+import edu.seu.vcampus.client.application.ClientContext;
+import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.common.shop.CartItemDto;
 import edu.seu.vcampus.common.shop.ProductSummaryDto;
+import edu.seu.vcampus.common.shop.SetCartItemRequest;
+import edu.seu.vcampus.common.shop.ShopActions;
+import edu.seu.vcampus.common.shop.ShoppingCartView;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Client-side cart used by the first UI slice. Server persistence comes later.
+ * Local view of the server-side cart. Mutations are stored in the shared Access database.
  */
 final class ShopCartStore {
 
@@ -19,6 +26,15 @@ final class ShopCartStore {
 
     private final List<Line> lines = new ArrayList<>();
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
+    private final ClientContext context;
+
+    ShopCartStore(ClientContext context) {
+        this.context = context;
+    }
+
+    void reload() {
+        sync(ShopActions.GET_CART, null);
+    }
 
     void add(ProductSummaryDto product) {
         add(product, 1);
@@ -35,13 +51,11 @@ final class ShopCartStore {
             Line line = lines.get(index);
             if (line.product().getProductId() == product.getProductId()) {
                 int next = Math.min(stock, line.quantity() + extra);
-                lines.set(index, new Line(product, next));
-                notifyListeners();
+                sync(ShopActions.SET_CART_ITEM, new SetCartItemRequest(product.getProductId(), next));
                 return;
             }
         }
-        lines.add(new Line(product, extra));
-        notifyListeners();
+        sync(ShopActions.SET_CART_ITEM, new SetCartItemRequest(product.getProductId(), extra));
     }
 
     void setQuantity(long productId, int quantity) {
@@ -50,13 +64,8 @@ final class ShopCartStore {
             if (line.product().getProductId() != productId) {
                 continue;
             }
-            if (quantity < 1) {
-                lines.remove(index);
-            } else {
-                int next = Math.min(line.product().getStockQty(), quantity);
-                lines.set(index, new Line(line.product(), next));
-            }
-            notifyListeners();
+            int next = quantity < 1 ? 0 : Math.min(line.product().getStockQty(), quantity);
+            sync(ShopActions.SET_CART_ITEM, new SetCartItemRequest(productId, next));
             return;
         }
     }
@@ -66,8 +75,7 @@ final class ShopCartStore {
     }
 
     void clear() {
-        lines.clear();
-        notifyListeners();
+        sync(ShopActions.CLEAR_CART, null);
     }
 
     List<Line> lines() {
@@ -97,6 +105,21 @@ final class ShopCartStore {
     private void notifyListeners() {
         for (Runnable listener : listeners) {
             listener.run();
+        }
+    }
+
+    private void sync(String action, java.io.Serializable request) {
+        try {
+            Response response = context.send(action, request);
+            if (response.isSuccess() && response.getData() instanceof ShoppingCartView cart) {
+                lines.clear();
+                for (CartItemDto item : cart.getItems()) {
+                    lines.add(new Line(item.getProduct(), item.getQuantity()));
+                }
+                notifyListeners();
+            }
+        } catch (IOException ignored) {
+            // The surrounding module already owns connection-error presentation.
         }
     }
 }

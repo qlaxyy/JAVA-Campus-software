@@ -10,6 +10,7 @@ import edu.seu.vcampus.common.hospital.EpisodeStatus;
 import edu.seu.vcampus.common.hospital.PaymentStatus;
 import edu.seu.vcampus.common.hospital.VisitType;
 import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
+import edu.seu.vcampus.server.security.UserDirectory;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -42,10 +43,16 @@ final class AccessHospitalRepository implements HospitalRepository {
 
     private final AccessDatabase database;
     private final Clock clock;
+    private final UserDirectory users;
 
     AccessHospitalRepository(AccessDatabase database, Clock clock) {
+        this(database, clock, null);
+    }
+
+    AccessHospitalRepository(AccessDatabase database, Clock clock, UserDirectory users) {
         this.database = database;
         this.clock = clock;
+        this.users = users;
         initializeSchema();
         seedReferenceData();
     }
@@ -84,7 +91,7 @@ final class AccessHospitalRepository implements HospitalRepository {
                         result.getString("doctorId"),
                         result.getString("userId"),
                         result.getString("departmentId"),
-                        result.getString("doctorName"),
+                        currentName(result.getString("userId"), result.getString("doctorName")),
                         result.getString("doctorTitle"),
                         true));
             }
@@ -105,7 +112,7 @@ final class AccessHospitalRepository implements HospitalRepository {
                         result.getString("doctorId"),
                         nullableText(result.getString("userId")),
                         result.getString("departmentId"),
-                        result.getString("doctorName"),
+                        currentName(nullableText(result.getString("userId")), result.getString("doctorName")),
                         result.getString("doctorTitle"),
                         true));
             }
@@ -127,7 +134,7 @@ final class AccessHospitalRepository implements HospitalRepository {
                         result.getString("doctorId"),
                         nullableText(result.getString("userId")),
                         result.getString("departmentId"),
-                        result.getString("doctorName"),
+                        currentName(nullableText(result.getString("userId")), result.getString("doctorName")),
                         result.getString("doctorTitle"),
                         result.getBoolean("active")));
             }
@@ -498,7 +505,7 @@ final class AccessHospitalRepository implements HospitalRepository {
             return Optional.empty();
         }
         String sql = "SELECT patientUserId, bloodType, allergies, medicalHistory, "
-                + "longTermMedication, emergencyContact, updatedAt "
+                + "longTermMedication, emergencyContact, updatedAt, profileVersion "
                 + "FROM tblHospitalPatientProfile WHERE patientUserId = ?";
         try (Connection connection = database.openConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -519,6 +526,39 @@ final class AccessHospitalRepository implements HospitalRepository {
             savePatientProfile(connection, profile);
         } catch (SQLException exception) {
             throw failure("Cannot save patient health profile.", exception);
+        }
+    }
+
+    @Override
+    public synchronized boolean savePatientProfileIfVersion(
+            HospitalPatientProfile profile,
+            long expectedVersion) {
+        String sql = "UPDATE tblHospitalPatientProfile SET bloodType = ?, "
+                + "allergies = ?, medicalHistory = ?, longTermMedication = ?, "
+                + "emergencyContact = ?, updatedAt = ?, profileVersion = ? "
+                + "WHERE patientUserId = ? AND profileVersion = ?";
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            bindPatientProfile(statement, profile, false);
+            statement.setLong(9, expectedVersion);
+            if (statement.executeUpdate() == 1) {
+                return true;
+            }
+            if (expectedVersion != 0L
+                    || patientProfileExists(connection, profile.patientUserId())) {
+                return false;
+            }
+            try {
+                insertPatientProfile(connection, profile);
+                return true;
+            } catch (SQLException insertFailure) {
+                if (patientProfileExists(connection, profile.patientUserId())) {
+                    return false;
+                }
+                throw insertFailure;
+            }
+        } catch (SQLException exception) {
+            throw failure("Cannot conditionally save patient health profile.", exception);
         }
     }
 
@@ -1178,8 +1218,10 @@ final class AccessHospitalRepository implements HospitalRepository {
                         + "medicalHistory MEMO, "
                         + "longTermMedication MEMO, "
                         + "emergencyContact TEXT(100), "
-                        + "updatedAt DATETIME NOT NULL)");
+                        + "updatedAt DATETIME NOT NULL, "
+                        + "profileVersion LONG NOT NULL)");
             }
+            migratePatientProfileColumns(connection);
             if (!tableExists(connection, EPISODE_TABLE)) {
                 execute(connection, "CREATE TABLE tblHospitalEpisode ("
                         + "episodeId TEXT(64) PRIMARY KEY, "
@@ -1470,6 +1512,15 @@ final class AccessHospitalRepository implements HospitalRepository {
         }
     }
 
+    private void migratePatientProfileColumns(Connection connection) throws SQLException {
+        if (!columnExists(connection, PATIENT_PROFILE_TABLE, "profileVersion")) {
+            execute(connection,
+                    "ALTER TABLE tblHospitalPatientProfile ADD COLUMN profileVersion LONG");
+        }
+        execute(connection, "UPDATE tblHospitalPatientProfile SET profileVersion = 0 "
+                + "WHERE profileVersion IS NULL");
+    }
+
     private String legacyValue(String prefix, String source) {
         String normalized = source == null ? "UNKNOWN"
                 : source.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9_-]", "_");
@@ -1607,8 +1658,8 @@ final class AccessHospitalRepository implements HospitalRepository {
             HospitalPatientProfile profile) throws SQLException {
         String sql = "INSERT INTO tblHospitalPatientProfile "
                 + "(patientUserId, bloodType, allergies, medicalHistory, "
-                + "longTermMedication, emergencyContact, updatedAt) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?)";
+                + "longTermMedication, emergencyContact, updatedAt, profileVersion) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             bindPatientProfile(statement, profile, true);
             statement.executeUpdate();
@@ -1620,7 +1671,7 @@ final class AccessHospitalRepository implements HospitalRepository {
             HospitalPatientProfile profile) throws SQLException {
         String sql = "UPDATE tblHospitalPatientProfile SET bloodType = ?, allergies = ?, "
                 + "medicalHistory = ?, longTermMedication = ?, emergencyContact = ?, "
-                + "updatedAt = ? WHERE patientUserId = ?";
+                + "updatedAt = ?, profileVersion = ? WHERE patientUserId = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             bindPatientProfile(statement, profile, false);
             statement.executeUpdate();
@@ -1641,6 +1692,7 @@ final class AccessHospitalRepository implements HospitalRepository {
         statement.setString(index++, nullableText(profile.longTermMedication()));
         statement.setString(index++, nullableText(profile.emergencyContact()));
         statement.setTimestamp(index++, Timestamp.valueOf(profile.updatedAt()));
+        statement.setLong(index++, profile.version());
         if (!insert) {
             statement.setString(index, profile.patientUserId());
         }
@@ -1654,7 +1706,8 @@ final class AccessHospitalRepository implements HospitalRepository {
                 result.getString("medicalHistory"),
                 result.getString("longTermMedication"),
                 result.getString("emergencyContact"),
-                result.getTimestamp("updatedAt").toLocalDateTime());
+                result.getTimestamp("updatedAt").toLocalDateTime(),
+                result.getLong("profileVersion"));
     }
 
     private String appointmentSelect() {
@@ -2027,7 +2080,7 @@ final class AccessHospitalRepository implements HospitalRepository {
 
     private String slotSelect() {
         return "SELECT s.scheduleId, s.departmentId, d.departmentName, "
-                + "s.doctorId, h.doctorName, h.doctorTitle, s.startTime, s.endTime, "
+                + "s.doctorId, h.userId AS doctorUserId, h.doctorName, h.doctorTitle, s.startTime, s.endTime, "
                 + "s.registrationFeeCents, s.capacity, s.status "
                 + "FROM (tblHospitalSchedule AS s INNER JOIN tblHospitalDepartment AS d "
                 + "ON s.departmentId = d.departmentId) "
@@ -2043,7 +2096,7 @@ final class AccessHospitalRepository implements HospitalRepository {
                         result.getString("departmentId"),
                         result.getString("departmentName"),
                         result.getString("doctorId"),
-                        result.getString("doctorName"),
+                        currentName(nullableText(result.getString("doctorUserId")), result.getString("doctorName")),
                         result.getString("doctorTitle"),
                         result.getTimestamp("startTime").toLocalDateTime(),
                         result.getTimestamp("endTime").toLocalDateTime(),
@@ -2054,6 +2107,15 @@ final class AccessHospitalRepository implements HospitalRepository {
             }
             return slots;
         }
+    }
+
+    private String currentName(String userId, String snapshot) {
+        if (users == null || userId == null) {
+            return snapshot;
+        }
+        return users.findByUserId(userId)
+                .map(identity -> identity.displayName())
+                .orElse(snapshot);
     }
 
     private boolean exists(Connection connection, String sql, String value) throws SQLException {

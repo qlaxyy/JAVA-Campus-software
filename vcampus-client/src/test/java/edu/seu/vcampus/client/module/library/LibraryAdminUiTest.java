@@ -25,13 +25,13 @@ class LibraryAdminUiTest {
     void onlyLibraryScopedAdministratorsSeeTheManagementWorkspace() throws Exception {
         try (CampusServer server = new CampusServer(0, 3)) {
             server.start();
-            assertEquals(2, onlineTabCount(login(server, "20260001")));
             assertEquals(2, onlineTabCount(login(server, "20260006")));
-            assertEquals(2, onlineTabCount(login(server, "20260005")));
+            assertEquals(2, onlineTabCount(login(server, "20260004")));
+            assertEquals(2, onlineTabCount(login(server, "20260003")));
             assertEquals(2, onlineTabCount(login(server, "20260000")));
-            assertTrue(hasManagementMode(login(server, "20260005")));
+            assertTrue(hasManagementMode(login(server, "20260003")));
             assertTrue(hasManagementMode(login(server, "20260000")));
-            assertFalse(hasManagementMode(login(server, "20260001")));
+            assertFalse(hasManagementMode(login(server, "20260004")));
         }
     }
 
@@ -39,7 +39,7 @@ class LibraryAdminUiTest {
     void selectionEnablesOnlyStateTransitionsKnownToBeLegal() throws Exception {
         try (CampusServer server = new CampusServer(0, 3)) {
             server.start();
-            ClientContext context = login(server, "20260005");
+            ClientContext context = login(server, "20260003");
             AtomicReference<LibraryModePanel> root = new AtomicReference<>();
             onEdt(() -> root.set((LibraryModePanel)
                     new LibraryClientModule().createView(context)));
@@ -116,12 +116,12 @@ class LibraryAdminUiTest {
     void reservedCopyIsLabeledAndCannotBeEditedOrWithdrawn() throws Exception {
         try (CampusServer server = new CampusServer(0, 3)) {
             server.start();
-            ClientContext reader = login(server, "20260001");
+            ClientContext reader = login(server, "20260006");
             assertTrue(reader.send(LibraryActions.CREATE_RESERVATION,
                     new CreateReservationRequest(
                             "B001", "九龙湖校区—中文图书阅览室3")).isSuccess());
 
-            ClientContext librarian = login(server, "20260005");
+            ClientContext librarian = login(server, "20260003");
             AtomicReference<LibraryModePanel> root = new AtomicReference<>();
             onEdt(() -> root.set((LibraryModePanel)
                     new LibraryClientModule().createView(librarian)));

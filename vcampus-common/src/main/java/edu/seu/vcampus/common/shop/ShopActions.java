@@ -22,6 +22,9 @@ public final class ShopActions {
     public static final String LIST_SALES = ActionNames.of(ModuleNames.SHOP, "LIST_SALES");
     public static final String UPDATE_PRODUCT = ActionNames.of(ModuleNames.SHOP, "UPDATE_PRODUCT");
     public static final String LIST_LISTINGS = ActionNames.of(ModuleNames.SHOP, "LIST_LISTINGS");
+    public static final String GET_CART = ActionNames.of(ModuleNames.SHOP, "GET_CART");
+    public static final String SET_CART_ITEM = ActionNames.of(ModuleNames.SHOP, "SET_CART_ITEM");
+    public static final String CLEAR_CART = ActionNames.of(ModuleNames.SHOP, "CLEAR_CART");
 
     private ShopActions() {
     }

@@ -59,7 +59,7 @@ final class AccessCoursePlanRepository
 
         String sql =
             "SELECT courseId, courseCode, courseName, "
-                + "credits, courseType "
+                + "credits, courseType, departmentName "
                 + "FROM tblCourse "
                 + "WHERE courseGroup = ? "
                 + "ORDER BY courseId";
@@ -97,6 +97,8 @@ final class AccessCoursePlanRepository
                                 "credits"),
                             result.getString(
                                 "courseType"),
+                            result.getString(
+                                "departmentName"),
                             false,
                             findOfferings(
                                 courseId)));
@@ -227,9 +229,16 @@ final class AccessCoursePlanRepository
 
                 while (result.next()) {
 
-                    teachers.add(
+                    String teacherName =
                         result.getString(
-                            "teacherName"));
+                            "teacherName");
+
+                    if (teacherName != null
+                        && !teacherName.isBlank()) {
+
+                        teachers.add(
+                            teacherName.trim());
+                    }
                 }
 
                 return List.copyOf(
@@ -325,6 +334,7 @@ final class AccessCoursePlanRepository
                             + "courseName TEXT(100) NOT NULL, "
                             + "credits DOUBLE NOT NULL, "
                             + "courseType TEXT(20) NOT NULL, "
+                            + "departmentName TEXT(100) NOT NULL, "
                             + "courseGroup TEXT(20) NOT NULL)");
 
                     statement.executeUpdate(
@@ -336,6 +346,30 @@ final class AccessCoursePlanRepository
                         "CREATE UNIQUE INDEX "
                             + "ux_tblCourse_courseCode "
                             + "ON tblCourse (courseCode)");
+                }
+            }
+
+            /*
+             * 兼容旧数据库：
+             * 给已有课程表增加真实开课院系字段。
+             */
+            if (!columnExists(
+                connection,
+                "tblCourse",
+                "departmentName")) {
+
+                try (Statement statement =
+                         connection.createStatement()) {
+
+                    statement.executeUpdate(
+                        "ALTER TABLE tblCourse "
+                            + "ADD COLUMN departmentName "
+                            + "TEXT(100)");
+
+                    statement.executeUpdate(
+                        "UPDATE tblCourse "
+                            + "SET departmentName = '未设置' "
+                            + "WHERE departmentName IS NULL");
                 }
             }
 
@@ -356,7 +390,8 @@ final class AccessCoursePlanRepository
                             + "teachingLanguage TEXT(20) NOT NULL, "
                             + "selectedCount LONG NOT NULL, "
                             + "capacity LONG NOT NULL, "
-                            + "availabilityStatus TEXT(30) NOT NULL)");
+                            + "availabilityStatus "
+                            + "TEXT(30) NOT NULL)");
 
                     statement.executeUpdate(
                         "CREATE UNIQUE INDEX "
@@ -379,14 +414,17 @@ final class AccessCoursePlanRepository
 
                     statement.executeUpdate(
                         "CREATE TABLE tblOfferingTeacher ("
-                            + "offeringTeacherId COUNTER PRIMARY KEY, "
+                            + "offeringTeacherId "
+                            + "COUNTER PRIMARY KEY, "
                             + "offeringId LONG NOT NULL, "
+                            + "teacherUserId TEXT(64), "
                             + "teacherName TEXT(50) NOT NULL)");
 
                     statement.executeUpdate(
                         "CREATE INDEX "
                             + "ix_tblOfferingTeacher_offeringId "
-                            + "ON tblOfferingTeacher (offeringId)");
+                            + "ON tblOfferingTeacher "
+                            + "(offeringId)");
                 }
             }
 
@@ -411,7 +449,8 @@ final class AccessCoursePlanRepository
                     statement.executeUpdate(
                         "CREATE INDEX "
                             + "ix_tblCourseSchedule_offeringId "
-                            + "ON tblCourseSchedule (offeringId)");
+                            + "ON tblCourseSchedule "
+                            + "(offeringId)");
                 }
             }
 
@@ -424,7 +463,7 @@ final class AccessCoursePlanRepository
     }
 
     /**
-     * 将原有内存演示课程写入空数据库。
+     * 将内存演示课程写入数据库。
      */
     private void initialiseDemoData() {
 
@@ -477,7 +516,8 @@ final class AccessCoursePlanRepository
 
         return recordExists(
             "SELECT COUNT(*) AS recordCount "
-                + "FROM tblCourse WHERE courseId = ?",
+                + "FROM tblCourse "
+                + "WHERE courseId = ?",
             courseId);
     }
 
@@ -527,8 +567,9 @@ final class AccessCoursePlanRepository
         String sql =
             "INSERT INTO tblCourse "
                 + "(courseId, courseCode, courseName, "
-                + "credits, courseType, courseGroup) "
-                + "VALUES (?, ?, ?, ?, ?, ?)";
+                + "credits, courseType, "
+                + "departmentName, courseGroup) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?)";
 
         try (Connection connection =
                  database.openConnection();
@@ -558,6 +599,10 @@ final class AccessCoursePlanRepository
 
             statement.setString(
                 6,
+                course.getDepartmentName());
+
+            statement.setString(
+                7,
                 "REGULAR");
 
             statement.executeUpdate();
@@ -742,6 +787,45 @@ final class AccessCoursePlanRepository
                 if (expected.equalsIgnoreCase(
                     tables.getString(
                         "TABLE_NAME"))) {
+
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private boolean columnExists(
+        Connection connection,
+        String tableName,
+        String columnName)
+        throws SQLException {
+
+        DatabaseMetaData metadata =
+            connection.getMetaData();
+
+        try (ResultSet columns =
+                 metadata.getColumns(
+                     null,
+                     null,
+                     "%",
+                     "%")) {
+
+            while (columns.next()) {
+
+                String actualTable =
+                    columns.getString(
+                        "TABLE_NAME");
+
+                String actualColumn =
+                    columns.getString(
+                        "COLUMN_NAME");
+
+                if (tableName.equalsIgnoreCase(
+                    actualTable)
+                    && columnName.equalsIgnoreCase(
+                    actualColumn)) {
 
                     return true;
                 }

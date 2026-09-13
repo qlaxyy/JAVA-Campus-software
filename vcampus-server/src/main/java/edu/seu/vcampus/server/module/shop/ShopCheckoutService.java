@@ -22,23 +22,31 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-/**
- * Campus-card wallet, checkout, cancel and refund. Memory-backed until Access DAOs exist.
- */
+/** Campus-card wallet, checkout, cancel and refund. */
 final class ShopCheckoutService {
 
-    private final InMemoryShopCatalog catalog;
-    private final InMemoryCampusCardStore cards;
-    private final InMemoryShopOrderStore orders;
+    private final ShopCatalogRepository catalog;
+    private final CampusCardRepository cards;
+    private final ShopOrderRepository orders;
+    private final AccessShopCheckoutTransaction accessCheckout;
     private final Object lock = new Object();
 
     ShopCheckoutService(
-            InMemoryShopCatalog catalog,
-            InMemoryCampusCardStore cards,
-            InMemoryShopOrderStore orders) {
+            ShopCatalogRepository catalog,
+            CampusCardRepository cards,
+            ShopOrderRepository orders) {
+        this(catalog, cards, orders, null);
+    }
+
+    ShopCheckoutService(
+            ShopCatalogRepository catalog,
+            CampusCardRepository cards,
+            ShopOrderRepository orders,
+            AccessShopCheckoutTransaction accessCheckout) {
         this.catalog = Objects.requireNonNull(catalog, "catalog must not be null");
         this.cards = Objects.requireNonNull(cards, "cards must not be null");
         this.orders = Objects.requireNonNull(orders, "orders must not be null");
+        this.accessCheckout = accessCheckout;
     }
 
     CampusCardView card(SessionInfo session) {
@@ -61,11 +69,16 @@ final class ShopCheckoutService {
         }
         Map<Long, Integer> quantities = merge(request.getLines());
         synchronized (lock) {
+            if (accessCheckout != null) {
+                return accessCheckout.createOrder(session, request, quantities);
+            }
             List<OrderItemDto> items = new ArrayList<>();
             int totalFen = 0;
             for (Map.Entry<Long, Integer> entry : quantities.entrySet()) {
                 ProductSummaryDto product = catalog.findById(entry.getKey()).orElseThrow(() ->
-                        new ShopBusinessException(ErrorCodes.SHOP_OUT_OF_STOCK, "商品不存在或已下架。"));
+                        new ShopBusinessException(
+                                ErrorCodes.SHOP_OUT_OF_STOCK,
+                                "商品不存在或已下架。"));
                 if (product.getSaleStatus() != ProductSaleStatus.ON_SALE
                         || product.getStockQty() < entry.getValue()) {
                     throw new ShopBusinessException(
@@ -94,8 +107,7 @@ final class ShopCheckoutService {
                 }
             } catch (RuntimeException exception) {
                 cards.refund(session.getUserId(), totalFen);
-                for (int index = 0; index < reserved.size(); index++) {
-                    Long productId = reserved.get(index);
+                for (Long productId : reserved) {
                     catalog.incrementStock(productId, quantities.get(productId));
                 }
                 throw exception;
@@ -108,7 +120,8 @@ final class ShopCheckoutService {
                     ShopPaymentMethods.CAMPUS_CARD,
                     request.getFulfillHint(),
                     totalFen,
-                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
+                    LocalDateTime.now().format(
+                            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
                     items);
             orders.save(order);
             return order;
@@ -119,9 +132,13 @@ final class ShopCheckoutService {
         Objects.requireNonNull(request, "request must not be null");
         synchronized (lock) {
             ShopOrderDto order = orders.findById(request.getOrderId()).orElseThrow(() ->
-                    new ShopBusinessException(ErrorCodes.SHOP_ORDER_NOT_FOUND, "订单不存在。"));
+                    new ShopBusinessException(
+                            ErrorCodes.SHOP_ORDER_NOT_FOUND,
+                            "订单不存在。"));
             if (!order.getUserId().equals(session.getUserId())) {
-                throw new ShopBusinessException(ErrorCodes.AUTH_FORBIDDEN, "不能取消他人的订单。");
+                throw new ShopBusinessException(
+                        ErrorCodes.AUTH_FORBIDDEN,
+                        "不能取消他人的订单。");
             }
             if (order.getStatus() != ShopOrderStatus.PAID) {
                 throw new ShopBusinessException(

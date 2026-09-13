@@ -6,63 +6,48 @@ import java.util.Objects;
 
 /**
  * 管理员为指定学生强制选课的请求。
+ *
+ * 教务只需要指定学生和教学班，
+ * 不需要选择选课批次。
  */
 public final class AdminForceSelectCourseRequest
     implements Serializable {
 
     @Serial
-    private static final long serialVersionUID =
-        1L;
+    private static final long serialVersionUID = 1L;
 
-    /**
-     * 目标学生学号。
-     */
     private final String studentId;
-
-    /**
-     * 选课批次编号。
-     */
-    private final long batchId;
-
-    /**
-     * 教学班编号。
-     */
     private final long offeringId;
-
-    /**
-     * 强制选课原因。
-     */
     private final String reason;
 
     public AdminForceSelectCourseRequest(
         String studentId,
-        long batchId,
         long offeringId,
         String reason) {
 
         this.studentId =
-            Objects.requireNonNull(
-                studentId);
+            requireText(
+                studentId,
+                "studentId");
 
-        this.batchId =
-            batchId;
+        if (offeringId <= 0) {
+
+            throw new IllegalArgumentException(
+                "offeringId must be positive");
+        }
 
         this.offeringId =
             offeringId;
 
         this.reason =
-            Objects.requireNonNull(
-                reason);
+            requireText(
+                reason,
+                "reason");
     }
 
     public String getStudentId() {
 
         return studentId;
-    }
-
-    public long getBatchId() {
-
-        return batchId;
     }
 
     public long getOfferingId() {
@@ -73,5 +58,25 @@ public final class AdminForceSelectCourseRequest
     public String getReason() {
 
         return reason;
+    }
+
+    private static String requireText(
+        String value,
+        String fieldName) {
+
+        Objects.requireNonNull(
+            value,
+            fieldName + " must not be null");
+
+        String normalized =
+            value.trim();
+
+        if (normalized.isEmpty()) {
+
+            throw new IllegalArgumentException(
+                fieldName + " must not be blank");
+        }
+
+        return normalized;
     }
 }

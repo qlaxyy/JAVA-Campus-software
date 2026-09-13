@@ -48,24 +48,24 @@ class LoginPanelTest {
         assertFalse(labels.contains("用户登录"));
         assertFalse(labels.contains("开发期基础登录"));
         assertTrue(labels.contains("超级管理员  20260000"));
-        assertTrue(labels.contains("普通账号  20260001"));
-        assertTrue(labels.contains("医生演示  20260002"));
-        assertTrue(labels.contains("学籍管理员  20260003"));
-        assertTrue(labels.contains("选课管理员  20260004"));
-        assertTrue(labels.contains("图书馆管理员  20260005"));
-        assertTrue(labels.contains("商店管理员  20260006"));
-        assertTrue(labels.contains("医院管理员  20260007"));
-        assertTrue(labels.contains("教师演示  20260008"));
+        assertTrue(labels.contains("学生账号  20260006"));
+        assertTrue(labels.contains("医生账号  20260029"));
+        assertTrue(labels.contains("学籍管理员  20260001"));
+        assertTrue(labels.contains("选课管理员  20260002"));
+        assertTrue(labels.contains("图书馆管理员  20260003"));
+        assertTrue(labels.contains("商店管理员  20260004"));
+        assertTrue(labels.contains("医院管理员  20260005"));
+        assertTrue(labels.contains("教师账号  20260021"));
         assertEquals(List.of(
                 "超级管理员  20260000",
-                "普通账号  20260001",
-                "医生演示  20260002",
-                "学籍管理员  20260003",
-                "选课管理员  20260004",
-                "图书馆管理员  20260005",
-                "商店管理员  20260006",
-                "医院管理员  20260007",
-                "教师演示  20260008"),
+                "学籍管理员  20260001",
+                "选课管理员  20260002",
+                "图书馆管理员  20260003",
+                "商店管理员  20260004",
+                "医院管理员  20260005",
+                "学生账号  20260006",
+                "教师账号  20260021",
+                "医生账号  20260029"),
                 labels.stream().filter(text -> text.matches(".*2026\\d{4}"))
                         .toList());
     }
@@ -75,8 +75,8 @@ class LoginPanelTest {
         assertEquals("请输入一卡通号", LoginPanel.validationMessage(" ", "secret".toCharArray()));
         assertEquals("一卡通号必须是 8 位数字（年份 + 4 位流水号）",
                 LoginPanel.validationMessage("AAA", "secret".toCharArray()));
-        assertEquals("请输入密码", LoginPanel.validationMessage("20260001", new char[0]));
-        assertNull(LoginPanel.validationMessage("20260001", "123456".toCharArray()));
+        assertEquals("请输入密码", LoginPanel.validationMessage("20260006", new char[0]));
+        assertNull(LoginPanel.validationMessage("20260006", "123456".toCharArray()));
         assertEquals("20260009", CampusCardNumber.format(2026, 9));
         assertEquals(9, CampusCardNumber.sequence("20260009"));
         assertTrue(CampusCardNumber.isValid("20260000"));

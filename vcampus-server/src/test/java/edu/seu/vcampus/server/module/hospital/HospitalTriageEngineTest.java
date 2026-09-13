@@ -1,6 +1,7 @@
 package edu.seu.vcampus.server.module.hospital;
 
 import edu.seu.vcampus.common.hospital.TriageMatchLevel;
+import edu.seu.vcampus.common.hospital.TriageFollowUpAnswer;
 import edu.seu.vcampus.common.hospital.TriageRequest;
 import org.junit.jupiter.api.Test;
 
@@ -71,6 +72,42 @@ class HospitalTriageEngineTest {
 
         assertEquals("dept-general",
                 result.getRecommendations().getFirst().getDepartmentId());
+    }
+
+    @Test
+    void treatsAnExplicitDangerouslyHighTemperatureAsUrgent() {
+        var withUnit = engine.triage(
+                new TriageRequest("发烧", false, List.of(
+                        new TriageFollowUpAnswer("测得体温是多少？", "50度"))),
+                departments);
+        var numberOnlyAnswer = engine.triage(
+                new TriageRequest("发烧", false, List.of(
+                        new TriageFollowUpAnswer("测得体温是多少？", "41"))),
+                departments);
+        var ordinaryFever = engine.triage(
+                new TriageRequest("发烧", false, List.of(
+                        new TriageFollowUpAnswer("测得体温是多少？", "38.5度"))),
+                departments);
+
+        assertTrue(withUnit.isUrgent());
+        assertTrue(numberOnlyAnswer.isUrgent());
+        assertFalse(ordinaryFever.isUrgent());
+    }
+
+    @Test
+    void usesRedFlagsAcrossSymptomFamiliesButRespectsExplicitNegation() {
+        var neurological = engine.triage(
+                new TriageRequest("突然嘴歪，说话含糊", false), departments);
+        var poisoning = engine.triage(
+                new TriageRequest("不小心服用过量药物", false), departments);
+        var negated = engine.triage(
+                new TriageRequest("咳嗽，没有呼吸困难，也不是持续胸痛", false),
+                departments);
+
+        assertTrue(neurological.isUrgent());
+        assertTrue(neurological.getSafetyMessage().contains("肢体活动"));
+        assertTrue(poisoning.isUrgent());
+        assertFalse(negated.isUrgent());
     }
 
     private static HospitalDepartment department(String id, String name) {

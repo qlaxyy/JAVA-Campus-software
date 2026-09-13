@@ -6,6 +6,8 @@ import java.util.Objects;
 
 /**
  * 教务修改课程基本信息请求。
+ *
+ * 课程基本信息是全局数据，不属于选课批次。
  */
 public final class AdminUpdateCourseRequest
     implements Serializable {
@@ -13,7 +15,6 @@ public final class AdminUpdateCourseRequest
     @Serial
     private static final long serialVersionUID = 1L;
 
-    private final long batchId;
     private final long courseId;
     private final String courseCode;
     private final String courseName;
@@ -22,7 +23,6 @@ public final class AdminUpdateCourseRequest
     private final String reason;
 
     public AdminUpdateCourseRequest(
-        long batchId,
         long courseId,
         String courseCode,
         String courseName,
@@ -30,36 +30,43 @@ public final class AdminUpdateCourseRequest
         String courseType,
         String reason) {
 
-        this.batchId =
-            batchId;
+        if (courseId <= 0) {
+
+            throw new IllegalArgumentException(
+                "courseId must be positive");
+        }
+
+        if (credits <= 0) {
+
+            throw new IllegalArgumentException(
+                "credits must be positive");
+        }
 
         this.courseId =
             courseId;
 
         this.courseCode =
-            Objects.requireNonNull(
-                courseCode);
+            requireText(
+                courseCode,
+                "courseCode");
 
         this.courseName =
-            Objects.requireNonNull(
-                courseName);
+            requireText(
+                courseName,
+                "courseName");
 
         this.credits =
             credits;
 
         this.courseType =
-            Objects.requireNonNull(
-                courseType);
+            requireText(
+                courseType,
+                "courseType");
 
         this.reason =
             reason == null
                 ? ""
-                : reason;
-    }
-
-    public long getBatchId() {
-
-        return batchId;
+                : reason.trim();
     }
 
     public long getCourseId() {
@@ -90,5 +97,25 @@ public final class AdminUpdateCourseRequest
     public String getReason() {
 
         return reason;
+    }
+
+    private static String requireText(
+        String value,
+        String fieldName) {
+
+        Objects.requireNonNull(
+            value,
+            fieldName + " must not be null");
+
+        String normalized =
+            value.trim();
+
+        if (normalized.isEmpty()) {
+
+            throw new IllegalArgumentException(
+                fieldName + " must not be blank");
+        }
+
+        return normalized;
     }
 }

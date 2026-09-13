@@ -14,9 +14,10 @@ public final class ModuleNames {
     public static final String LIBRARY = "LIBRARY";
     public static final String SHOP = "SHOP";
     public static final String HOSPITAL = "HOSPITAL";
+    public static final String CARD = "CARD";
 
     private static final Set<String> SUPPORTED = Set.of(
-            COMMON, USER, STUDENT, COURSE, LIBRARY, SHOP, HOSPITAL);
+            COMMON, USER, STUDENT, COURSE, LIBRARY, SHOP, HOSPITAL, CARD);
 
     private ModuleNames() {
     }

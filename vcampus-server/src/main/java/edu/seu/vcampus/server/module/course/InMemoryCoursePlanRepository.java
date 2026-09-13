@@ -17,15 +17,15 @@ final class InMemoryCoursePlanRepository
     @Override
     public List<CourseInfo> findPlanCourses(long batchId) {
 
+
+            // 方案内
         return List.of(
             createCalculusCourse(),
             createPhysicsCourse(),
             createDataStructureCourse(),
             createOperatingSystemCourse(),
-            createDatabaseCourse(),
-            createNetworkCourse(),
-            createSoftwareEngineeringCourse(),
-            createAiCourse()
+            createNetworkCourse()
+
         );
     }
 
@@ -38,7 +38,7 @@ final class InMemoryCoursePlanRepository
             new OfferingInfo(
                 1001L,
                 "01",
-                List.of("张老师"),
+                List.of(),
                 List.of(
                     new ScheduleInfo(
                         1,
@@ -73,6 +73,7 @@ final class InMemoryCoursePlanRepository
             "高等数学",
             4.0,
             "必修",
+            "数学学院",
             false,
             List.of(offering)
         );
@@ -90,8 +91,6 @@ final class InMemoryCoursePlanRepository
                 2001L,
                 "01",
                 List.of(
-                    "王老师",
-                    "陈老师"
                 ),
                 List.of(
                     new ScheduleInfo(
@@ -119,6 +118,7 @@ final class InMemoryCoursePlanRepository
             "大学物理",
             3.0,
             "必修",
+            "物理学院",
             false,
             List.of(offering)
         );
@@ -136,7 +136,7 @@ final class InMemoryCoursePlanRepository
             new OfferingInfo(
                 3001L,
                 "01",
-                List.of("刘老师"),
+                List.of(),
                 List.of(
                     new ScheduleInfo(
                         2,
@@ -163,6 +163,7 @@ final class InMemoryCoursePlanRepository
             "数据结构",
             4.0,
             "必修",
+            "计算机科学与工程学院",
             false,
             List.of(offering)
         );
@@ -181,7 +182,7 @@ final class InMemoryCoursePlanRepository
             new OfferingInfo(
                 4001L,
                 "01",
-                List.of("陈老师"),
+                List.of(),
                 List.of(
                     new ScheduleInfo(
                         2,
@@ -253,7 +254,7 @@ final class InMemoryCoursePlanRepository
             3.0,
             "必修",
             false,
-            List.of(offering)
+            List.of()
         );
     }
 
@@ -342,7 +343,7 @@ final class InMemoryCoursePlanRepository
             3.0,
             "限选",
             false,
-            List.of(offering)
+            List.of()
         );
     }
 
@@ -386,7 +387,7 @@ final class InMemoryCoursePlanRepository
             2.5,
             "任选",
             false,
-            List.of(offering)
+            List.of()
         );
     }
 }

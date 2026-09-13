@@ -19,12 +19,12 @@ import java.util.Objects;
 /**
  * In-memory shop catalog used until Access DAO replaces this class.
  */
-public final class InMemoryShopCatalog {
+public final class InMemoryShopCatalog implements ShopCatalogRepository {
 
     private static final String CAMPUS_SELLER = "校园商店";
     private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    private final List<ProductSummaryDto> products = new ArrayList<>(seed());
+    private final List<ProductSummaryDto> products = new ArrayList<>(seedProducts());
     private final List<ShopListingRecordDto> listings = new ArrayList<>();
     private final List<ShopCategoryDto> categories = new ArrayList<>(ShopCategories.seed());
     private long nextId = 11L;
@@ -269,7 +269,7 @@ public final class InMemoryShopCatalog {
                 || product.getDescription().toLowerCase(Locale.ROOT).contains(needle);
     }
 
-    private static List<ProductSummaryDto> seed() {
+    static List<ProductSummaryDto> seedProducts() {
         List<ProductSummaryDto> rows = new ArrayList<>();
         rows.add(onSale(1, ShopCategories.STATIONERY, "中性笔 0.5mm", 350, 120,
                 "顺滑好写，适合课堂笔记。笔帽不易丢，整盒分装后单支出售。"));

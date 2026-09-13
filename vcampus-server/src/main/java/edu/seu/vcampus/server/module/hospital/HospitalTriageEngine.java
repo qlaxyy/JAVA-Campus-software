@@ -4,6 +4,7 @@ import edu.seu.vcampus.common.hospital.TriageMatchLevel;
 import edu.seu.vcampus.common.hospital.TriageRecommendationView;
 import edu.seu.vcampus.common.hospital.TriageRequest;
 import edu.seu.vcampus.common.hospital.TriageResultView;
+import edu.seu.vcampus.common.hospital.TriageFollowUpAnswer;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -11,13 +12,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 /** Deterministic department guidance using only local, explainable keyword rules. */
 final class HospitalTriageEngine {
 
-    private static final List<String> URGENT_KEYWORDS = List.of(
-            "严重呼吸困难", "无法呼吸", "意识不清", "昏迷",
-            "大量出血", "止不住血", "持续胸痛", "抽搐", "严重过敏");
+    private final HospitalRedFlagEngine redFlagEngine = new HospitalRedFlagEngine();
 
     private static final List<DepartmentRule> RULES = List.of(
             rule("dept-respiratory",
@@ -53,11 +53,16 @@ final class HospitalTriageEngine {
     TriageResultView triage(
             TriageRequest request,
             List<HospitalDepartment> activeDepartments) {
-        String description = normalize(request.getSymptomDescription());
-        if (request.hasUrgentConcern() || containsAny(description, URGENT_KEYWORDS)) {
+        String description = conversationText(request);
+        Optional<HospitalRedFlagEngine.RedFlagAlert> redFlag =
+                redFlagEngine.evaluate(request);
+        if (redFlag.isPresent()) {
             return new TriageResultView(
                     true,
-                    "描述中可能存在不适合等待普通预约的情况。请立即寻求线下医护人员帮助；情况危急时联系当地急救服务。",
+                    "描述中出现" + redFlag.orElseThrow().patientReason()
+                            + "，不适合等待普通预约。"
+                            + "请立即寻求线下医护人员帮助；"
+                            + "情况危急时联系当地急救服务。",
                     List.of());
         }
 
@@ -102,7 +107,7 @@ final class HospitalTriageEngine {
         }
         return new TriageResultView(
                 false,
-                "以下结果由本地规则生成，只用于帮助选择科室，不构成疾病诊断或治疗意见。",
+                "以下建议仅用于选择就诊科室，不构成疾病诊断或治疗意见。",
                 recommendations);
     }
 
@@ -126,6 +131,14 @@ final class HospitalTriageEngine {
 
     private static String normalize(String text) {
         return text.toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
+    }
+
+    private static String conversationText(TriageRequest request) {
+        StringBuilder text = new StringBuilder(request.getSymptomDescription());
+        for (TriageFollowUpAnswer answer : request.getFollowUpAnswers()) {
+            text.append(' ').append(answer.getAnswer());
+        }
+        return normalize(text.toString());
     }
 
     private static boolean containsAny(String text, List<String> keywords) {

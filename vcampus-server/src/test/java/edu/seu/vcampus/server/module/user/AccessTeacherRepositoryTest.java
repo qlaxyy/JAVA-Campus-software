@@ -36,20 +36,20 @@ class AccessTeacherRepositoryTest {
         assertEquals("副教授", profile.title());
         assertFalse(profile.active());
         assertEquals("U-ADMIN-001", profile.createdByUserId());
-        assertEquals(1, repository(databasePath).findAll().size());
+        assertEquals(9, repository(databasePath).findAll().size());
     }
 
     @Test
-    void persistentBootstrapSeedsOnlyTheDedicatedTeacherAccount() {
+    void persistentBootstrapSeedsTheEightFinalDemoTeachers() {
         Path databasePath = temporaryDirectory.resolve("seeded-teachers.accdb");
         InMemoryAuthenticationService authentication =
                 UserAuthenticationBootstrap.createAccessBacked(databasePath);
 
         assertTrue(authentication.teacherDirectory()
-                .findByUserId("U-COURSE-TEACHER-001").isPresent());
+                .findByUserId("U-TEACHER-001").isPresent());
         assertTrue(authentication.teacherDirectory()
-                .findByUserId("U-TEACHER-001").isEmpty());
-        assertEquals(1, authentication.teacherDirectory().findActiveTeachers().size());
+                .findByUserId("U-TEACHER-008").isPresent());
+        assertEquals(8, authentication.teacherDirectory().findActiveTeachers().size());
     }
 
     private AccessTeacherRepository repository(Path path) {

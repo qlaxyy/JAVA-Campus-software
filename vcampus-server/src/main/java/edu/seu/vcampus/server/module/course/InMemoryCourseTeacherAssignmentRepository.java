@@ -14,14 +14,15 @@ final class InMemoryCourseTeacherAssignmentRepository
         ConcurrentHashMap.newKeySet();
 
     InMemoryCourseTeacherAssignmentRepository() {
-
-        /*
-         * 保留原有演示任课关系。
-         */
-        assignments.add(
-            new Assignment(
-                1001L,
-                "U-COURSE-TEACHER-001"));
+        assignments.addAll(List.of(
+            new Assignment(1001L, "U-TEACHER-003"),
+            new Assignment(2001L, "U-TEACHER-007"),
+            new Assignment(3001L, "U-TEACHER-001"),
+            new Assignment(4001L, "U-TEACHER-002"),
+            new Assignment(6001L, "U-TEACHER-008"),
+            new Assignment(14001L, "U-TEACHER-005"),
+            new Assignment(15001L, "U-TEACHER-006"),
+            new Assignment(15002L, "U-TEACHER-004")));
     }
 
     @Override

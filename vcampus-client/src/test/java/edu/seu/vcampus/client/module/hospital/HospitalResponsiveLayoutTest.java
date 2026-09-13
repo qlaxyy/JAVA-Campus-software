@@ -7,8 +7,12 @@ import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.Scrollable;
 import javax.swing.SwingUtilities;
+import javax.swing.JTextArea;
+import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
+import java.awt.Font;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -82,8 +86,100 @@ class HospitalResponsiveLayoutTest {
         assertTrue(content.getX() > 0);
     }
 
+    @Test
+    void plainUnicodeCopyWrapsToItsCurrentContainerWidth() throws Exception {
+        JTextArea[] copy = new JTextArea[1];
+        JPanel host = new JPanel(new java.awt.BorderLayout());
+        SwingUtilities.invokeAndWait(() -> {
+            copy[0] = HospitalResponsiveLayout.wrappingText(
+                    "一段需要随窗口宽度自动换行的中文提示，不依赖 HTML 固定宽度。",
+                    new Font("Microsoft YaHei UI", Font.PLAIN, 14), Color.BLACK);
+            host.add(copy[0], java.awt.BorderLayout.CENTER);
+            host.setSize(260, 120);
+            host.doLayout();
+        });
+
+        assertTrue(copy[0].getLineWrap());
+        assertEquals(260, copy[0].getWidth());
+        assertTrue(copy[0].getText().contains("中文提示"));
+    }
+
+    @Test
+    void administrationWorkspacesStackTheirColumnsInANarrowViewport()
+            throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            AdminSchedulePanel schedules = new AdminSchedulePanel(null, () -> { });
+            JPanel scheduleBody = namedPanel(
+                    schedules, "adminScheduleResponsiveBody");
+            layout(scheduleBody, 900);
+            assertEquals(scheduleBody.getComponent(0).getY(),
+                    scheduleBody.getComponent(1).getY());
+            layout(scheduleBody, 700);
+            assertTrue(scheduleBody.getComponent(1).getY()
+                    > scheduleBody.getComponent(0).getY());
+
+            AdminDepartmentPanel departments = new AdminDepartmentPanel(null, () -> { });
+            JPanel departmentBody = namedPanel(
+                    departments, "adminDepartmentResponsiveBody");
+            layout(departmentBody, 700);
+            assertTrue(departmentBody.getComponent(1).getY()
+                    > departmentBody.getComponent(0).getY());
+        });
+    }
+
+    @Test
+    void actionRailMovesBelowCardContentWhenTheCardNarrows() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JPanel main = new JPanel();
+            main.setPreferredSize(new Dimension(420, 80));
+            JPanel aside = new JPanel();
+            aside.setPreferredSize(new Dimension(130, 90));
+            JPanel row = HospitalResponsiveLayout.adaptiveRow(main, aside, 600, 16);
+
+            layout(row, 700);
+            assertTrue(aside.getX() > main.getX());
+            assertEquals(aside.getPreferredSize().height, aside.getHeight());
+
+            layout(row, 520);
+            assertTrue(aside.getY() > main.getY());
+            assertEquals(main.getX(), aside.getX());
+            assertEquals(main.getWidth(), aside.getWidth());
+            assertEquals(aside.getPreferredSize().height, aside.getHeight());
+        });
+    }
+
     private static void layout(JPanel panel, int width) {
         panel.setSize(width, 500);
         panel.doLayout();
+    }
+
+    private static JPanel namedPanel(Container root, String name) {
+        for (Component child : root.getComponents()) {
+            if (child instanceof JPanel panel && name.equals(panel.getName())) {
+                return panel;
+            }
+            if (child instanceof Container container) {
+                JPanel found = namedPanelOrNull(container, name);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        throw new AssertionError("component not found: " + name);
+    }
+
+    private static JPanel namedPanelOrNull(Container root, String name) {
+        for (Component child : root.getComponents()) {
+            if (child instanceof JPanel panel && name.equals(panel.getName())) {
+                return panel;
+            }
+            if (child instanceof Container container) {
+                JPanel found = namedPanelOrNull(container, name);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
     }
 }

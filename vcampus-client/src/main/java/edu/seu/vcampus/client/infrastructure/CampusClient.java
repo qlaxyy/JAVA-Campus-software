@@ -71,11 +71,19 @@ public final class CampusClient {
      * @throws IOException when network or protocol validation fails
      */
     public Response send(Request request) throws IOException {
+        return send(request, timeoutMillis);
+    }
+
+    /** Sends one request with an operation-specific read timeout. */
+    public Response send(Request request, int operationTimeoutMillis) throws IOException {
         Objects.requireNonNull(request, "request must not be null");
+        if (operationTimeoutMillis < 1) {
+            throw new IllegalArgumentException("operationTimeoutMillis must be positive");
+        }
 
         try (Socket socket = new Socket()) {
             socket.connect(new InetSocketAddress(host, port), timeoutMillis);
-            socket.setSoTimeout(timeoutMillis);
+            socket.setSoTimeout(operationTimeoutMillis);
 
             try (ObjectOutputStream output = new ObjectOutputStream(socket.getOutputStream())) {
                 output.flush();

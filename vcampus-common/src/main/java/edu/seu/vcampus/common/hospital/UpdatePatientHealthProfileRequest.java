@@ -14,6 +14,7 @@ public final class UpdatePatientHealthProfileRequest implements Serializable {
     private final String medicalHistory;
     private final String longTermMedication;
     private final String emergencyContact;
+    private final long expectedVersion;
 
     public UpdatePatientHealthProfileRequest(
             String bloodType,
@@ -21,11 +22,26 @@ public final class UpdatePatientHealthProfileRequest implements Serializable {
             String medicalHistory,
             String longTermMedication,
             String emergencyContact) {
+        this(bloodType, allergies, medicalHistory, longTermMedication,
+                emergencyContact, 0L);
+    }
+
+    public UpdatePatientHealthProfileRequest(
+            String bloodType,
+            String allergies,
+            String medicalHistory,
+            String longTermMedication,
+            String emergencyContact,
+            long expectedVersion) {
         this.bloodType = normalize(bloodType);
         this.allergies = normalize(allergies);
         this.medicalHistory = normalize(medicalHistory);
         this.longTermMedication = normalize(longTermMedication);
         this.emergencyContact = normalize(emergencyContact);
+        if (expectedVersion < 0L) {
+            throw new IllegalArgumentException("expectedVersion must not be negative");
+        }
+        this.expectedVersion = expectedVersion;
     }
 
     public String getBloodType() { return bloodType; }
@@ -37,6 +53,8 @@ public final class UpdatePatientHealthProfileRequest implements Serializable {
     public String getLongTermMedication() { return longTermMedication; }
 
     public String getEmergencyContact() { return emergencyContact; }
+
+    public long getExpectedVersion() { return expectedVersion; }
 
     private static String normalize(String value) {
         return value == null ? "" : value.trim();

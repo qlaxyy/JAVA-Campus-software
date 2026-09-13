@@ -2,10 +2,10 @@ package edu.seu.vcampus.client.module.course;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.common.course.AdminUpdateCourseRequest;
-import edu.seu.vcampus.common.course.BatchRequest;
+
 import edu.seu.vcampus.common.course.CourseActions;
 import edu.seu.vcampus.common.course.CourseInfo;
-import edu.seu.vcampus.common.course.SelectionBatchInfo;
+
 import edu.seu.vcampus.common.protocol.Response;
 
 import javax.swing.BorderFactory;
@@ -43,9 +43,6 @@ final class CourseAdminCoursePanel
 
     private final ClientContext context;
 
-    private final JComboBox<BatchChoice>
-        batchBox =
-        new JComboBox<>();
 
     private final JTextField keywordField =
         new JTextField(18);
@@ -75,7 +72,7 @@ final class CourseAdminCoursePanel
         new JTable(tableModel);
 
     private final JLabel statusLabel =
-        new JLabel("正在加载选课批次……");
+        new JLabel("正在加载课程……");
 
     private final List<CourseInfo> courses =
         new ArrayList<>();
@@ -87,7 +84,7 @@ final class CourseAdminCoursePanel
             context;
 
         initialiseView();
-        loadBatches();
+        loadCourses();
     }
 
     /**
@@ -149,17 +146,7 @@ final class CourseAdminCoursePanel
 
         toolbar.setOpaque(false);
 
-        toolbar.add(
-            new JLabel(
-                "选课批次："));
 
-        batchBox.setPrototypeDisplayValue(
-            new BatchChoice(
-                -1,
-                "2026-2027-1 第一轮选课"));
-
-        toolbar.add(
-            batchBox);
 
         toolbar.add(
             new JLabel(
@@ -260,9 +247,7 @@ final class CourseAdminCoursePanel
             statusLabel,
             BorderLayout.SOUTH);
 
-        batchBox.addActionListener(
-            event ->
-                loadCourses());
+
 
         searchButton.addActionListener(
             event ->
@@ -281,120 +266,14 @@ final class CourseAdminCoursePanel
                 editSelectedCourse());
     }
 
-    /**
-     * 加载选课批次。
-     */
-    private void loadBatches() {
 
-        statusLabel.setText(
-            "正在加载选课批次……");
-
-        batchBox.setEnabled(
-            false);
-
-        SwingWorker<Response, Void> worker =
-            new SwingWorker<>() {
-
-                @Override
-                protected Response doInBackground()
-                    throws Exception {
-
-                    return context.send(
-                        CourseActions.LIST_BATCHES,
-                        null);
-                }
-
-                @Override
-                protected void done() {
-
-                    try {
-
-                        Response response =
-                            get();
-
-                        if (!response.isSuccess()) {
-
-                            showError(
-                                response.getMessage());
-
-                            return;
-                        }
-
-                        List<SelectionBatchInfo> batches =
-                            readBatches(
-                                response);
-
-                        batchBox.removeAllItems();
-
-                        for (SelectionBatchInfo batch
-                            : batches) {
-
-                            batchBox.addItem(
-                                new BatchChoice(
-                                    batch.getBatchId(),
-                                    batch.getSemester()
-                                        + " "
-                                        + batch.getBatchName()));
-                        }
-
-                        batchBox.setEnabled(
-                            true);
-
-                        if (batches.isEmpty()) {
-
-                            statusLabel.setText(
-                                "当前没有选课批次。");
-
-                        } else {
-
-                            batchBox.setSelectedIndex(
-                                0);
-
-                            loadCourses();
-                        }
-
-                    } catch (InterruptedException exception) {
-
-                        Thread.currentThread()
-                            .interrupt();
-
-                        showError(
-                            "加载选课批次被中断。");
-
-                    } catch (ExecutionException
-                             | IllegalStateException exception) {
-
-                        Throwable cause =
-                            exception instanceof
-                                ExecutionException
-                                ? exception.getCause()
-                                : exception;
-
-                        showError(
-                            "无法加载选课批次："
-                                + messageOf(
-                                cause));
-                    }
-                }
-            };
-
-        worker.execute();
-    }
 
     /**
      * 加载指定批次全部课程。
      */
     private void loadCourses() {
 
-        BatchChoice batch =
-            (BatchChoice)
-                batchBox.getSelectedItem();
 
-        if (batch == null
-            || batch.batchId() < 0) {
-
-            return;
-        }
 
         statusLabel.setText(
             "正在加载课程……");
@@ -409,8 +288,7 @@ final class CourseAdminCoursePanel
                     return context.send(
                         CourseActions
                             .ADMIN_LIST_OFFERINGS,
-                        new BatchRequest(
-                            batch.batchId()));
+                        null);
                 }
 
                 @Override
@@ -701,18 +579,11 @@ final class CourseAdminCoursePanel
             return;
         }
 
-        BatchChoice batch =
-            (BatchChoice)
-                batchBox.getSelectedItem();
 
-        if (batch == null) {
-
-            return;
-        }
 
         submitUpdate(
             new AdminUpdateCourseRequest(
-                batch.batchId(),
+
                 course.getCourseId(),
                 courseCode,
                 courseName,
@@ -791,34 +662,7 @@ final class CourseAdminCoursePanel
         worker.execute();
     }
 
-    private List<SelectionBatchInfo> readBatches(
-        Response response) {
 
-        if (!(response.getData()
-            instanceof List<?> values)) {
-
-            throw new IllegalStateException(
-                "服务器返回的批次数据格式错误。");
-        }
-
-        List<SelectionBatchInfo> result =
-            new ArrayList<>();
-
-        for (Object value : values) {
-
-            if (!(value
-                instanceof SelectionBatchInfo batch)) {
-
-                throw new IllegalStateException(
-                    "服务器返回的批次数据格式错误。");
-            }
-
-            result.add(
-                batch);
-        }
-
-        return result;
-    }
 
     private List<CourseInfo> readCourses(
         Response response) {
@@ -913,17 +757,5 @@ final class CourseAdminCoursePanel
         return throwable.getMessage();
     }
 
-    /**
-     * 批次下拉框显示对象。
-     */
-    private record BatchChoice(
-        long batchId,
-        String text) {
 
-        @Override
-        public String toString() {
-
-            return text;
-        }
-    }
 }

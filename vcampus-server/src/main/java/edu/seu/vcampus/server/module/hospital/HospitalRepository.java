@@ -63,6 +63,11 @@ interface HospitalRepository {
 
     void savePatientProfile(HospitalPatientProfile profile);
 
+    /** Saves only when the stored version still equals the version seen by the client. */
+    boolean savePatientProfileIfVersion(
+            HospitalPatientProfile profile,
+            long expectedVersion);
+
     List<HospitalConsultation> findConsultationsByPatientUserId(String patientUserId);
 
     List<HospitalConsultation> findConsultationsByDoctorId(String doctorId);

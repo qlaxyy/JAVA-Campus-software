@@ -3,6 +3,7 @@ package edu.seu.vcampus.server.module.shop;
 import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.shop.CampusCardView;
 import edu.seu.vcampus.common.user.SessionInfo;
+import edu.seu.vcampus.server.demo.FinalDemoRoster;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -11,19 +12,20 @@ import java.util.Objects;
 /**
  * In-memory virtual campus-card wallets. The login campus-card number is reused as card number.
  */
-final class InMemoryCampusCardStore {
+final class InMemoryCampusCardStore implements CampusCardRepository {
 
     static final int DEMO_BALANCE_FEN = 10_000;
 
     private final Map<String, CampusCardView> cards = new HashMap<>();
     InMemoryCampusCardStore() {
-        cards.put("U-STUDENT-001", new CampusCardView(
-                "U-STUDENT-001", "20260001", "20260001", DEMO_BALANCE_FEN));
-        cards.put("U-SHOP-ADMIN-001", new CampusCardView(
-                "U-SHOP-ADMIN-001", "20260006", "20260006", DEMO_BALANCE_FEN));
+        for (FinalDemoRoster.AccountSeed account : FinalDemoRoster.accounts()) {
+            cards.put(account.userId(), new CampusCardView(
+                    account.userId(), account.campusCardNumber(),
+                    account.campusCardNumber(), DEMO_BALANCE_FEN));
+        }
     }
 
-    synchronized CampusCardView view(SessionInfo session) {
+    public synchronized CampusCardView view(SessionInfo session) {
         Objects.requireNonNull(session, "session must not be null");
         CampusCardView existing = cards.get(session.getUserId());
         if (existing != null) {
@@ -38,7 +40,7 @@ final class InMemoryCampusCardStore {
         return created;
     }
 
-    synchronized CampusCardView recharge(SessionInfo session, int amountFen) {
+    public synchronized CampusCardView recharge(SessionInfo session, int amountFen) {
         CampusCardView current = view(session);
         int next = Math.addExact(current.getBalanceFen(), amountFen);
         if (next > 1_000_000) {
@@ -52,7 +54,7 @@ final class InMemoryCampusCardStore {
         return updated;
     }
 
-    synchronized CampusCardView deduct(SessionInfo session, int amountFen) {
+    public synchronized CampusCardView deduct(SessionInfo session, int amountFen) {
         CampusCardView current = view(session);
         if (current.getBalanceFen() < amountFen) {
             throw new ShopBusinessException(
@@ -68,7 +70,7 @@ final class InMemoryCampusCardStore {
         return updated;
     }
 
-    synchronized void refund(String userId, int amountFen) {
+    public synchronized void refund(String userId, int amountFen) {
         CampusCardView current = cards.get(userId);
         if (current == null) {
             return;

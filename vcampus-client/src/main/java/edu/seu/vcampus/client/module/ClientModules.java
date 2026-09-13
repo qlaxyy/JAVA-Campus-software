@@ -1,5 +1,6 @@
 package edu.seu.vcampus.client.module;
 
+import edu.seu.vcampus.client.module.card.CardClientModule;
 import edu.seu.vcampus.client.module.course.CourseClientModule;
 import edu.seu.vcampus.client.module.hospital.HospitalClientModule;
 import edu.seu.vcampus.client.module.library.LibraryClientModule;
@@ -10,7 +11,7 @@ import edu.seu.vcampus.client.module.user.UserClientModule;
 import java.util.List;
 
 /**
- * Fixed catalog of the six agreed client-side business modules.
+ * Campus client modules, including the campus-card wallet.
  */
 public final class ClientModules {
 
@@ -28,6 +29,7 @@ public final class ClientModules {
                 new StudentClientModule(),
                 new CourseClientModule(),
                 new LibraryClientModule(),
+                new CardClientModule(),
                 new ShopClientModule(),
                 new HospitalClientModule());
     }

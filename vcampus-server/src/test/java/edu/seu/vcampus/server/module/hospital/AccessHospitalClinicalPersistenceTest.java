@@ -50,8 +50,8 @@ class AccessHospitalClinicalPersistenceTest {
     private static final Clock CLOCK = Clock.fixed(
             Instant.parse("2026-09-04T00:00:00Z"), ZoneOffset.UTC);
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 4, 0, 0);
-    private static final SessionInfo DOCTOR = session("U-TEACHER-001");
-    private static final SessionInfo OTHER_DOCTOR = session("U-TEACHER-002");
+    private static final SessionInfo DOCTOR = session("U-DOCTOR-001");
+    private static final SessionInfo OTHER_DOCTOR = session("U-DOCTOR-002");
 
     @TempDir
     Path temporaryDirectory;

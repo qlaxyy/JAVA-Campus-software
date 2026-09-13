@@ -38,14 +38,14 @@ class LibraryReservationUiTest {
     void unavailableLocationExplainsQueueAndActiveReservationCanBeCanceled() throws Exception {
         try (CampusServer server = new CampusServer(0, 4)) {
             server.start();
-            ClientContext firstBorrower = login(server, "20260001");
-            ClientContext secondBorrower = login(server, "20260002");
+            ClientContext firstBorrower = login(server, "20260006");
+            ClientContext secondBorrower = login(server, "20260029");
             assertTrue(firstBorrower.send(LibraryActions.BORROW_COPY,
                     new CopyBorrowRequest("SEU-B005-001")).isSuccess());
             assertTrue(secondBorrower.send(LibraryActions.BORROW_COPY,
                     new CopyBorrowRequest("SEU-B005-002")).isSuccess());
 
-            ClientContext waitingReader = login(server, "20260003");
+            ClientContext waitingReader = login(server, "20260001");
             AtomicReference<LibraryModePanel> root = new AtomicReference<>();
             onEdt(() -> root.set((LibraryModePanel)
                     new LibraryClientModule().createView(waitingReader)));
@@ -100,13 +100,13 @@ class LibraryReservationUiTest {
     void terminalClearlyRejectsCopyReservedForAnotherReader() throws Exception {
         try (CampusServer server = new CampusServer(0, 3)) {
             server.start();
-            ClientContext owner = login(server, "20260001");
+            ClientContext owner = login(server, "20260006");
             String location = search(owner, "9787111213826").getBooks().getFirst()
                     .getLocations().getFirst().getLocation();
             assertTrue(owner.send(LibraryActions.CREATE_RESERVATION,
                     new CreateReservationRequest("B001", location)).isSuccess());
 
-            ClientContext other = login(server, "20260002");
+            ClientContext other = login(server, "20260029");
             AtomicReference<SelfServicePanel> panel = new AtomicReference<>();
             onEdt(() -> panel.set(new SelfServicePanel(other)));
             JTextField barcode = named(

@@ -370,7 +370,7 @@ final class PatientHealthRecordPanel extends JPanel {
         JLabel title = new JLabel(titleText);
         title.setFont(HospitalTheme.uiFont(Font.BOLD, 20F));
         title.setForeground(HospitalTheme.TEXT);
-        JLabel detail = message(description, HospitalTheme.MUTED, 220);
+        JTextArea detail = message(description, HospitalTheme.MUTED, 220);
         copy.add(title);
         copy.add(Box.createVerticalStrut(9));
         copy.add(detail);
@@ -509,7 +509,8 @@ final class PatientHealthRecordPanel extends JPanel {
             JLabel saveStatus) {
         UpdatePatientHealthProfileRequest request = new UpdatePatientHealthProfileRequest(
                 bloodType.getText(), allergies.getText(), history.getText(),
-                medication.getText(), emergencyContact.getText());
+                medication.getText(), emergencyContact.getText(),
+                healthRecord.getHealthProfile().getVersion());
         save.setEnabled(false);
         save.setText("正在保存……");
         saveStatus.setForeground(HospitalTheme.MUTED);
@@ -533,6 +534,14 @@ final class PatientHealthRecordPanel extends JPanel {
                         renderOverview();
                         renderProfile();
                         cards.show(pages, PROFILE_PAGE);
+                    } else if (ErrorCodes.HOSPITAL_HEALTH_PROFILE_CONFLICT.equals(
+                            response.getCode())) {
+                        JOptionPane.showMessageDialog(
+                                PatientHealthRecordPanel.this,
+                                "档案已在其他窗口更新。系统将载入最新内容，请核对后再修改。",
+                                "档案内容已变化",
+                                JOptionPane.WARNING_MESSAGE);
+                        loadHealthRecord();
                     } else {
                         save.setEnabled(true);
                         save.setText("保存我的健康信息");
@@ -590,7 +599,7 @@ final class PatientHealthRecordPanel extends JPanel {
                 + DATE_FORMAT.format(record.getCreatedAt()));
         title.setFont(HospitalTheme.uiFont(Font.BOLD, 17F));
         title.setForeground(HospitalTheme.TEXT);
-        JLabel diagnosis = message(
+        JTextArea diagnosis = message(
                 "诊断：" + record.getDiagnosisOpinion(), HospitalTheme.MUTED, 560);
         copy.add(title);
         copy.add(Box.createVerticalStrut(8));
@@ -660,7 +669,7 @@ final class PatientHealthRecordPanel extends JPanel {
             JLabel heading = new JLabel("需要再次就诊？");
             heading.setFont(HospitalTheme.uiFont(Font.BOLD, 16F));
             heading.setForeground(HospitalTheme.PRIMARY_DARK);
-            JLabel explanation = message(
+            JTextArea explanation = message(
                     "以本次记录预约原科室排班；普通复诊会建立新的诊疗过程并正常收取挂号费。",
                     HospitalTheme.MUTED,
                     520);
@@ -712,7 +721,7 @@ final class PatientHealthRecordPanel extends JPanel {
                 + examinationStatusText(examination));
         title.setFont(HospitalTheme.uiFont(Font.BOLD, 17F));
         title.setForeground(HospitalTheme.TEXT);
-        JLabel meta = message(
+        JTextArea meta = message(
                 examination.getDepartmentName() + "  ·  "
                         + examination.getDoctorName() + "  ·  "
                         + DATE_TIME_FORMAT.format(examination.getOrderedAt()),
@@ -1052,11 +1061,9 @@ final class PatientHealthRecordPanel extends JPanel {
         JLabel label = new JLabel(labelText);
         label.setFont(HospitalTheme.uiFont(Font.PLAIN, 12F));
         label.setForeground(HospitalTheme.MUTED);
-        JLabel value = new JLabel("<html><body style='width:520px'>"
-                + html(valueText) + "</body></html>");
+        JTextArea value = HospitalResponsiveLayout.wrappingText(
+                valueText, HospitalTheme.uiFont(Font.BOLD, 14F), HospitalTheme.TEXT);
         value.setName("patientHealthRecordDetail");
-        value.setFont(HospitalTheme.uiFont(Font.BOLD, 14F));
-        value.setForeground(HospitalTheme.TEXT);
         row.add(label);
         row.add(Box.createVerticalStrut(4));
         row.add(value);
@@ -1136,12 +1143,9 @@ final class PatientHealthRecordPanel extends JPanel {
         return panel;
     }
 
-    private static JLabel message(String text, Color color, int width) {
-        JLabel label = new JLabel("<html><body style='width:" + width + "px'>"
-                + html(text) + "</body></html>");
-        label.setFont(HospitalTheme.uiFont(Font.PLAIN, 13F));
-        label.setForeground(color);
-        return label;
+    private static JTextArea message(String text, Color color, int ignoredWidth) {
+        return HospitalResponsiveLayout.wrappingText(
+                text, HospitalTheme.uiFont(Font.PLAIN, 13F), color);
     }
 
     private static String html(String value) {

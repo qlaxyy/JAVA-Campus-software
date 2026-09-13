@@ -33,8 +33,12 @@ public enum AdminScope {
      * @return matching scope; USER and COMMON are deliberately not scopes
      */
     public static Optional<AdminScope> fromModuleId(String moduleId) {
+        if (moduleId == null || moduleId.isBlank()) {
+            return Optional.empty();
+        }
+        String normalized = moduleId.trim();
         return Arrays.stream(values())
-                .filter(scope -> scope.moduleId.equals(moduleId))
+                .filter(scope -> scope.moduleId.equalsIgnoreCase(normalized))
                 .findFirst();
     }
 }

@@ -302,7 +302,7 @@ class DoctorWorkspacePanelTest {
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(context.login(
-                    "20260001", "123456".toCharArray()).isSuccess());
+                    "20260006", "123456".toCharArray()).isSuccess());
             AppointmentBookingView booking = assertInstanceOf(
                     AppointmentBookingView.class,
                     context.send(
@@ -310,7 +310,7 @@ class DoctorWorkspacePanelTest {
                             BookAppointmentRequest.firstVisit("slot-general-1")).getData());
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
-                    "20260002", "123456".toCharArray()).isSuccess());
+                    "20260029", "123456".toCharArray()).isSuccess());
 
             DoctorWorkspacePanel[] panel = new DoctorWorkspacePanel[1];
             SwingUtilities.invokeAndWait(() -> {
@@ -319,7 +319,7 @@ class DoctorWorkspacePanelTest {
             });
 
             assertTrue(awaitCondition(() -> labelTexts(panel[0]).stream()
-                    .anyMatch(text -> text.contains("陈医生") && text.contains("全科门诊"))));
+                    .anyMatch(text -> text.contains("陈安") && text.contains("全科门诊"))));
             List<JButton> schedules = namedButtons(panel[0], "doctorScheduleButton");
             assertEquals(3, schedules.size());
             assertTrue(schedules.getFirst().getParent() instanceof Container);
@@ -329,6 +329,8 @@ class DoctorWorkspacePanelTest {
 
             assertTrue(awaitCondition(() -> namedButtons(
                     panel[0], "doctorAppointmentButton").size() == 5));
+            assertEquals(5, namedComponents(
+                    panel[0], JPanel.class, "doctorAppointmentAdaptiveContent").size());
             JButton patient = namedButtons(panel[0], "doctorAppointmentButton").stream()
                     .filter(button -> {
                         Container card = namedAncestor(button, "doctorAppointmentCard");
@@ -365,6 +367,8 @@ class DoctorWorkspacePanelTest {
                     panel[0], "submitConsultationButton").size());
             assertEquals(1, namedButtons(
                     panel[0], "submitExaminationPlanButton").size());
+            assertEquals(1, namedComponents(
+                    panel[0], JPanel.class, "doctorCurrentVisitResponsiveColumns").size());
             assertTrue(labelTexts(panel[0]).stream()
                     .anyMatch(text -> text.contains("患者自述健康档案")));
             JPanel consultationForm = namedComponents(
@@ -378,7 +382,7 @@ class DoctorWorkspacePanelTest {
             ClientContext patientUpdater = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(patientUpdater.login(
-                    "20260001", "123456".toCharArray()).isSuccess());
+                    "20260006", "123456".toCharArray()).isSuccess());
             assertTrue(patientUpdater.send(
                     HospitalActions.UPDATE_MY_HEALTH_PROFILE,
                     new UpdatePatientHealthProfileRequest(
@@ -417,9 +421,13 @@ class DoctorWorkspacePanelTest {
     }
 
     private static List<String> labelTexts(Container root) {
-        return components(root, JLabel.class).stream()
+        List<String> texts = new ArrayList<>(components(root, JLabel.class).stream()
                 .map(JLabel::getText)
-                .toList();
+                .toList());
+        texts.addAll(components(root, JTextArea.class).stream()
+                .map(JTextArea::getText)
+                .toList());
+        return texts;
     }
 
     private static DoctorConsultationContextView consultationContext(

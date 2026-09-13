@@ -1,330 +1,463 @@
-# 图书馆检索功能 UML 设计
+# 图书馆模块 UML 设计
+
+> 本文是图书馆模块的类结构与调用关系设计记录。模块的功能规则、Action 契约与数据字典见
+> [借阅归还交付说明](library-borrow-return.md)、[管理员维护说明](library-admin-maintenance.md)
+> 与 [图书馆数据字典](../../database/schema/library.md)。
 
 ## 1. 设计目标
 
-第一轮实现一条小而完整的图书检索链路：已登录用户在 Swing 页面输入关键词，客户端通过 Socket 发送请求，服务器完成身份与参数校验后查询馆藏，并将结果返回页面显示。
+图书馆模块实现的是一条完整的馆藏流通链路：管理员维护书目与实体单册，读者按关键词与分类检索馆藏，
+线上预约并到模拟终端扫码取书，归还后由管理员确认归架。核心设计判断有三条：
 
-当前使用内存馆藏完成演示。后续接入 Access 数据库时，主要替换数据访问实现，客户端页面和公共请求协议不需要大幅修改。
+1. **书目与实体单册分离**。`BookDTO` 只描述书目元数据，`BookCopy` 才是可借还的物理对象。
+   馆藏数与可借数不落库，由未注销单册的状态按馆藏地实时汇总，避免两套事实来源。
+2. **读者检索与借还分离**。检索结果页不提供借书按钮，实体书必须走到模拟自助终端扫描条码，
+   模拟真实图书馆"线上预约、到馆取书"的流程。
+3. **服务层单一临界区**。全部业务规则集中在 `LibraryService`，由一把 `circulationLock`
+   串行化，管理操作与流通操作不交错；持久化由 `LibraryTransactionManager` 抽象，
+   Access 实现让一次业务中的多个 Repository 复用同一个 JDBC 连接。
+
+正式启动使用 Access 持久化，普通单元测试仍注入 InMemory Repository。两套实现共享同一组
+Repository 接口与同一套业务规则。
 
 ## 2. UML 类图
 
 ### 2.1 投屏讲解版
 
-这张图只保留检索功能的核心类，适合课堂交流和投屏讲解。
-
-```mermaid
-%%{init: {"themeVariables": {"fontSize": "24px"}}}%%
-classDiagram
-direction TB
-
-class LibraryPanel {
-    -search()
-    -showResponse()
-}
-
-class ClientContext {
-    +send(action, data) Response
-}
-
-class BookSearchRequest {
-    +keyword
-}
-
-class BookSearchResult {
-    +books
-}
-
-class BookDTO {
-    +title
-    +author
-    +availableCount
-}
-
-class ActionRouter {
-    +register(action, handler)
-    +dispatch(request) Response
-}
-
-class LibraryServerModule {
-    +registerHandlers()
-    -searchBooks() Response
-}
-
-class ServerContext {
-    +sessions() SessionLookup
-}
-
-class LibraryService {
-    ~searchBooks(request) BookSearchResult
-}
-
-class BookRepository {
-    <<interface>>
-    +search(keyword) List~BookDTO~
-}
-
-class InMemoryBookRepository
-
-LibraryPanel --> ClientContext : 发送搜索
-LibraryPanel ..> BookSearchRequest : 创建
-LibraryPanel ..> BookSearchResult : 读取
-BookSearchResult *-- "0..*" BookDTO : 包含
-
-ActionRouter --> LibraryServerModule : 分发请求
-LibraryServerModule ..> BookSearchRequest : 校验
-LibraryServerModule --> ServerContext : 校验登录
-LibraryServerModule *-- LibraryService : 调用业务
-LibraryService ..> BookSearchResult : 创建
-LibraryService --> BookRepository : 查询馆藏
-BookRepository <|.. InMemoryBookRepository : 实现
-InMemoryBookRepository ..> BookDTO : 返回
-```
-
-### 2.2 完整类图（分区展示）
-
-以下四张子图合起来构成完整类图。拆分只改变展示方式，不省略实际类或跨层关系。
-
-#### 2.2.1 客户端类图
+这张图只保留跨层主干，适合课堂交流和答辩投屏。各类的职责见表 3。
 
 ```mermaid
 %%{init: {"themeVariables": {"fontSize": "22px"}}}%%
 classDiagram
-direction LR
+direction TB
 
-class ClientModule {
-    <<interface>>
-    +id() String
-    +displayName() String
-    +createView(ClientContext) JComponent
+namespace 客户端 {
+    class LibraryModePanel
+    class LibraryPanel
+    class MyLibraryPanel
+    class SelfServicePanel
+    class LibraryAdminPanel
 }
+
+namespace 公共契约 {
+    class LibraryActions
+    class BookSearchRequest
+    class BookDTO
+    class BookCopyDTO
+    class BorrowRecordDTO
+    class ReservationDTO
+}
+
+namespace 服务器 {
+    class LibraryServerModule
+    class LibraryService
+    class BookRepository
+    class BookCopyRepository
+    class BorrowRecordRepository
+    class ReservationRepository
+    class LibraryTransactionManager
+}
+
+LibraryModePanel --> LibraryPanel
+LibraryModePanel --> MyLibraryPanel
+LibraryModePanel --> SelfServicePanel
+LibraryModePanel --> LibraryAdminPanel
+LibraryPanel ..> LibraryActions : 经 ClientContext 与 Socket
+SelfServicePanel ..> LibraryActions : 经 ClientContext 与 Socket
+LibraryServerModule --> LibraryService
+LibraryServerModule ..> LibraryActions : 按 Action 分发
+LibraryService --> BookRepository
+LibraryService --> BookCopyRepository
+LibraryService --> BorrowRecordRepository
+LibraryService --> ReservationRepository
+LibraryService --> LibraryTransactionManager
+LibraryService ..> BookDTO
+LibraryService ..> BookCopyDTO
+LibraryService ..> BorrowRecordDTO
+LibraryService ..> ReservationDTO
+```
+
+### 2.2 完整类图（分区展示）
+
+#### 2.2.1 客户端类图
+
+```mermaid
+%%{init: {"themeVariables": {"fontSize": "18px"}}}%%
+classDiagram
+direction TB
 
 class LibraryClientModule {
     +id() String
-    +displayName() String
-    +createView(ClientContext) JComponent
+    +createView(context) ModuleViewLifecycle
+}
+
+class LibraryModePanel {
+    -CardLayout cards
+    -LibraryPanel catalog
+    -MyLibraryPanel myLibrary
+    -LibraryAdminPanel admin
+    +onModuleExit()
+    -showModeSelection()
 }
 
 class LibraryPanel {
-    -ClientContext context
-    -JTextField keywordField
-    -JButton searchButton
-    -DefaultTableModel tableModel
-    -search() void
-    -showResponse(Response) void
+    -JTextField keyword
+    -JComboBox category
+    -JTable results
+    -JComboBox pickupLocation
+    +refreshIfSearched()
+    +reservationStateChanged()
+}
+
+class MyLibraryPanel {
+    -JTable currentBorrows
+    -JTable borrowHistory
+    -JTable myReservations
+    +refresh()
+    -submitRenewal()
+    -submitCancellation()
+}
+
+class SelfServicePanel {
+    -JTextField barcode
+    -Timer inspectDebounce
+    -int inspectionVersion
+    -submit(mode)
+}
+
+class LibraryAdminPanel {
+    -JTabbedPane areas
+    -JTable books
+    -JTable copies
+    -JTable borrows
+    -submit(operation, request)
+}
+
+class LibraryUiTheme {
+    <<utility>>
+    +installPage(panel)
+    +stylePrimaryButton(button)
+    +cardBorder(v, h)
 }
 
 class ClientContext {
-    -CampusClient client
-    +send(String, Serializable) Response
+    +send(action, data) Response
+    +currentSession() Optional~SessionInfo~
 }
 
 class CampusClient {
     +send(Request) Response
 }
 
-ClientModule <|.. LibraryClientModule : 实现
-LibraryClientModule ..> LibraryPanel : 创建
-LibraryPanel --> ClientContext : 持有
-ClientContext --> CampusClient : 持有
+LibraryClientModule --> LibraryModePanel : 创建
+LibraryModePanel --> LibraryPanel : 组合
+LibraryModePanel --> MyLibraryPanel : 组合
+LibraryModePanel --> SelfServicePanel : 组合
+LibraryModePanel --> LibraryAdminPanel : 组合，仅管理员
+LibraryPanel --> ClientContext : 关联
+MyLibraryPanel --> ClientContext : 关联
+SelfServicePanel --> ClientContext : 关联
+LibraryAdminPanel --> ClientContext : 关联
+LibraryPanel ..> LibraryUiTheme : 使用
+LibraryModePanel ..> LibraryUiTheme : 使用
+ClientContext --> CampusClient : 关联
 ```
+
+`LibraryMessages` 提供错误码到中文文案的映射，`LibraryCategories` 提供分类下拉的占位选项，
+两者都是无状态的工具类型，图中省略。
 
 #### 2.2.2 公共契约类图
 
 ```mermaid
-%%{init: {"themeVariables": {"fontSize": "22px"}}}%%
+%%{init: {"themeVariables": {"fontSize": "18px"}}}%%
 classDiagram
-direction LR
+direction TB
 
 class LibraryActions {
     <<utility>>
     +SEARCH_BOOKS String
+    +BORROW_COPY String
+    +RETURN_COPY String
+    +RENEW_BORROW String
+    +CREATE_RESERVATION String
+    +ADMIN_QUERY_BORROWS String
 }
 
 class BookSearchRequest {
-    -String keyword
-    +getKeyword() String
+    +String keyword
+    +String categoryId
 }
 
 class BookSearchResult {
-    -List~BookDTO~ books
-    +getBooks() List~BookDTO~
+    +List~BookDTO~ books
 }
 
 class BookDTO {
-    -String bookId
-    -String isbn
-    -String title
-    -String author
-    -String category
-    -int totalCount
-    -int availableCount
-    +getTitle() String
-    +getAuthor() String
-    +getAvailableCount() int
+    +String bookId
+    +String isbn
+    +String categoryId
+    +String status
+    +List~BookLocationDTO~ locations
+}
+
+class BookLocationDTO {
+    +String location
+    +int totalCount
+    +int availableCount
+}
+
+class BookCopyDTO {
+    +String copyId
+    +String barcode
+    +String location
+    +String callNumber
+    +String status
+}
+
+class BorrowRecordDTO {
+    +String recordId
+    +String barcode
+    +LocalDateTime dueTime
+    +int renewalCount
+    +boolean overdue
+}
+
+class ReservationDTO {
+    +String reservationId
+    +String pickupLocation
+    +String assignedBarcode
+    +Integer queuePosition
+    +LocalDateTime expiresAt
+}
+
+class CopyInspectionDTO {
+    +String bookTitle
+    +boolean borrowAllowed
+    +boolean returnAllowed
+    +boolean reservedForCurrentUser
 }
 
 class Request {
-    -String requestId
-    -String action
-    -String token
-    -Serializable data
-    +getData() Serializable
+    +String action
+    +String token
+    +Object data
 }
 
 class Response {
-    -String requestId
-    -boolean success
-    -String code
-    -String message
-    -Serializable data
-    +success(Request, String, Serializable) Response
-    +failure(String, String, String) Response
+    +boolean success
+    +String code
+    +String message
+    +Object data
 }
 
-Request ..> BookSearchRequest : data可装入
-Response ..> BookSearchResult : data可装入
-BookSearchResult *-- "0..*" BookDTO : 组合
-LibraryActions ..> Request : 指定action
+LibraryActions ..> Request : 作为 action 字段
+BookSearchResult *-- BookDTO
+BookDTO *-- BookLocationDTO
+Request --> Response : 一对请求与响应
+Request ..> BookSearchRequest
+Request ..> ReservationDTO
 ```
+
+`LibraryActions` 共定义 22 个常量（10 个读者与通用、12 个管理），完整清单见
+[借阅归还交付说明](library-borrow-return.md) 与 [管理员维护说明](library-admin-maintenance.md)。
 
 #### 2.2.3 服务器类图
 
 ```mermaid
-%%{init: {"themeVariables": {"fontSize": "22px"}}}%%
+%%{init: {"themeVariables": {"fontSize": "18px"}}}%%
 classDiagram
-direction LR
-
-class ServerModule {
-    <<interface>>
-    +id() String
-    +registerHandlers(ActionRouter, ServerContext) void
-}
+direction TB
 
 class LibraryServerModule {
     -LibraryService service
-    +id() String
-    +registerHandlers(ActionRouter, ServerContext) void
-    -searchBooks(Request, ServerContext) Response
+    -CampusCardWallet campusCards
+    +registerHandlers(router, context)
+    -administer(request, context, type, handler)
+    -businessFailure(request, exception)
 }
 
 class LibraryService {
-    -BookRepository repository
-    ~searchBooks(BookSearchRequest) BookSearchResult
+    -Object circulationLock
+    -Clock clock
+    -LibraryTransactionManager transactionManager
+    +searchBooks(request) BookSearchResult
+    +borrowCopy(userId, request)
+    +returnCopy(userId, request)
+    +renewBorrow(userId, request) BorrowRecordDTO
+    +inspectCopy(userId, request) CopyInspectionDTO
+    +createReservation(userId, request) ReservationDTO
+    +getMyReservations(userId) List~ReservationDTO~
+    +cancelReservation(userId, request) ReservationDTO
+    +getBorrowRecords(userId) List~BorrowRecordDTO~
+    +queryBorrows(actor, request) List~AdminBorrowRecordDTO~
+    +addBook(actor, request) BookDTO
+    +addBookCopy(actor, request) BookCopyDTO
+    +shelveBookCopy(actor, request) BookCopyDTO
+    +withdrawBookCopy(actor, request) BookCopyDTO
+    +restoreBookCopy(actor, request) BookCopyDTO
+    -borrowDecision(...) BorrowDecision
+    -expireReservations(now)
+    -assignAvailableCopy(copy, now) BookCopy
 }
 
 class BookRepository {
     <<interface>>
-    +search(String) List~BookDTO~
+    +search(keyword) List~BookDTO~
+    +findIncludingInactive(bookId) Optional~BookDTO~
 }
 
-class InMemoryBookRepository {
-    -List~BookDTO~ BOOKS
-    +search(String) List~BookDTO~
-}
-
-class ActionRouter {
-    +register(String, RequestHandler) void
-    +dispatch(Request) Response
-}
-
-class CampusServer {
-    -ActionRouter actionRouter
-    +start() void
-    -dispatch(Object) Response
-}
-
-class ServerContext {
-    -SessionLookup sessions
-    +sessions() SessionLookup
-}
-
-class SessionLookup {
+class BookCopyRepository {
     <<interface>>
-    +findSession(String) Optional~SessionInfo~
+    +findByBarcode(barcode) Optional~BookCopy~
+    +findByBookId(bookId) List~BookCopy~
+    +update(copy)
 }
 
-ServerModule <|.. LibraryServerModule : 实现
-CampusServer --> ActionRouter : 持有并分发
-LibraryServerModule *-- LibraryService : 拥有
-LibraryService --> BookRepository : 依赖接口
-BookRepository <|.. InMemoryBookRepository : 实现
-LibraryServerModule ..> ActionRouter : 注册handler
-LibraryServerModule ..> ServerContext : 校验会话
-ServerContext --> SessionLookup : 持有
+class BorrowRecordRepository {
+    <<interface>>
+    +findBorrowedByUserId(userId) List~BorrowRecord~
+    +findBorrowedByCopyId(copyId) Optional~BorrowRecord~
+    +save(record)
+    +update(record)
+}
+
+class ReservationRepository {
+    <<interface>>
+    +findByUserId(userId) List~Reservation~
+    +findAll() List~Reservation~
+    +save(reservation)
+    +update(reservation)
+}
+
+class LibraryTransactionManager {
+    <<interface>>
+    +execute(Runnable)
+}
+
+class AccessLibraryStore {
+    -ThreadLocal~Connection~ bound
+    +execute(Runnable)
+    +createSchemaIfAbsent()
+}
+
+class InMemoryLibraryTransactionManager
+
+class BookCopy {
+    <<record>>
+    +String copyId
+    +String barcode
+    +String bookId
+    +String location
+    +String callNumber
+    +BookCopyStatus status
+    +withStatus(status) BookCopy
+}
+
+class BorrowRecord {
+    <<record>>
+    +String recordId
+    +String userId
+    +String copyId
+    +LocalDateTime dueTime
+    +int renewalCount
+    +BorrowStatus status
+    +returnedAt(time) BorrowRecord
+    +renewedUntil(dueTime) BorrowRecord
+    +isOverdueAt(time) boolean
+}
+
+class Reservation {
+    <<record>>
+    +String reservationId
+    +String userId
+    +String bookId
+    +String pickupLocation
+    +String assignedCopyId
+    +ReservationStatus status
+    +readyForPickup(copyId, readyAt, expiresAt) Reservation
+    +canceledAt(time) Reservation
+    +expiredAt(time) Reservation
+    +fulfilledAt(time) Reservation
+}
+
+LibraryServerModule --> LibraryService
+LibraryServerModule ..> LibraryBusinessException
+LibraryService --> BookRepository
+LibraryService --> BookCopyRepository
+LibraryService --> BorrowRecordRepository
+LibraryService --> ReservationRepository
+LibraryService --> LibraryTransactionManager
+LibraryService ..> BookCopy
+LibraryService ..> BorrowRecord
+LibraryService ..> Reservation
+LibraryTransactionManager <|.. AccessLibraryStore
+LibraryTransactionManager <|.. InMemoryLibraryTransactionManager
+BookCopy ..> BookSearchResult : 汇总为馆藏数
+BorrowRecord --> BookCopy : copyId
+Reservation --> BookCopy : assignedCopyId
 ```
+
+Repository 接口各有两套实现：`InMemory*Repository` 用于单元测试与 `ServerModules.createRouter()`
+创建的普通测试服务器，`Access*Repository` 用于正式启动。两套实现共享同一组接口与同一套业务规则。
 
 #### 2.2.4 跨层关系图
 
 ```mermaid
 %%{init: {"themeVariables": {"fontSize": "22px"}}}%%
-classDiagram
-direction LR
-
-class LibraryPanel
-class ClientContext
-class CampusClient
-class LibraryActions
-class BookSearchRequest
-class BookSearchResult
-class BookDTO
-class Request
-class Response
-class CampusServer
-class ActionRouter
-class LibraryServerModule
-class LibraryService
-class ServerContext
-class BookRepository
-class InMemoryBookRepository
-
-LibraryPanel --> ClientContext : 调用
-LibraryPanel ..> LibraryActions : 使用Action
-LibraryPanel ..> BookSearchRequest : 创建
-LibraryPanel ..> BookSearchResult : 读取
-ClientContext --> CampusClient : 委托网络发送
-CampusClient ..> Request : 发送
-CampusClient ..> Response : 接收
-CampusClient ..> CampusServer : Socket请求/响应
-
-CampusServer --> ActionRouter : 持有并分发
-ActionRouter --> LibraryServerModule : 分发Request
-LibraryServerModule --> ServerContext : 查询会话
-LibraryServerModule ..> BookSearchRequest : 读取
-LibraryServerModule *-- LibraryService : 调用
-LibraryService ..> BookSearchResult : 创建
-LibraryService --> BookRepository : 查询
-BookRepository <|.. InMemoryBookRepository : 实现
-InMemoryBookRepository ..> BookDTO : 返回
-BookSearchResult *-- "0..*" BookDTO : 包含
+flowchart LR
+    UI[vcampus-client<br/>Swing 页面] --> CTX[ClientContext]
+    CTX --> CLIENT[CampusClient]
+    CLIENT -->|Socket 传输 Request| SERVER[CampusServer]
+    SERVER --> ROUTER[ActionRouter]
+    ROUTER --> MODULE[LibraryServerModule]
+    MODULE --> SERVICE[LibraryService]
+    SERVICE --> REPO[Repository 接口]
+    REPO --> MEM[InMemory 实现<br/>单元测试]
+    REPO --> ACC[Access 实现<br/>正式启动]
+    ACC --> STORE[AccessLibraryStore<br/>线程绑定 JDBC 连接]
+    STORE --> DB[(vCampus.accdb)]
 ```
 
 ## 3. 类的职责
 
 ### 客户端
 
-- `LibraryClientModule`：图书馆客户端模块入口，实现统一的 `ClientModule` 接口并创建检索页面。
-- `LibraryPanel`：收集关键词、异步发送请求、处理响应并把图书数据显示到表格。
+- `LibraryClientModule`：图书馆客户端模块入口，实现统一的 `ClientModule` 接口。
+- `LibraryModePanel`：模式选择与容器。三张入口卡片分别对应线上图书馆、图书管理员工作台和模拟终端；
+  管理员入口只在 `canAdminister(LIBRARY)` 时创建。离开模块时复位到模式选择页。
+- `LibraryPanel`：馆藏查询与线上预约。收集关键词与分类、展示按馆藏地汇总的馆藏详情、提交预约。
+- `MyLibraryPanel`：我的图书馆。当前借阅、历史借阅、我的预约三个页签，含续借与取消预约。
+- `SelfServicePanel`：模拟自助终端。条码输入带 350 毫秒防抖与版本号，预检结果决定借书/归还按钮的启用。
+- `LibraryAdminPanel`：图书管理员工作台。书目维护、实体单册、借阅查询三个页签。
+- `LibraryUiTheme`：统一的色板、卡片、按钮与表格状态着色。
 - `ClientContext`：为业务页面提供带当前登录 token 的统一发送方法。
-- `CampusClient`：负责底层 Socket 请求和响应传输。
+- `CampusClient`：负责底层 Socket 请求与响应传输。
 
 ### 公共契约
 
-- `LibraryActions`：定义稳定的公开操作名 `LIBRARY.SEARCH_BOOKS`。
-- `BookSearchRequest`：封装用户输入的检索关键词。
-- `BookSearchResult`：封装一次检索返回的图书集合。
-- `BookDTO`：描述一本图书的基础信息和馆藏数量。
+- `LibraryActions`：定义 22 个稳定的公开操作名。
+- `BookSearchRequest` / `BookSearchResult`：检索请求与结果外壳。
+- `BookDTO` / `BookLocationDTO`：书目元数据与按馆藏地汇总的馆藏数/可借数。
+- `BookCopyDTO` / `CopyInspectionDTO`：单册资料与终端预检结论。
+- `BorrowRecordDTO` / `AdminBorrowRecordDTO`：读者视角与管理视角的借阅记录。
+- `ReservationDTO`：预约状态、排队位次、分配条码与取书截止时间。
 - `Request`、`Response`：所有模块共用的网络消息外壳。
+
+借还类请求 DTO **不包含 `userId`**：当前用户一律由 `Request.token` 推导，防止越权代操作。
 
 ### 服务器
 
 - `CampusServer`：监听 Socket、读取公共 `Request`，并把合法请求交给 `ActionRouter`。
-- `LibraryServerModule`：注册搜索 handler，完成身份验证、请求 DTO 类型校验、业务调用和响应组织。
-- `LibraryService`：完成关键词非空、非空白、长度和去除首尾空格等业务参数校验，并组织搜索结果；它不依赖 Socket 或 Swing。
-- `BookRepository`：定义馆藏查询的数据边界，后续可由 Access/JDBC 实现。
-- `InMemoryBookRepository`：保存第一轮演示数据，并按书名、作者、ISBN 或分类进行匹配。
-- `ActionRouter`：根据 Action 将公共请求分发给对应 handler。
-- `ServerContext`：向业务模块提供共享的会话查询能力。
-- `SessionLookup`：根据 token 查找当前登录用户。
+- `ActionRouter`：根据 Action 将公共请求分发给对应 handler，并兜底异常。
+- `LibraryServerModule`：注册 22 个 handler，完成身份验证、请求 DTO 类型校验、管理动作鉴权与响应组织。
+- `LibraryService`：承载全部业务规则，是唯一持有 `circulationLock` 的临界区；不依赖 Socket 或 Swing。
+- 五个 Repository 接口：定义书目、单册、分类、借阅记录与预约的数据边界。
+- `AccessLibraryStore`：实现 `LibraryTransactionManager`，在事务开始时把同一个 JDBC Connection
+  绑定到当前线程，供本模块全部 Access Repository 复用。
+- `InMemoryLibraryTransactionManager`：通过快照与补偿维持内存实现的事务语义。
+- `BookCopy` / `BorrowRecord` / `Reservation`：不可变领域记录，状态流转由 `withStatus`、
+  `returnedAt`、`renewedUntil`、`readyForPickup`、`canceledAt`、`expiredAt`、`fulfilledAt`
+  等方法派生新实例，不提供原地修改。
 
 ## 4. 类之间的关系
 
@@ -332,26 +465,31 @@ BookSearchResult *-- "0..*" BookDTO : 包含
 |---|---|---|
 | 接口实现 | `LibraryClientModule` → `ClientModule` | 所有客户端模块使用统一入口加载页面 |
 | 接口实现 | `LibraryServerModule` → `ServerModule` | 所有服务器模块使用统一入口注册 handler |
-| 创建依赖 | `LibraryClientModule` → `LibraryPanel` | 进入图书馆模块时创建检索页面 |
-| 关联 | `LibraryPanel` → `ClientContext` | 页面长期持有公共客户端上下文 |
-| 创建依赖 | `LibraryPanel` → `BookSearchRequest` | 每次搜索时创建请求 DTO |
-| 组合 | `BookSearchResult` → `BookDTO` | 一次搜索结果包含零到多本图书 |
+| 接口实现 | `AccessLibraryStore` → `LibraryTransactionManager` | Access 事务上下文的具体实现 |
+| 接口实现 | `Access*Repository` → `*Repository` | 生产数据源实现统一的数据边界 |
+| 组合 | `LibraryModePanel` → 四个业务面板 | 模式容器拥有全部子面板并负责切换 |
+| 关联 | 全部业务面板 → `ClientContext` | 页面长期持有公共客户端上下文 |
+| 创建依赖 | 业务面板 → 请求 DTO | 每次操作时创建请求对象 |
+| 组合 | `BookSearchResult` → `BookDTO` → `BookLocationDTO` | 检索结果逐层包含馆藏汇总 |
 | 组合 | `LibraryServerModule` → `LibraryService` | 服务器模块拥有图书馆业务服务 |
-| 关联 | `CampusServer` → `ActionRouter` | Socket 服务器持有路由器，并把读取到的公共请求交给它分发 |
-| 接口依赖 | `LibraryService` → `BookRepository` | 业务规则只依赖数据边界，不依赖具体存储方式 |
-| 接口实现 | `InMemoryBookRepository` → `BookRepository` | 内存数据源实现统一查询接口 |
+| 关联 | `CampusServer` → `ActionRouter` | Socket 服务器持有路由器并分发请求 |
+| 接口依赖 | `LibraryService` → 五个 Repository 接口 | 业务规则只依赖数据边界，不依赖存储方式 |
+| 接口依赖 | `LibraryService` → `LibraryTransactionManager` | 业务只声明事务边界，不关心实现 |
+| 引用 | `BorrowRecord` → `BookCopy`（`copyId`） | 借阅记录关联具体单册，不直接保存 `bookId` |
+| 引用 | `Reservation` → `BookCopy`（`assignedCopyId`） | 待取预约占用一份被保留的单册 |
 | 调用依赖 | `LibraryServerModule` → `ServerContext` | 处理请求时查询 token 是否有效 |
-| 调用依赖 | `LibraryServerModule` → `ActionRouter` | 初始化时登记搜索 handler |
 
 图中 `<|..` 表示接口实现，`-->` 表示关联或持有，`*--` 表示组合，`..>` 表示临时依赖或调用。
 
-## 5. 搜索时序图
+## 5. 条码借书时序图
+
+选择这条链路是因为它同时覆盖了身份校验、临界区、状态机、事务与预约联动。
 
 ```mermaid
-%%{init: {"themeVariables": {"fontSize": "20px"}}}%%
+%%{init: {"themeVariables": {"fontSize": "18px"}}}%%
 sequenceDiagram
     actor User as 用户
-    participant Panel as LibraryPanel
+    participant Panel as SelfServicePanel
     participant Context as ClientContext
     participant Client as CampusClient
     participant Server as CampusServer
@@ -359,56 +497,111 @@ sequenceDiagram
     participant Module as LibraryServerModule
     participant Sessions as SessionLookup
     participant Service as LibraryService
-    participant Repository as InMemoryBookRepository
+    participant Records as BorrowRecordRepository
+    participant Copies as BookCopyRepository
+    participant Reservations as ReservationRepository
 
-    User->>Panel: 输入 Java 并点击搜索
-    Panel->>Context: send(SEARCH_BOOKS, BookSearchRequest)
+    User->>Panel: 扫描或输入馆藏条码
+    Panel->>Context: send(INSPECT_COPY, CopyInspectionRequest)
     Context->>Client: send(Request，包含 token)
     Client->>Server: Socket 发送 Request
     Server->>Router: dispatch(Request)
-    Router->>Module: 调用已注册的搜索 handler
+    Router->>Module: 调用已注册的预检 handler
     Module->>Sessions: findSession(token)
     Sessions-->>Module: 返回有效会话
-    Module->>Module: 校验请求 DTO 类型
-    Module->>Service: searchBooks(BookSearchRequest)
-    Service->>Service: 校验并整理关键词
-    Service->>Repository: search("Java")
-    Repository-->>Service: List<BookDTO>
-    Service-->>Module: BookSearchResult
-    Module-->>Router: Response + BookSearchResult
+    Module->>Service: inspectCopy(userId, request)
+    Service->>Service: synchronized(circulationLock)
+    Service->>Reservations: expireReservations(now)
+    Service->>Copies: findByBarcode(barcode)
+    Service->>Records: findBorrowedByUserId(userId)
+    Service->>Service: borrowDecision 判定链
+    Service-->>Module: CopyInspectionDTO
+    Module-->>Router: Response + CopyInspectionDTO
     Router-->>Server: Response
     Server-->>Client: Socket 返回 Response
     Client-->>Context: 返回 Response
     Context-->>Panel: 返回 Response
-    Panel-->>User: 表格显示匹配图书
+    Panel-->>User: 展示书名、状态，仅启用合法按钮
+    User->>Panel: 点击借书登记
+    Panel->>Context: send(BORROW_COPY, CopyBorrowRequest)
+    Context->>Client: send(Request，包含 token)
+    Client->>Server: Socket 发送 Request
+    Server->>Router: dispatch(Request)
+    Router->>Module: 调用已注册的借书 handler
+    Module->>Service: borrowCopy(userId, request)
+    Service->>Service: 事务内重新执行完整判定链
+    Service->>Copies: 单册 -> LOANED
+    Service->>Records: 保存 BORROWED 记录，到期日 +30 天
+    alt 命中本人预约
+        Service->>Reservations: 预约 -> FULFILLED
+        Service->>Reservations: 释放多余保留册并顺延队首
+    end
+    Service-->>Module: 成功
+    Module-->>Server: Response.success
+    Server-->>Client: Response
+    Client-->>Panel: Response
+    Panel-->>User: 提示借书成功，借期 30 天
 ```
+
+预检与正式提交复用同一条 `borrowDecision` 判定链：预检只返回结论供界面控制按钮，
+正式提交在事务内重新执行全部校验，因此客户端的按钮状态不构成安全边界。
 
 ## 6. 设计理由
 
-1. **界面与网络分离**：`LibraryPanel` 不直接操作 Socket，而是通过 `ClientContext` 发送请求。
-2. **客户端与服务器共享契约**：请求和响应 DTO 位于 `vcampus-common`，避免双方使用不同的数据格式。
-3. **统一路由扩展方式**：图书馆模块通过 `ServerModule.registerHandlers` 注册自己的 Action，服务器核心不需要知道模块内部细节。
-4. **服务器负责安全校验**：即使客户端页面只能在登录后进入，服务器仍会独立校验 token 和关键词，不能依赖客户端保证安全。
-5. **业务与数据分离**：`LibraryService` 只依赖 `BookRepository` 接口。当前使用内存实现，后续接入 Access/JDBC 时不需要改变页面、公共协议或业务服务。
+1. **书目与实体单册分离**：`BookDTO` 不含库存字段，`totalCount` / `availableCount` 由单册状态
+   按馆藏地实时汇总。这样"某馆藏地还有几本可借"永远只有一个事实来源，不会出现库存与实际单册不一致。
+2. **界面与网络分离**：业务面板不直接操作 Socket，而是通过 `ClientContext` 发送请求。
+3. **客户端与服务器共享契约**：请求与响应 DTO 位于 `vcampus-common`，双方使用同一份定义。
+4. **统一路由扩展方式**：图书馆模块通过 `ServerModule.registerHandlers` 注册自己的 Action，
+   服务器核心不需要知道模块内部细节。
+5. **服务器负责安全校验**：客户端隐藏入口、禁用按钮只用于改善体验；服务器对每个 Action
+   独立校验 token、管理权与业务规则，借还身份只从会话推导。
+6. **业务与数据分离**：`LibraryService` 只依赖 Repository 接口与事务抽象。
+7. **单一临界区**：全部读写都在 `circulationLock` 内串行执行，管理操作与流通操作共用同一临界区，
+   避免"管理员注销单册"与"读者借同一单册"交错破坏状态。
+8. **事务边界显式化**：多表写入通过 `LibraryTransactionManager.execute` 声明为一个事务，
+   Access 实现让多个 Repository 复用同一连接，任一步失败整体回滚。
 
-## 7. 数据源替换设计
+## 7. 数据源与事务设计
 
-当前已经通过 `BookRepository` 隔离数据来源。接入数据库时，主要新增一个数据库实现，并在服务端组装处替换当前内存实现：
+数据源替换已经完成：正式启动使用 `AccessLibraryStore`，单元测试仍用内存实现。
+两者共享同一组 Repository 接口。
 
 ```mermaid
 %%{init: {"themeVariables": {"fontSize": "20px"}}}%%
 classDiagram
+direction TB
+
+class LibraryService
+class LibraryTransactionManager {
+    <<interface>>
+    +execute(Runnable)
+}
+class AccessLibraryStore {
+    -ThreadLocal~Connection~ bound
+    +execute(Runnable)
+    +read(...)
+    +write(...)
+}
+class InMemoryLibraryTransactionManager
 class BookRepository {
     <<interface>>
-    +search(String) List~BookDTO~
 }
-class InMemoryBookRepository
 class AccessBookRepository
-class LibraryService
+class InMemoryBookRepository
 
+LibraryService --> LibraryTransactionManager : 依赖
 LibraryService --> BookRepository : 依赖
-BookRepository <|.. InMemoryBookRepository
+LibraryTransactionManager <|.. AccessLibraryStore
+LibraryTransactionManager <|.. InMemoryLibraryTransactionManager
 BookRepository <|.. AccessBookRepository
+BookRepository <|.. InMemoryBookRepository
+AccessLibraryStore ..> AccessBookRepository : 提供同一 Connection
 ```
 
-`LibraryServerModule` 依赖 `LibraryService`，`LibraryService` 通过构造方法接收 `BookRepository`。当前默认构造函数组装的是 `new LibraryService(new InMemoryBookRepository())`。正式接入数据库时，需要新增 `AccessBookRepository`（或 JDBC 实现），并在这一服务端组装处替换 Repository 实现；`LibraryService`、客户端页面和公共 DTO 不需要因存储方式而大幅修改。
+`LibraryServerModule.createAccessBacked(databasePath)` 是生产组装点：它创建
+`AccessLibraryStore`，用同一 store 构造五个 Access Repository，再注入 `LibraryService`。
+`ServerModules.createRouter()` 则用内存实现组装普通测试服务器。
+
+需要替换存储方式时，只需新增一组 Repository 实现与一个事务管理器实现，并在组装点替换；
+`LibraryService`、客户端页面与公共 DTO 都不需要改动。

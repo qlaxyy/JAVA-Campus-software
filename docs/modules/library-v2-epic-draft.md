@@ -2,6 +2,13 @@
 
 > 本文是 Epic #6 的 V2 替换草稿，供人工复制和修改。  
 > 设计依据：`docs/modules/library-v2-design-proposal.md`。
+>
+> **状态：本设计已全部落地，并在其之外继续扩展。** 下文"范围内 / 范围外"与 Action 表
+> 反映的是提出时的计划，**不是最终交付范围**：预约队列、续借、条码预检、可恢复注销与
+> 可扩展分类都在本设计之后完成。阅读时请以以下文档为准：
+> [借阅归还交付说明](library-borrow-return.md)、
+> [管理员维护说明](library-admin-maintenance.md)、
+> [SRS 第 8 章](../design/SOFTWARE_DESIGN_SPECIFICATION.md)。
 
 ## 模块
 
@@ -36,7 +43,10 @@
 
 ### 范围外
 
-- 预约排队、委托借阅、续借；
+> 注：本列表是提出时的计划。**预约排队与续借后来已实现**（含 24 小时保留、稳定 FIFO 队列、
+> 7 天爽约冷却、一次续借），不在最终的范围外集合中；委托借阅仍未实现。
+
+- ~~预约排队~~、委托借阅、~~续借~~；
 - 书评、书架、荐购、热门排行；
 - 学期末或消息通知；
 - 真实罚款、欠款支付和遗失赔偿；
@@ -72,7 +82,8 @@
 - `bookId`
 - `location`
 - `callNumber`
-- `status: AVAILABLE | LOANED | WAITING_SHELVING | WITHDRAWN`
+- `status: AVAILABLE | RESERVED | LOANED | WAITING_SHELVING | WITHDRAWN`
+  （`RESERVED` 为预约落地后新增，本设计提出时不存在）
 
 ### `BorrowRecord`
 
@@ -204,6 +215,12 @@ status == BORROWED && currentTime > dueTime
 ## Action 与 DTO
 
 以下是 V2 目标契约。修改 `vcampus-common` 时客户端和服务器必须同步。
+
+> 注：下表是提出时的目标契约（共 14 个 Action）。**最终交付 22 个**：新增
+> `LIST_CATEGORIES`、`ADD_BOOK_CATEGORY`、`INSPECT_COPY`、`RENEW_BORROW`、
+> `CREATE_RESERVATION`、`GET_MY_RESERVATIONS`、`CANCEL_RESERVATION`、`RESTORE_BOOK_COPY`。
+> 完整清单见 [借阅归还交付说明](library-borrow-return.md) 与
+> [管理员维护说明](library-admin-maintenance.md)。
 
 ### 普通用户 Action
 

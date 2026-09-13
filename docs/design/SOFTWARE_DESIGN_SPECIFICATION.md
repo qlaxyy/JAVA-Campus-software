@@ -188,7 +188,7 @@ flowchart LR
 | 用户与公共架构 | 吴尚扬 | 登录、会话、账号管理、批量导入和 Access 持久化已纳入 |
 | 学籍 | 施天琦 | 待负责人材料汇总 |
 | 选课 | 杨凯涵 | 待负责人材料汇总 |
-| 图书馆 | 吴昊哲 | 预约、模拟借还、管理维护、Access 事务与测试已纳入 |
+| 图书馆 | 吴昊哲 | 已按 4.3 结构写完；检索、预约、续借、模拟借还、管理维护、Access 事务与测试均已纳入 |
 | 商店 | 葛丰玮 | 待负责人材料汇总 |
 | 医院 | 廖俊杰 | 待负责人材料汇总 |
 
@@ -652,20 +652,376 @@ classDiagram
 
 负责人：杨凯涵。后续按 4.3 节结构补充选课批次、课程查询、选课退课、冲突与容量规则、接口、数据库、图表和测试。
 
-## 8. 图书馆子系统设计说明（预约与入口调整阶段 4 已实现）
+## 8. 图书馆子系统设计说明（已实现，已知限制见 8.10）
 
-负责人：吴昊哲。当前已完成书目与实体单册分离、按馆藏地汇总、线上预约、个人图书馆与一次续借、
-模拟自助条码借还、服务器条码预检与合法操作按钮控制、可扩展分类、书目与单册维护、全馆借阅查询、
-Access Repository 和跨 Repository 事务。
+### 8.1 模块背景
+
+负责人：吴昊哲。图书馆是课程必做模块之一，目标是实现"书目—实体单册—借阅记录—预约"四层模型下的
+馆藏检索、线上预约与模拟自助条码借还。系统的关键设计判断是**把书目与可流转的实体单册分离**：
+馆藏数与可借数不落库，而由未注销单册的状态按馆藏地实时汇总，避免两套事实来源。
+
+模块同时保留一个刻意的简化：读者在自己的检索结果里不能直接借走实体书，必须走到"模拟自助终端"
+扫描条码，模拟真实图书馆"线上预约、到馆取书"的流程。终端不接真实扫码硬件，条码由手工输入。
 
 当前实现及评审入口：[借阅归还交付说明](../modules/library-borrow-return.md)、
-[图书管理员维护设计与测试](../modules/library-admin-maintenance.md)。
-图书管理员是具有 `AdminScope.LIBRARY` 的 `Role.USER`，超级管理员也具备此能力；
-服务器从 token 取得会话，通过 `SessionInfo.canAdminister(ModuleNames.LIBRARY)` 判断。
-分类接口使用 `categoryId/categoryName`，管理员可新增分类，已有书目只保存稳定分类 ID。图书管理员
-同时具有读者能力，但客户端把读者入口与管理员工作台分开，服务器仍逐个 Action 鉴权。正式启动时，书目、实体单册、分类、借阅记录和预约均保存在
-`vCampus.accdb`；预约分配、借书、归还等多表操作通过 `AccessLibraryStore` 复用同一个 JDBC Connection。
-仅在首次创建整套图书馆表且业务表为空时初始化一致演示状态，已有数据库不会补种或重置。
+[图书管理员维护设计与测试](../modules/library-admin-maintenance.md)、
+[数据字典](../../database/schema/library.md)。
+
+### 8.2 用例设计
+
+参与角色只有两类，二者是正交的：
+
+| 角色 | 判定方式 | 能力 |
+|---|---|---|
+| 读者 | 任意已登录账号 | 检索、预约、续借、条码借还、查看本人记录 |
+| 图书馆管理员 | `Role.USER + AdminScope.LIBRARY`，或 `Role.SUPER_ADMIN` | 管理员全部能力，同时保留读者能力 |
+
+图书管理员不是新的全局角色。服务器从 token 取得会话，通过
+`SessionInfo.canAdminister(ModuleNames.LIBRARY)` 逐个 Action 鉴权，客户端在 DTO 中自报身份无效。
+
+#### 8.2.1 读者用例
+
+1. **检索馆藏**：按关键词（≤50 字符）与可选分类查询，结果为按馆藏地汇总的馆藏数与可借数；停用书目不可见。
+2. **线上预约**：选定书目与取书馆藏地提交预约；有可借单册时立即保留 24 小时，否则进入队列。
+3. **查看与取消预约**：查看状态、排队位次、分配条码与取书截止时间；排队中或待取可取消。
+4. **条码借书**：在模拟终端扫描条码，先由服务器预检，界面只启用合法操作；本人预约的保留册可在此时取走。
+5. **条码还书**：扫描本人当前借阅的单册完成归还，单册转入"待上架"。
+6. **查看借阅记录**：当前借阅与历史借阅，逾期由服务器动态判定并标注。
+7. **续借**：本人当前、未逾期且未续借过的记录可续借 1 次，从原到期日顺延 30 天。
+
+#### 8.2.2 管理员用例
+
+1. **书目维护**：查询全部书目（含停用）、新增与编辑元数据、切换"开放借阅 / 停止借阅"。
+2. **分类维护**：新增可复用分类，名称忽略大小写去重；书目只保存稳定分类 ID。
+3. **单册维护**：登记唯一馆藏条码、维护馆藏地与索书号、确认归架、软注销、恢复误注销单册。
+4. **借阅查询**：按"当前借阅 / 借阅历史 / 逾期未还"三个范围查询全馆记录。
+
+### 8.3 界面设计
+
+| 页面 | 类 | 职责 |
+|---|---|---|
+| 模式选择 | `LibraryModePanel` | 三张入口卡片：线上图书馆、图书管理员工作台（仅管理员可见）、模拟自助终端 |
+| 馆藏查询 | `LibraryPanel` | 关键词与分类检索、结果表、按馆藏地展示的馆藏详情、预约提交 |
+| 我的图书馆 | `MyLibraryPanel` | 当前借阅 / 历史借阅 / 我的预约三个页签，含续借与取消预约 |
+| 模拟自助终端 | `SelfServicePanel` | 条码输入、服务器预检、按预检结果启用借书或归还 |
+| 图书管理员工作台 | `LibraryAdminPanel` | 书目维护 / 实体单册 / 借阅查询三个页签 |
+
+页面状态约定：
+
+- 图书管理员入口与读者页签**不混排**；管理员进入工作台与进入线上图书馆是两条独立路径。
+- 离开模块返回其他子系统后再次进入，始终从模式选择页开始（`ModuleViewLifecycle.onModuleExit`）。
+- 所有表格只读、单选，禁止拖动列与列宽；网络调用一律在 `SwingWorker` 中执行，不阻塞 EDT。
+- 客户端对状态的预判（如禁用"续借"按钮）只改善体验，服务器仍独立校验。
+- 写入结果不确定时冻结全部按钮，提示"请先查询核对，勿重复提交"。
+
+### 8.4 条码借书判定流程
+
+判定顺序固定，任一环节不通过即返回对应错误码；预检与正式提交复用同一判定链。
+
+```mermaid
+flowchart TD
+    A[输入馆藏条码] --> C{条码是否存在}
+    C -- 否 --> C1[LIBRARY_COPY_NOT_FOUND]
+    C -- 是 --> D{书目是否 ACTIVE}
+    D -- 否 --> D1[LIBRARY_COPY_NOT_AVAILABLE]
+    D -- 是 --> E{单册状态}
+    E -- 他人 RESERVED --> E1[LIBRARY_COPY_RESERVED_FOR_OTHER]
+    E -- LOANED / WAITING_SHELVING / WITHDRAWN --> E2[LIBRARY_COPY_NOT_AVAILABLE]
+    E -- AVAILABLE 或本人 RESERVED --> F{存在逾期未还}
+    F -- 是 --> F1[LIBRARY_OVERDUE_BORROW_EXISTS]
+    F -- 否 --> G{当前借阅已达 5 本}
+    G -- 是 --> G1[LIBRARY_BORROW_LIMIT_REACHED]
+    G -- 否 --> H{已借同书目其他单册}
+    H -- 是 --> H1[LIBRARY_ALREADY_BORROWED]
+    H -- 否 --> I[单册 -> LOANED]
+    I --> J[创建 BORROWED 记录, 到期日 = 借阅时间 + 30 天]
+    J --> K{命中本人预约}
+    K -- 是 --> L[预约 -> FULFILLED; 若保留的是别的单册则释放并顺延]
+    K -- 否 --> M[结束]
+    L --> M
+```
+
+### 8.5 线上预约时序图
+
+```mermaid
+sequenceDiagram
+    actor Reader as 读者
+    participant LP as LibraryPanel
+    participant CC as ClientContext
+    participant CS as CampusServer
+    participant SM as LibraryServerModule
+    participant LS as LibraryService
+    participant BR as BookRepository
+    participant CR as BookCopyRepository
+    participant RR as ReservationRepository
+
+    Reader->>LP: 选择书目与取书馆藏地后点击预约
+    LP->>CC: send(Request(LIBRARY.CREATE_RESERVATION, data))
+    CC->>CS: Socket / ObjectOutputStream
+    CS->>SM: ActionRouter.dispatch(request)
+    SM->>SM: 从 token 取 SessionInfo, 校验已登录
+    SM->>LS: createReservation(userId, request)
+    LS->>LS: synchronized(circulationLock)
+    LS->>RR: expireReservations(now) 清理到期预约
+    LS->>BR: findIncludingInactive(bookId)
+    LS->>CR: findByBookId(bookId) 过滤馆藏地与 WITHDRAWN
+    LS->>RR: 校验 3 条上限 / 同书目重复 / 7 天爽约冷却
+    alt 该馆藏地存在 AVAILABLE 单册
+        LS->>CR: 取条码最小的单册 -> RESERVED
+        LS->>RR: 保存 READY_FOR_PICKUP, expiresAt = now + 24h
+        LS-->>SM: ReservationDTO(含分配条码与截止时间)
+    else 无可借单册
+        LS->>RR: 保存 WAITING, 按 createdAt + reservationId 排序
+        LS-->>SM: ReservationDTO(含排队位次)
+    end
+    SM-->>CS: Response.success
+    CS-->>CC: Response
+    CC-->>LP: 展示待取截止时间或排队位次
+```
+
+### 8.6 类分析
+
+```mermaid
+classDiagram
+    direction LR
+    class LibraryServerModule {
+        +registerHandlers(router, context)
+        -administer(request, context, type, handler)
+    }
+    class LibraryService {
+        -Object circulationLock
+        -LibraryTransactionManager transactionManager
+        +searchBooks(BookSearchRequest) BookSearchResult
+        +borrowCopy(userId, CopyBorrowRequest)
+        +returnCopy(userId, CopyReturnRequest)
+        +inspectCopy(userId, CopyInspectionRequest) CopyInspectionDTO
+        +renewBorrow(userId, BorrowRecordIdRequest) BorrowRecordDTO
+        +createReservation(userId, CreateReservationRequest) ReservationDTO
+        +getMyReservations(userId) List~ReservationDTO~
+        +cancelReservation(userId, ReservationIdRequest) ReservationDTO
+        +getBorrowRecords(userId) List~BorrowRecordDTO~
+        +queryBorrows(actor, AdminBorrowQueryRequest) List~AdminBorrowRecordDTO~
+        +addBook(actor, AddBookRequest) BookDTO
+        +addBookCopy(actor, AddBookCopyRequest) BookCopyDTO
+        +shelveBookCopy(actor, BookCopyIdRequest) BookCopyDTO
+        +withdrawBookCopy(actor, BookCopyIdRequest) BookCopyDTO
+        +restoreBookCopy(actor, BookCopyIdRequest) BookCopyDTO
+    }
+    class BookRepository { <<interface>> }
+    class BookCopyRepository { <<interface>> }
+    class BookCategoryRepository { <<interface>> }
+    class BorrowRecordRepository { <<interface>> }
+    class ReservationRepository { <<interface>> }
+    class LibraryTransactionManager { <<interface>> }
+    class Book {
+        +String bookId
+        +String isbn
+        +String categoryId
+        +String status
+    }
+    class BookCopy {
+        +String copyId
+        +String barcode
+        +String bookId
+        +String location
+        +String callNumber
+        +BookCopyStatus status
+    }
+    class BorrowRecord {
+        +String recordId
+        +String userId
+        +String copyId
+        +LocalDateTime dueTime
+        +int renewalCount
+        +BorrowStatus status
+    }
+    class Reservation {
+        +String reservationId
+        +String userId
+        +String bookId
+        +String pickupLocation
+        +String assignedCopyId
+        +ReservationStatus status
+    }
+    class BookCopyStatus {
+        <<enumeration>>
+        AVAILABLE
+        RESERVED
+        LOANED
+        WAITING_SHELVING
+        WITHDRAWN
+    }
+    class BorrowStatus {
+        <<enumeration>>
+        BORROWED
+        RETURNED
+    }
+    class ReservationStatus {
+        <<enumeration>>
+        WAITING
+        READY_FOR_PICKUP
+        FULFILLED
+        CANCELED
+        EXPIRED
+    }
+
+    LibraryServerModule --> LibraryService
+    LibraryService --> BookRepository
+    LibraryService --> BookCopyRepository
+    LibraryService --> BookCategoryRepository
+    LibraryService --> BorrowRecordRepository
+    LibraryService --> ReservationRepository
+    LibraryService --> LibraryTransactionManager
+    BookCopy --> Book : bookId
+    BorrowRecord --> BookCopy : copyId
+    Reservation --> Book : bookId
+    Reservation --> BookCopy : assignedCopyId
+    BookCopy ..> BookCopyStatus
+    BorrowRecord ..> BorrowStatus
+    Reservation ..> ReservationStatus
+```
+
+职责划分：`LibraryServerModule` 只做参数类型校验、鉴权与响应包装；`LibraryService` 承载全部业务规则，
+是唯一的临界区持有者；五个 Repository 接口各有 InMemory 与 Access 两套实现；领域类
+（`Book` 之外）为不可变记录，状态流转通过 `withStatus` / `renewedUntil` / `canceledAt` 等方法派生新实例。
+
+更完整的类图（含客户端、公共契约、服务器三张分区图）、类职责表、类关系表与条码借书时序图见
+[图书馆模块 UML 设计](../modules/library-uml.md)。
+
+### 8.7 Action、DTO 与错误码
+
+读者与通用 Action（10 个）：
+
+| Action | Request.data | 成功 Response.data | 权限 |
+|---|---|---|---|
+| `LIBRARY.SEARCH_BOOKS` | `BookSearchRequest(keyword, categoryId)` | `BookSearchResult` | 已登录 |
+| `LIBRARY.LIST_CATEGORIES` | `null` | `List<BookCategoryDTO>` | 已登录 |
+| `LIBRARY.CREATE_RESERVATION` | `CreateReservationRequest(bookId, pickupLocation)` | `ReservationDTO` | 已登录 |
+| `LIBRARY.GET_MY_RESERVATIONS` | `null` | `List<ReservationDTO>` | 已登录 |
+| `LIBRARY.CANCEL_RESERVATION` | `ReservationIdRequest(reservationId)` | `ReservationDTO` | 已登录且为预约本人 |
+| `LIBRARY.GET_BORROW_RECORDS` | `null` | `List<BorrowRecordDTO>` | 已登录 |
+| `LIBRARY.RENEW_BORROW` | `BorrowRecordIdRequest(recordId)` | `BorrowRecordDTO` | 已登录且为借阅本人 |
+| `LIBRARY.INSPECT_COPY` | `CopyInspectionRequest(barcode)` | `CopyInspectionDTO` | 已登录 |
+| `LIBRARY.BORROW_COPY` | `CopyBorrowRequest(barcode)` | `null` | 已登录 |
+| `LIBRARY.RETURN_COPY` | `CopyReturnRequest(barcode)` | `null` | 已登录 |
+
+管理 Action（全部要求 `canAdminister(LIBRARY)`，由 `administer(...)` 统一包装）：
+
+| Action | Request.data | 成功 Response.data |
+|---|---|---|
+| `LIBRARY.ADMIN_SEARCH_BOOKS` | `BookSearchRequest` | `BookSearchResult` |
+| `LIBRARY.ADD_BOOK_CATEGORY` | `AddBookCategoryRequest(categoryName)` | `BookCategoryDTO` |
+| `LIBRARY.ADD_BOOK` / `LIBRARY.UPDATE_BOOK` | `AddBookRequest` / `UpdateBookRequest` | `BookDTO` |
+| `LIBRARY.SET_BOOK_STATUS` | `SetBookStatusRequest(bookId, status)` | `BookDTO` |
+| `LIBRARY.ADD_BOOK_COPY` | `AddBookCopyRequest(bookId, barcode, location, callNumber)` | `BookCopyDTO` |
+| `LIBRARY.LIST_BOOK_COPIES` | `ListBookCopiesRequest(bookId)` | `List<BookCopyDTO>` |
+| `LIBRARY.UPDATE_BOOK_COPY` | `UpdateBookCopyRequest(copyId, location, callNumber)` | `BookCopyDTO` |
+| `LIBRARY.SHELVE_BOOK_COPY` / `WITHDRAW_BOOK_COPY` / `RESTORE_BOOK_COPY` | `BookCopyIdRequest(copyId)` | `BookCopyDTO` |
+| `LIBRARY.ADMIN_QUERY_BORROWS` | `AdminBorrowQueryRequest(scope)` | `List<AdminBorrowRecordDTO>` |
+
+借还类请求 DTO **不含 `userId`**：当前用户一律由 `Request.token -> SessionInfo.userId` 确认，
+防止越权代操作。
+
+业务错误码（`ErrorCodes` 中以 `LIBRARY_` 开头、由 `LibraryBusinessException` 抛出）：
+
+| 分类 | 错误码 |
+|---|---|
+| 书目与单册 | `LIBRARY_BOOK_NOT_FOUND`、`LIBRARY_COPY_NOT_FOUND`、`LIBRARY_CATEGORY_NOT_FOUND`、`LIBRARY_DUPLICATE_ISBN`、`LIBRARY_DUPLICATE_BARCODE`、`LIBRARY_DUPLICATE_CATEGORY`、`LIBRARY_INVALID_BOOK_STATUS`、`LIBRARY_INVALID_COPY_STATUS`、`LIBRARY_COPY_NOT_AVAILABLE`、`LIBRARY_COPY_RESERVED_FOR_OTHER` |
+| 借还与续借 | `LIBRARY_BORROW_RECORD_NOT_FOUND`、`LIBRARY_BORROW_LIMIT_REACHED`、`LIBRARY_ALREADY_BORROWED`、`LIBRARY_OVERDUE_BORROW_EXISTS`、`LIBRARY_RENEWAL_NOT_ALLOWED`、`LIBRARY_RENEWAL_LIMIT_REACHED`、`LIBRARY_RENEWAL_BLOCKED_BY_RESERVATION` |
+| 预约 | `LIBRARY_RESERVATION_NOT_FOUND`、`LIBRARY_RESERVATION_LIMIT_REACHED`、`LIBRARY_DUPLICATE_RESERVATION`、`LIBRARY_RESERVATION_COOLDOWN`、`LIBRARY_RESERVATION_NOT_CANCELLABLE`、`LIBRARY_INVALID_PICKUP_LOCATION` |
+| 认证 | `AUTH_REQUIRED`（无 token 或会话失效）、`AUTH_FORBIDDEN`（非图书馆管理员调用管理 Action） |
+
+参数非法（超长文本、非法 ISBN、非法出版年、未知查询范围）返回 `COMMON_INVALID_ARGUMENT`；
+请求体类型不符返回 `COMMON_INVALID_REQUEST`。客户端 `LibraryMessages` 把错误码映射为中文提示。
+
+### 8.8 数据表与并发规则
+
+五张表：`tblBook`、`tblBookCopy`、`tblBookCategory`、`tblBorrowRecord`、`tblReservation`。
+字段、主外键、唯一索引与不变量的完整定义见[图书馆数据字典](../../database/schema/library.md)，此处只列设计要点：
+
+- `tblBook` 是书目元数据，**不保存 `totalCount` / `availableCount`**；两个值由未注销
+  `tblBookCopy` 按馆藏地实时汇总，`INACTIVE` 书目保留馆藏数但业务可借数固定为 0。
+- `tblBorrowRecord` 只保存 `copyId` 而不保存 `bookId`；`renewalCount` 记录成功续借次数（上限 1）。
+- 逾期**不落库、不占第三种状态**，由 `BORROWED && now > dueTime` 动态计算。
+- `tblReservation` 的排队顺序由 `createdAt` 加 `reservationId` 决定，保证相同创建时间下顺序稳定。
+- 唯一索引：`tblBook.isbn`、`tblBookCopy.barcode`；跨模块 `userId` 不建外键。
+
+并发规则分两层：
+
+1. **同一服务器实例内**：`LibraryService.circulationLock` 串行化全部读写，管理操作与流通操作共用同一临界区，
+   避免交错破坏状态。预约到期的清理没有后台定时器，而是在检索、预约、借还和管理状态操作前于事务内原子执行。
+2. **持久化层**：`AccessLibraryStore` 在事务开始时把同一个 JDBC Connection 绑定到当前线程，
+   五个 Access Repository 在一次业务中复用该连接，任一步失败整体回滚。InMemory 版本通过
+   第二步失败时补偿第一步维持测试状态一致。
+
+尚未覆盖的是**跨进程或跨服务器实例**的并发：系统没有 `SELECT ... FOR UPDATE` 与乐观锁版本号，
+多实例部署时同一单册可能被重复分配。这一点在 8.10 中作为已知限制列出。
+
+### 8.9 测试与验收
+
+自动化测试（详见 [交付说明](../modules/library-borrow-return.md)）：
+
+| 测试类 | 覆盖内容 |
+|---|---|
+| `LibraryServiceTest` | 关键词 trim、分类过滤、馆藏地汇总语义、停用书目对读者的可见性 |
+| `LibraryCirculationPhaseTwoTest` | 条码借还、30 天借期、五本上限、同书目重复、逾期停借、终端预检、他人归还拒绝、并发借同一册、事务回滚 |
+| `LibraryReservationServiceTest` | 立即保留、FIFO 排队与稳定 tie-break、24 小时过期、7 天冷却、取消顺延、续借三条规则、并发抢最后一册 |
+| `LibraryAdminServiceTest` | 分类新增与去重、ISBN 规范化、单册生命周期、状态专用操作、全馆借阅查询与越权拒绝 |
+| `LibraryServerModuleTest` | 22 个 Action 契约反射冻结、鉴权、DTO 类型校验、会话身份优先于载荷 |
+| `AccessLibraryRepositoryTest` | 真实 `.accdb` 建表与索引、唯一约束、借还/预约事务回滚、演示种子不变量 |
+| `LibraryPersistenceIntegrationTest` | 真实 Socket 下跨多次服务器重启的状态保留、演示数据不重复播种 |
+| `LibraryWorkflowUiTest` / `LibraryAdminUiTest` / `LibraryReservationUiTest` / `LibrarySearchIntegrationTest` / `LibraryAdminIntegrationTest` | 模式切换、预约与取消、续借、终端预检、管理员可见性与状态按钮禁用、跨 Socket 全链路 |
+| `LibraryResponsiveLayoutTest` / `LibraryUiThemeTest` | 900×560 与 1280×760 两档布局不越界、按钮禁用态对比度 |
+
+验收条件：
+
+- [ ] 读者检索只能看到 `ACTIVE` 书目，管理员检索可见 `INACTIVE`。
+- [ ] 馆藏数与可借数按馆藏地汇总，`RESERVED` 计入馆藏不计可借，`WITHDRAWN` 全部不计。
+- [ ] 有可借单册时预约立即保留 24 小时；无可借单册时按稳定 FIFO 排队并返回位次。
+- [ ] 借书成功后单册为 `LOANED`，且存在对应 `BORROWED` 记录，到期日为借阅时间加 30 天。
+- [ ] 逾期、达到五本上限、已借同书目时拒绝借阅，分别返回对应错误码。
+- [ ] 归还后单册为 `WAITING_SHELVING`，可借数不立即恢复；管理员确认归架后恢复。
+- [ ] 续借从原到期日顺延 30 天，逾期、已续借过一次或同书目有有效预约时拒绝。
+- [ ] 非图书馆管理员调用任一管理 Action 返回 `AUTH_FORBIDDEN`；无 token 返回 `AUTH_REQUIRED`。
+- [ ] 同一单册的并发借阅只有一次成功（`LibraryCirculationPhaseTwoTest`）。
+- [ ] 服务器重启后借阅、预约与单册状态保持不变，已有数据库不重新播种演示数据。
+- [ ] `mvn clean verify` 全部通过。
+
+### 8.10 仍未完成的内容和已知限制
+
+**文档声明排除、本轮不实现**（出处见各模块文档的"范围"说明）：
+
+- 逾期罚款、欠款与遗失赔偿：无金额字段、无计费规则、无缴费 Action。
+  上游已为图书馆预留校园卡缴费钩子 `LibraryServerModule.settleFee(...)`，但图书馆侧尚未接入。
+- 消息通知：预约到书、到期提醒与逾期催还均无推送，用户只能主动刷新查看。
+- 委托借阅、书评、书架收藏、荐购与热门排行。
+- 采购批次、馆藏盘点与馆际互借。
+- 真实条码枪或 RFID 硬件，终端为手工输入条码的模拟实现。
+- 学生与教师使用同一套借阅规则，无差异化借期与额度（无复杂借阅等级）。
+- 分类只支持新增，不支持重命名与删除，以免已有书目引用失效。
+- 管理员不能代替读者办理借还：借还一律取会话身份，这是有意的防越权设计。
+
+**尚未实现但未在文档中声明排除**（后续 PR 处理）：
+
+- 分页与排序：检索、借阅查询与单册列表均一次性全量返回，无 `pageSize` 一类参数。
+- 管理员看不到预约队列：工作台只有书目、单册、借阅三个页签，无法查看或干预预约。
+- 管理员不能按读者筛选借阅记录：`AdminBorrowQueryRequest` 只有 `scope` 字段。
+- 无统计报表与导出，只有"共 N 条"的文字计数。
+- 检索字段偏窄：关键词只匹配书名、作者、ISBN 与分类名，不含索书号、出版社、出版年与语种。
+- 无独立馆藏地字典，取书地点由现存单册的 `location` 反推。
+- 逾期只有动态判定与拦截，没有催还动作与状态位。
+
+**工程限制**：
+
+- **不支持跨进程/跨实例并发**：仅依赖单实例的 `circulationLock` 与数据库唯一索引，无悲观锁或乐观锁。
+- **`LibraryService` 未按课程"每个文件不超过 200 行"拆分**：当前 1050 行，承载检索、流通、预约、
+  馆藏维护等职责。经评估，全面达标需拆为约 10 个类，与仓库其余模块现状（`HospitalService` 2209 行、
+  course 模块存在 693 与 889 行的服务类）差异过大，本轮暂不拆分。
+- **无障碍支持空白**：界面无 `setMnemonic` / `setLabelFor` 与可访问名称，除回车外无快捷键。
+- **业务常量在两处维护**：借期、上限、保留时长等服务端常量在客户端提示文案中硬编码了一份，存在漂移风险。
+- **未使用常量**：`LIBRARY_NO_AVAILABLE_COPY`、`LIBRARY_ALREADY_RETURNED`、`LIBRARY_INVALID_STOCK`
+  在服务端从不抛出，是 V1 遗留，客户端仍保留其文案映射。
+- **无持续集成**：仓库没有 CI 配置，336 个测试依赖本地手动执行。
 
 ## 9. 商店子系统设计说明（已实现首条完整业务链路，其余待负责人材料汇总）
 
@@ -710,6 +1066,11 @@ Access Repository 和跨 Repository 事务。
 | `USER.ADMIN_LIST_TEACHERS` | 必填 | `null` | `TeacherProfileListResponse` | 超级管理员查看全部教师档案。 |
 | `USER.ADMIN_SAVE_TEACHER_PROFILE` | 必填 | `SaveTeacherProfileRequest` | `TeacherProfileView` | 超级管理员为已有账号创建或更新教师档案。 |
 | `USER.ADMIN_BATCH_SAVE_TEACHERS` | 必填 | `BatchSaveTeacherProfilesRequest` | `TeacherProfileListResponse` | 超级管理员批量新增或更新已有账号的教师档案。 |
+
+> 上表以用户模块为例说明 Action 的命名与请求/响应约定，**不是跨模块的全量清单**。
+> Action 名统一为 `<模块>.<动作>`，由 `ActionNames.of(ModuleNames.XXX, "VERB")` 生成。
+> 各业务模块的完整 Action 表在其子系统章节中给出，例如图书馆的 22 个 Action（10 个读者与通用、
+> 12 个管理）见 8.7 节。
 
 ### 11.2 Request
 
@@ -766,6 +1127,10 @@ token 已经是 `SessionInfo` 的字段。登录响应不是分别返回两份�
 | `AUTH_REQUIRED` | 需要有效登录 | 会话查询或退出时 token 为空/无效。 |
 | `COMMON_UNKNOWN_ACTION` | Action 未注册 | 客户端发送未知操作。 |
 | `COMMON_SERVER_ERROR` | 服务器无法完成请求 | 处理器抛出未预期运行时异常。 |
+| `AUTH_FORBIDDEN` | 已登录但无该模块管理权 | 非管理员调用任意模块的管理 Action。 |
+
+> 上表是公共与认证类响应码。各业务模块另有自己的响应码族，例如图书馆的 `LIBRARY_*`
+> （书目与单册、借还与续借、预约三组）见 8.7 节。
 
 ## 12. 网络模块设计说明
 
@@ -955,6 +1320,8 @@ flowchart LR
 | `LibraryPersistenceIntegrationTest` | 真实 Socket 下演示借阅与预约跨重启保留、已有库不重复补种，以及借书、归还、管理员上架。 |
 | `UserAdministrationIntegrationTest`、`AccessUserAuditRepositoryTest` | 超级管理员账号维护、越权拦截、成功/失败审计记录及 Access 重启后记录保留。 |
 
+图书馆模块的服务端 8 个测试类与客户端 9 个测试类共 75 个用例，完整清单见 8.9 节。
+
 ### 16.2 登录模块验收条件
 
 - [ ] 正确账号和密码能够登录，响应数据为 `SessionInfo`。
@@ -966,6 +1333,12 @@ flowchart LR
 - [ ] 登录过程不冻结 Swing 界面，密码输入在使用后被清空。
 - [ ] Response 不包含密码、密码 proof 或服务器异常堆栈。
 - [ ] `mvn clean verify` 全部通过。
+
+### 16.3 图书馆模块验收条件
+
+图书馆的完整验收清单见 8.9 节，覆盖：读者与管理员检索可见性差异、馆藏数与可借数的汇总语义、
+预约的 24 小时保留与稳定 FIFO 排队、借还与归架的状态流转、续借的三条拒绝规则、
+越权与匿名请求拒绝、并发抢同一单册只有一次成功，以及跨服务器重启后的状态保持。
 
 ## 17. 源代码位置索引
 
@@ -990,8 +1363,16 @@ flowchart LR
 | 身份认证与会话存储 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/InMemoryAuthenticationService.java` |
 | 账号 Repository | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/UserRepository.java` |
 | 生产账号实现 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/AccessUserRepository.java` |
+| 图书馆业务规则 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/library/LibraryService.java` |
+| 图书馆服务器入口与鉴权 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/library/LibraryServerModule.java` |
 | 图书馆 Access 事务边界 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/library/AccessLibraryStore.java` |
-| 图书馆 Access Repository | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/library/AccessBookRepository.java`、`AccessBookCopyRepository.java`、`AccessBorrowRecordRepository.java`、`AccessBookCategoryRepository.java` |
+| 图书馆 Access Repository | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/library/AccessBookRepository.java`、`AccessBookCopyRepository.java`、`AccessBorrowRecordRepository.java`、`AccessBookCategoryRepository.java`、`AccessReservationRepository.java` |
+| 图书馆 Action 常量 | `vcampus-common/src/main/java/edu/seu/vcampus/common/library/LibraryActions.java` |
+| 图书馆公共 DTO | `vcampus-common/src/main/java/edu/seu/vcampus/common/library/`（书目、单册、借阅记录、预约、分类） |
+| 图书馆客户端入口与容器 | `vcampus-client/src/main/java/edu/seu/vcampus/client/module/library/LibraryClientModule.java`、`LibraryModePanel.java` |
+| 图书馆客户端页面 | `vcampus-client/src/main/java/edu/seu/vcampus/client/module/library/LibraryPanel.java`、`MyLibraryPanel.java`、`SelfServicePanel.java`、`LibraryAdminPanel.java` |
+| 图书馆客户端样式与文案 | `vcampus-client/src/main/java/edu/seu/vcampus/client/module/library/LibraryUiTheme.java`、`LibraryMessages.java` |
+| 图书馆数据库设计 | `database/schema/library.md` |
 | 测试账号实现 | `vcampus-server/src/main/java/edu/seu/vcampus/server/module/user/InMemoryUserRepository.java` |
 | 子系统会话查询接口 | `vcampus-server/src/main/java/edu/seu/vcampus/server/security/SessionLookup.java` |
 | 用户数据库设计 | `database/schema/user.md` |

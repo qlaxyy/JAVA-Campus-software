@@ -959,11 +959,14 @@ classDiagram
 
 ### 8.9 测试与验收
 
-自动化测试（详见 [交付说明](../modules/library-borrow-return.md)）：
+自动化测试共 **97 个用例**（服务端 10 个测试类、客户端 9 个测试类），详见
+[交付说明](../modules/library-borrow-return.md)：
 
 | 测试类 | 覆盖内容 |
 |---|---|
 | `LibraryServiceTest` | 关键词 trim、分类过滤、馆藏地汇总语义、停用书目对读者的可见性 |
+| `LibraryValidationTest` | 字段长度上限（恰好等于上限通过 / 超一字符拒绝）、ISBN 的 10 位与 13 位写法与分隔符归一化、长度检查先于格式检查、出版年 1000–9999 边界 |
+| `LibraryBoundaryTest` | 逾期与预约过期的时刻边界、第五本借阅与第三条预约的恰好边界、借已注销单册、续借已归还记录、有活跃借阅时归架与恢复被拒、未知标识的未找到分支 |
 | `LibraryCirculationPhaseTwoTest` | 条码借还、30 天借期、五本上限、同书目重复、逾期停借、终端预检、他人归还拒绝、并发借同一册、事务回滚 |
 | `LibraryReservationServiceTest` | 立即保留、FIFO 排队与稳定 tie-break、24 小时过期、7 天冷却、取消顺延、续借三条规则、并发抢最后一册 |
 | `LibraryAdminServiceTest` | 分类新增与去重、ISBN 规范化、单册生命周期、状态专用操作、全馆借阅查询与越权拒绝 |
@@ -980,6 +983,8 @@ classDiagram
 - [ ] 有可借单册时预约立即保留 24 小时；无可借单册时按稳定 FIFO 排队并返回位次。
 - [ ] 借书成功后单册为 `LOANED`，且存在对应 `BORROWED` 记录，到期日为借阅时间加 30 天。
 - [ ] 逾期、达到五本上限、已借同书目时拒绝借阅，分别返回对应错误码。
+- [ ] 超长字段、非法 ISBN 与越界出版年返回 `COMMON_INVALID_ARGUMENT`；恰好等于上限的值被接受。
+- [ ] 到期时刻本身不算逾期；预约截止时刻本身算过期。
 - [ ] 归还后单册为 `WAITING_SHELVING`，可借数不立即恢复；管理员确认归架后恢复。
 - [ ] 续借从原到期日顺延 30 天，逾期、已续借过一次或同书目有有效预约时拒绝。
 - [ ] 非图书馆管理员调用任一管理 Action 返回 `AUTH_FORBIDDEN`；无 token 返回 `AUTH_REQUIRED`。
@@ -1021,7 +1026,6 @@ classDiagram
 - **业务常量在两处维护**：借期、上限、保留时长等服务端常量在客户端提示文案中硬编码了一份，存在漂移风险。
 - **未使用常量**：`LIBRARY_NO_AVAILABLE_COPY`、`LIBRARY_ALREADY_RETURNED`、`LIBRARY_INVALID_STOCK`
   在服务端从不抛出，是 V1 遗留，客户端仍保留其文案映射。
-- **无持续集成**：仓库没有 CI 配置，336 个测试依赖本地手动执行。
 
 ## 9. 商店子系统设计说明（已实现首条完整业务链路，其余待负责人材料汇总）
 
@@ -1320,7 +1324,8 @@ flowchart LR
 | `LibraryPersistenceIntegrationTest` | 真实 Socket 下演示借阅与预约跨重启保留、已有库不重复补种，以及借书、归还、管理员上架。 |
 | `UserAdministrationIntegrationTest`、`AccessUserAuditRepositoryTest` | 超级管理员账号维护、越权拦截、成功/失败审计记录及 Access 重启后记录保留。 |
 
-图书馆模块的服务端 8 个测试类与客户端 9 个测试类共 75 个用例，完整清单见 8.9 节。
+图书馆模块的服务端 10 个测试类与客户端 9 个测试类共 97 个用例，完整清单见 8.9 节。
+其余模块的测试同样由 `.github/workflows/ci.yml` 在每次 PR 上执行。
 
 ### 16.2 登录模块验收条件
 

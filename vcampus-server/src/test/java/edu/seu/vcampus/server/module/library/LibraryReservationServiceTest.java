@@ -20,11 +20,9 @@ import edu.seu.vcampus.common.user.Role;
 import edu.seu.vcampus.common.user.SessionInfo;
 import org.junit.jupiter.api.Test;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayDeque;
 import java.util.List;
@@ -442,30 +440,5 @@ class LibraryReservationServiceTest {
 
         @Override
         public void update(Reservation reservation) { delegate.update(reservation); }
-    }
-
-    private static final class MutableClock extends Clock {
-        private volatile Instant current;
-        private final ZoneId zone;
-
-        private MutableClock(Instant current, ZoneId zone) {
-            this.current = current;
-            this.zone = zone;
-        }
-
-        void advance(Duration duration) {
-            current = current.plus(duration);
-        }
-
-        @Override
-        public ZoneId getZone() { return zone; }
-
-        @Override
-        public Clock withZone(ZoneId newZone) {
-            return new MutableClock(current, newZone);
-        }
-
-        @Override
-        public Instant instant() { return current; }
     }
 }

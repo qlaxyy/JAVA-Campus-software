@@ -654,15 +654,16 @@ classDiagram
 
 ## 8. 图书馆子系统设计说明（预约与入口调整阶段 4 已实现）
 
-负责人：吴昊哲。当前已完成书目与实体单册分离、按馆藏地汇总、线上预约、个人图书馆、
-模拟自助条码借还、服务器条码预检与合法操作按钮控制、书目与单册维护、全馆借阅查询、
+负责人：吴昊哲。当前已完成书目与实体单册分离、按馆藏地汇总、线上预约、个人图书馆与一次续借、
+模拟自助条码借还、服务器条码预检与合法操作按钮控制、可扩展分类、书目与单册维护、全馆借阅查询、
 Access Repository 和跨 Repository 事务。
 
 当前实现及评审入口：[借阅归还交付说明](../modules/library-borrow-return.md)、
 [图书管理员维护设计与测试](../modules/library-admin-maintenance.md)。
 图书管理员是具有 `AdminScope.LIBRARY` 的 `Role.USER`，超级管理员也具备此能力；
 服务器从 token 取得会话，通过 `SessionInfo.canAdminister(ModuleNames.LIBRARY)` 判断。
-分类接口使用 `categoryId/categoryName`。正式启动时，书目、实体单册、分类、借阅记录和预约均保存在
+分类接口使用 `categoryId/categoryName`，管理员可新增分类，已有书目只保存稳定分类 ID。图书管理员
+同时具有读者能力，但客户端把读者入口与管理员工作台分开，服务器仍逐个 Action 鉴权。正式启动时，书目、实体单册、分类、借阅记录和预约均保存在
 `vCampus.accdb`；预约分配、借书、归还等多表操作通过 `AccessLibraryStore` 复用同一个 JDBC Connection。
 仅在首次创建整套图书馆表且业务表为空时初始化一致演示状态，已有数据库不会补种或重置。
 

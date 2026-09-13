@@ -3,7 +3,7 @@
 ## 权限边界
 
 图书管理员不是新的全局角色，而是 `Role.USER + AdminScope.LIBRARY`；`Role.SUPER_ADMIN` 也可管理。
-客户端根据 `SessionInfo.canAdminister(ModuleNames.LIBRARY)` 决定是否显示“图书管理”标签，但每个管理 Action
+客户端根据 `SessionInfo.canAdminister(ModuleNames.LIBRARY)` 决定是否显示独立的“图书管理员工作台”入口，但每个管理 Action
 仍由 `LibraryServerModule` 从 token 查询服务器会话并再次鉴权，客户端不能在 DTO 中自报身份或权限。
 
 ## 管理页面
@@ -11,7 +11,7 @@
 “图书管理”包含三个区域：
 
 1. **书目维护**：查询全部书目（含 `INACTIVE`），新增/编辑 ISBN、书名、作者、分类、出版社、出版年和语种，
-   通过专用操作切换“开放借阅 / 停止借阅”。新增书目初始馆藏为 0。
+   可新增可复用分类，并通过专用操作切换“开放借阅 / 停止借阅”。新增书目初始馆藏为 0。
 2. **实体单册**：为选中的书目登记唯一馆藏条码，维护馆藏地和索书号，确认归还单册归架，软注销单册，
    或恢复误注销的单册。
    登记后的 barcode、bookId 和 status 不能通过通用编辑修改。
@@ -26,6 +26,7 @@
 | Action | Request.data | 成功 Response.data |
 |---|---|---|
 | `ADMIN_SEARCH_BOOKS` | `BookSearchRequest` | `BookSearchResult` |
+| `ADD_BOOK_CATEGORY` | `AddBookCategoryRequest` | `BookCategoryDTO` |
 | `ADD_BOOK` | `AddBookRequest` | `BookDTO` |
 | `UPDATE_BOOK` | `UpdateBookRequest` | `BookDTO` |
 | `SET_BOOK_STATUS` | `SetBookStatusRequest` | `BookDTO` |
@@ -43,6 +44,7 @@
 - `Book` 不保存 `totalCount / availableCount`，两个值由未注销 `BookCopy` 的状态按馆藏地汇总；
   `INACTIVE` 仍保留馆藏数，但业务可借数固定为 0；
 - 新增书目与登记实体单册分离，同 ISBN 不能重复新增；同一 barcode 全馆唯一；
+- 分类是服务端字典：管理员可新增，书目只引用分类 ID；分类名称不可重复，本轮不删除已被引用的分类；
 - `UPDATE_BOOK_COPY` 只接收 `copyId / location / callNumber`，不能绕过状态机；
 - 注销是 `BookCopy -> WITHDRAWN` 的软删除，不物理删除书目或借阅历史；借出中的单册禁止注销；
 - 管理员可以将误注销的单册恢复为 `AVAILABLE`，恢复前仍须确认不存在当前借阅记录；

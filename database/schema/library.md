@@ -63,7 +63,9 @@
 | `categoryId` | Short Text(20) | 是 | 无 | 分类主键 |
 | `categoryName` | Short Text(50) | 是 | 无 | 分类显示名称 |
 
-当前演示字典为 `C001=计算机`、`C002=文学`、`C003=历史`；暂不提供分类增删改。
+初始字典为 `C001=计算机`、`C002=文学`、`C003=历史`。图书管理员可新增分类，服务器生成
+`categoryId`，分类名称忽略大小写后不得重复。书目保存分类 ID，因此新增分类无需修改书目表结构；
+本轮不提供重命名和删除，以免已有书目引用失效。
 
 ### `tblBorrowRecord`
 
@@ -73,7 +75,8 @@
 | `userId` | Short Text(36) | 是 | 无 | 当前会话对应的稳定用户 ID |
 | `copyId` | Short Text(36) | 是 | 无 | 关联 `tblBookCopy.copyId`，不直接保存 `bookId` |
 | `borrowTime` | Date/Time | 是 | 无 | 借阅成功时间 |
-| `dueTime` | Date/Time | 是 | 无 | 到期时间，等于借阅时间加 30 天 |
+| `dueTime` | Date/Time | 是 | 无 | 当前到期时间；初借为借阅时间加 30 天，续借后再顺延 30 天 |
+| `renewalCount` | Long Integer | 是 | `0` | 已成功续借次数，本轮最大为 1 |
 | `returnTime` | Date/Time | 否 | `NULL` | 实际归还时间 |
 | `status` | Short Text(20) | 是 | `BORROWED` | `BORROWED`、`RETURNED` |
 
@@ -82,6 +85,7 @@
 - `BORROWED => returnTime == NULL`；
 - `RETURNED => returnTime != NULL`；
 - `dueTime >= borrowTime`，非空 `returnTime >= borrowTime`；
+- 当前借阅最多续借一次；从原 `dueTime` 顺延 30 天，不重置 `borrowTime`；
 - 一份 `BookCopy` 同一时刻最多存在一条 `BORROWED` 记录；
 - `BookCopy.status == LOANED` 当且仅当存在该单册的当前 `BORROWED` 记录。
 
@@ -141,6 +145,7 @@
 - 用户身份只允许从 `Request.token -> SessionInfo.userId` 获取，借还 DTO 不接受 `userId`；
 - 借书按 barcode 定位一份 `AVAILABLE` 单册；同一书目的另一单册仍算重复借阅；
 - 最多同时借 5 本；存在逾期未还记录时拒绝新借阅；借期 30 天；
+- 本人未逾期的当前借阅最多续借 1 次；同书目存在有效预约时拒绝续借；
 - 借书成功必须同时创建 `BORROWED` 记录并将单册改为 `LOANED`；
 - 归还允许书目已经 `INACTIVE`，成功时同时把记录改为 `RETURNED` 并将单册改为
   `WAITING_SHELVING`；归还不会立即恢复可借数；
@@ -162,15 +167,16 @@
 
 ## 8. 演示数据
 
-演示书目会生成具有稳定 copyId 和 barcode 的实体单册。首次创建整套图书馆表时，还会为普通学生账号
-`20260001`（`U-STUDENT-001`）建立以下一致场景：
+演示书目会生成具有稳定 copyId 和 barcode 的实体单册。首次创建整套图书馆表时，会为普通学生账号
+`20260001` 建立正常流转场景，并为图书管理员账号 `20260005` 建立逾期限制场景：
 
 | 场景 | copyId | barcode | bookId | 单册状态 | 关联状态 |
 |---|---|---|---|---|---|
 | 当前借阅 | `CP-B001-001` | `SEU-B001-001` | `B001` | `LOANED` | `BORROWED`，借期 30 天 |
 | 历史借阅 | `CP-B002-001` | `SEU-B002-001` | `B002` | `AVAILABLE` | `RETURNED` |
 | 预约待取 | `CP-B003-001` | `SEU-B003-001` | `B003` | `RESERVED` | `READY_FOR_PICKUP`，保留 24 小时 |
+| 逾期未还 | `CP-B005-002` | `SEU-B005-002` | `B005` | `LOANED` | `BORROWED`，已超过到期日 15 天 |
 
-初始化要求“本次首次创建全部图书馆表”且借阅、预约业务表为空，三组状态在一个 Access 事务中写入；
+初始化要求“本次首次创建全部图书馆表”且借阅、预约业务表为空，四组状态在一个 Access 事务中写入；
 任一步失败全部回滚。已有数据库即使借阅或预约表为空也不会补种，取消或修改演示记录后重启不会恢复。
 正常新增、编辑、预约、借阅、归还和上架状态均跨服务器重启保留。

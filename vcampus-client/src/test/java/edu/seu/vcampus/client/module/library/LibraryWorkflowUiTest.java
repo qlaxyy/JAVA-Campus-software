@@ -153,8 +153,10 @@ class LibraryWorkflowUiTest {
             onEdt(() -> view.set(new LibraryClientModule().createView(context)));
             List<JTable> tables = descendants(view.get()).stream()
                     .filter(JTable.class::isInstance).map(JTable.class::cast).toList();
-            // 馆藏查询 1、我的图书馆 3、管理员工作台 4（书目 / 单册 / 借阅 / 预约）
-            assertEquals(8, tables.size());
+            // 馆藏查询 1、我的图书馆 3，管理员工作台至少 4（书目 / 单册 / 借阅 / 预约）。
+            // 这里只保证"不少于"，因为管理端增加页签时表数会变，而本用例真正要守的是
+            // 下面那组不变量：每张表都只读、单选、表头固定。
+            assertTrue(tables.size() >= 8, "至少应有 8 张表，实际 " + tables.size());
             for (JTable table : tables) {
                 assertEquals(ListSelectionModel.SINGLE_SELECTION, table.getSelectionModel().getSelectionMode());
                 assertFalse(table.getTableHeader().getReorderingAllowed());

@@ -42,6 +42,7 @@ class LibraryServerModuleTest {
                 LibraryActions.UPDATE_BOOK_COPY, LibraryActions.SHELVE_BOOK_COPY,
                 LibraryActions.WITHDRAW_BOOK_COPY, LibraryActions.RESTORE_BOOK_COPY,
                 LibraryActions.ADMIN_QUERY_BORROWS, LibraryActions.ADMIN_QUERY_RESERVATIONS,
+                LibraryActions.ADMIN_STATISTICS,
                 LibraryActions.CREATE_RESERVATION,
                 LibraryActions.GET_MY_RESERVATIONS,
                 LibraryActions.CANCEL_RESERVATION), actions);

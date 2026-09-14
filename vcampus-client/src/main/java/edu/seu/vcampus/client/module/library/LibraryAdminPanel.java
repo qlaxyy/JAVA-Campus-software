@@ -14,7 +14,10 @@ import edu.seu.vcampus.common.library.BookCopyIdRequest;
 import edu.seu.vcampus.common.library.BookDTO;
 import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BookSearchResult;
+import edu.seu.vcampus.common.library.CategoryStatisticDTO;
 import edu.seu.vcampus.common.library.LibraryActions;
+import edu.seu.vcampus.common.library.LibraryStatisticsDTO;
+import edu.seu.vcampus.common.library.PopularBookDTO;
 import edu.seu.vcampus.common.library.ListBookCopiesRequest;
 import edu.seu.vcampus.common.library.SetBookStatusRequest;
 import edu.seu.vcampus.common.library.UpdateBookCopyRequest;
@@ -26,6 +29,8 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -100,6 +105,17 @@ public final class LibraryAdminPanel extends JPanel {
     });
     private final JTable reservationTable = new JTable(reservationModel);
 
+    private final JButton refreshStatistics = new JButton("刷新统计");
+    private final JButton exportStatistics = new JButton("导出 CSV");
+    private final JTextArea statisticsSummary = new JTextArea(10, 40);
+    private final DefaultTableModel categoryModel =
+            readOnlyModel(new String[]{"分类", "书目数", "馆藏数"});
+    private final DefaultTableModel popularModel =
+            readOnlyModel(new String[]{"书目编号", "书名", "借阅次数"});
+    private final JTable categoryTable = new JTable(categoryModel);
+    private final JTable popularTable = new JTable(popularModel);
+    private LibraryStatisticsDTO statistics;
+
     private final JLabel outcome = new JLabel("管理员操作均由服务器再次校验权限");
     private final JLabel status = new JLabel("正在等待加载数据");
     private List<BookDTO> books = List.of();
@@ -124,6 +140,7 @@ public final class LibraryAdminPanel extends JPanel {
         areas.addTab("实体单册", createCopyArea());
         areas.addTab("借阅查询", createBorrowArea());
         areas.addTab("预约查询", createReservationQueueArea());
+        areas.addTab("统计", createStatisticsArea());
         add(areas, BorderLayout.CENTER);
 
         outcome.setName("library.admin.outcome");
@@ -314,6 +331,163 @@ public final class LibraryAdminPanel extends JPanel {
         return panel;
     }
 
+    /** 全馆统计：数字来自服务器查询时派生，客户端只负责呈现与导出。 */
+    private JPanel createStatisticsArea() {
+        configureTable(categoryTable, "library.admin.statisticsCategories");
+        configureTable(popularTable, "library.admin.statisticsPopular");
+        statisticsSummary.setName("library.admin.statisticsSummary");
+        statisticsSummary.setEditable(false);
+        statisticsSummary.setFont(new java.awt.Font(
+                java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 13));
+        statisticsSummary.setBackground(LibraryUiTheme.SURFACE);
+        statisticsSummary.setForeground(LibraryUiTheme.TEXT);
+        statisticsSummary.setText("打开本页后加载统计");
+
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        LibraryUiTheme.installPage(panel);
+        JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        LibraryUiTheme.styleCard(header);
+        header.setBorder(LibraryUiTheme.cardBorder(10, 12));
+        header.add(refreshStatistics);
+        header.add(exportStatistics);
+        header.add(LibraryUiTheme.createMutedLabel(
+                "统计为查询时派生，不落库；导出为当前快照"));
+        panel.add(header, BorderLayout.NORTH);
+
+        JPanel body = new JPanel(new BorderLayout(10, 10));
+        body.setOpaque(false);
+        body.add(statisticsSummary, BorderLayout.NORTH);
+        JPanel tables = new JPanel(new java.awt.GridLayout(1, 2, 10, 0));
+        tables.setOpaque(false);
+        tables.add(labelled("分类分布", categoryTable));
+        tables.add(labelled("借阅排行", popularTable));
+        body.add(tables, BorderLayout.CENTER);
+        panel.add(body, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private static JPanel labelled(String title, JTable table) {
+        JPanel wrapper = new JPanel(new BorderLayout(0, 4));
+        wrapper.setOpaque(false);
+        wrapper.add(new JLabel(title), BorderLayout.NORTH);
+        wrapper.add(LibraryUiTheme.tableScrollPane(table), BorderLayout.CENTER);
+        return wrapper;
+    }
+
+    private void loadStatistics() {
+        if (working) { return; }
+        setWorking(true);
+        status.setText("正在加载统计……");
+        new SwingWorker<Response, Void>() {
+            protected Response doInBackground() throws Exception {
+                return context.send(LibraryActions.ADMIN_STATISTICS, null);
+            }
+            protected void done() {
+                try {
+                    LibraryStatisticsDTO loaded =
+                            requireData(get(), LibraryStatisticsDTO.class);
+                    statistics = loaded;
+                    statisticsSummary.setText(summaryText(loaded));
+                    categoryModel.setRowCount(0);
+                    for (CategoryStatisticDTO row : loaded.getCategories()) {
+                        categoryModel.addRow(new Object[]{row.getCategoryName(),
+                                row.getBookCount(), row.getCopyCount()});
+                    }
+                    popularModel.setRowCount(0);
+                    for (PopularBookDTO row : loaded.getPopularBooks()) {
+                        popularModel.addRow(new Object[]{row.getBookId(), row.getTitle(),
+                                row.getBorrowCount()});
+                    }
+                    status.setText("统计已更新");
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    status.setText("统计加载已中断");
+                } catch (ExecutionException | IllegalArgumentException exception) {
+                    status.setText("统计加载失败，请稍后重试");
+                } finally {
+                    setWorking(false);
+                }
+            }
+        }.execute();
+    }
+
+    private static String summaryText(LibraryStatisticsDTO value) {
+        return "书目 " + value.getBookCount() + " 种，馆藏 " + value.getCopyCount()
+                + " 册（可借 " + value.getAvailableCount()
+                + "，已注销 " + value.getWithdrawnCount() + "）\n"
+                + "当前在借 " + value.getActiveBorrowCount()
+                + " 本，其中逾期 " + value.getOverdueCount()
+                + " 本；历史借阅 " + value.getHistoryBorrowCount() + " 条\n"
+                + "预约：排队中 " + value.getWaitingReservationCount()
+                + " 条，待取书 " + value.getReadyReservationCount() + " 条\n"
+                + "费用：未结清 " + value.getUnpaidFeeCount() + " 笔 / "
+                + yuan(value.getUnpaidFeeFen()) + " 元；已结清 "
+                + yuan(value.getSettledFeeFen()) + " 元";
+    }
+
+    private void exportStatisticsCsv() {
+        if (statistics == null) {
+            outcome.setText("请先刷新统计再导出");
+            return;
+        }
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new java.io.File("library-statistics.csv"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        try {
+            Files.writeString(chooser.getSelectedFile().toPath(),
+                    statisticsCsv(statistics), StandardCharsets.UTF_8);
+            outcome.setText("已导出：" + chooser.getSelectedFile().getAbsolutePath());
+        } catch (java.io.IOException exception) {
+            outcome.setText("导出失败：" + exception.getMessage());
+        }
+    }
+
+    /** 导出内容与界面同源：概览、分类分布、借阅排行三段，字段按 CSV 规则转义。 */
+    static String statisticsCsv(LibraryStatisticsDTO value) {
+        StringBuilder csv = new StringBuilder();
+        csv.append("概览,数值\n");
+        csv.append("书目数,").append(value.getBookCount()).append('\n');
+        csv.append("馆藏数,").append(value.getCopyCount()).append('\n');
+        csv.append("可借数,").append(value.getAvailableCount()).append('\n');
+        csv.append("已注销,").append(value.getWithdrawnCount()).append('\n');
+        csv.append("当前在借,").append(value.getActiveBorrowCount()).append('\n');
+        csv.append("逾期未还,").append(value.getOverdueCount()).append('\n');
+        csv.append("历史借阅,").append(value.getHistoryBorrowCount()).append('\n');
+        csv.append("排队中预约,").append(value.getWaitingReservationCount()).append('\n');
+        csv.append("待取书预约,").append(value.getReadyReservationCount()).append('\n');
+        csv.append("未结清笔数,").append(value.getUnpaidFeeCount()).append('\n');
+        csv.append("未结清金额(元),").append(yuan(value.getUnpaidFeeFen())).append('\n');
+        csv.append("已结清金额(元),").append(yuan(value.getSettledFeeFen())).append('\n');
+
+        csv.append("\n分类,书目数,馆藏数\n");
+        for (CategoryStatisticDTO row : value.getCategories()) {
+            csv.append(csvField(row.getCategoryName())).append(',')
+                    .append(row.getBookCount()).append(',')
+                    .append(row.getCopyCount()).append('\n');
+        }
+
+        csv.append("\n书目编号,书名,借阅次数\n");
+        for (PopularBookDTO row : value.getPopularBooks()) {
+            csv.append(csvField(row.getBookId())).append(',')
+                    .append(csvField(row.getTitle())).append(',')
+                    .append(row.getBorrowCount()).append('\n');
+        }
+        return csv.toString();
+    }
+
+    /** 含逗号、引号或换行的字段用双引号包裹并把内部引号翻倍。 */
+    static String csvField(String value) {
+        if (value == null) {
+            return "";
+        }
+        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            return '"' + value.replace("\"", "\"\"") + '"';
+        }
+        return value;
+    }
+
     private void loadReservations() {
         if (working) { return; }
         String scope = switch (reservationScope.getSelectedIndex()) {
@@ -429,8 +603,12 @@ public final class LibraryAdminPanel extends JPanel {
                 loadBorrows();
             } else if (areas.getSelectedIndex() == 3) {
                 loadReservations();
+            } else if (areas.getSelectedIndex() == 4) {
+                loadStatistics();
             }
         });
+        refreshStatistics.addActionListener(event -> loadStatistics());
+        exportStatistics.addActionListener(event -> exportStatisticsCsv());
     }
 
     /** Reloads authoritative categories and all catalog snapshots. */

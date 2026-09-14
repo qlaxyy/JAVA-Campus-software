@@ -20,6 +20,11 @@
 4. **预约查询**：只读地查看全馆预约队列，按"排队中 / 待取书 / 全部"筛选，
    展示 `userId`、馆藏地、排队位次、分配条码与取书截止时间。
    管理员不能重排或强制取消预约——队列的结束方式只有读者取消、到期未取与取书借出三种。
+5. **统计**：全馆快照——书目与馆藏规模、可借与已注销数、在借与逾期数、历史借阅数、
+   预约队列长度、未结清与已结清费用、分类分布、借阅排行（前 5）。可导出 CSV。
+
+   统计**全部在查询时派生，不落库**，因此数字永远不会与明细不一致；快照与写操作共用同一临界区，
+   不会读到"借出一半"的中间状态。导出为客户端本地写文件，内容与界面同源。
 
 已知不合法操作直接禁用：`AVAILABLE` 不能再次归架，`RESERVED/LOANED/WITHDRAWN` 不能注销，
 预约待取单册不能编辑，只有 `WITHDRAWN` 可以恢复，且 `WITHDRAWN` 不能直接编辑；条码登记后不可编辑。
@@ -42,6 +47,7 @@
 | `RESTORE_BOOK_COPY` | `BookCopyIdRequest` | `BookCopyDTO` |
 | `ADMIN_QUERY_BORROWS` | `AdminBorrowQueryRequest` | `List<AdminBorrowRecordDTO>` |
 | `ADMIN_QUERY_RESERVATIONS` | `AdminReservationQueryRequest` | `List<AdminReservationDTO>` |
+| `ADMIN_STATISTICS` | 无 data | `LibraryStatisticsDTO` |
 
 ## 关键业务规则
 

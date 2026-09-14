@@ -7,6 +7,9 @@ import edu.seu.vcampus.common.library.AdminBorrowQueryRequest;
 import edu.seu.vcampus.common.library.AdminBorrowRecordDTO;
 import edu.seu.vcampus.common.library.AdminReservationDTO;
 import edu.seu.vcampus.common.library.AdminReservationQueryRequest;
+import edu.seu.vcampus.common.library.CategoryStatisticDTO;
+import edu.seu.vcampus.common.library.LibraryStatisticsDTO;
+import edu.seu.vcampus.common.library.PopularBookDTO;
 import edu.seu.vcampus.common.library.BookCategoryDTO;
 import edu.seu.vcampus.common.library.BookCopyDTO;
 import edu.seu.vcampus.common.library.BookCopyIdRequest;
@@ -61,6 +64,7 @@ final class LibraryService {
     private static final int MIN_BOOK_PRICE_FEN = 1;
     private static final int MAX_BOOK_PRICE_FEN = 999_999;
     private static final int LOST_HANDLING_FEE_FEN = 500;
+    private static final int POPULAR_BOOK_LIMIT = 5;
 
     private final BookRepository bookRepository;
     private final BorrowRecordRepository borrowRecordRepository;
@@ -1157,6 +1161,110 @@ final class LibraryService {
                             .thenComparing(Reservation::reservationId))
                     .map(this::toAdminReservationDTO)
                     .toList();
+        }
+    }
+
+    /**
+     * Builds the whole-library statistics snapshot.
+     *
+     * <p>Everything is derived at read time — no counter table exists — so the numbers can never
+     * disagree with the records they summarise. The snapshot is taken under the same
+     * {@code circulationLock} as every write, so a concurrent borrow cannot produce a torn view.
+     */
+    LibraryStatisticsDTO statistics(SessionInfo actor) {
+        requireAdministrator(actor);
+        synchronized (circulationLock) {
+            cleanExpiredReservations();
+            LocalDateTime now = now();
+
+            List<BookDTO> books = bookRepository.searchAll("");
+            Map<String, BookDTO> booksById = new java.util.HashMap<>();
+            books.forEach(book -> booksById.put(book.getBookId(), book));
+            List<BookCopy> copies = books.stream()
+                    .flatMap(book -> bookCopyRepository.findByBookId(book.getBookId()).stream())
+                    .toList();
+            List<BorrowRecord> borrowRecords = borrowRecordRepository.findAll();
+            List<Reservation> reservations = reservationRepository.findAll();
+
+            int copyCount = 0;
+            int withdrawnCount = 0;
+            int availableCount = 0;
+            Map<String, int[]> byCategory = new java.util.LinkedHashMap<>();
+            for (BookCopy copy : copies) {
+                BookDTO book = booksById.get(copy.bookId());
+                if (book == null) {
+                    continue;
+                }
+                if (copy.status() == BookCopyStatus.WITHDRAWN) {
+                    withdrawnCount++;
+                } else {
+                    copyCount++;
+                }
+                if (copy.status() == BookCopyStatus.AVAILABLE && "ACTIVE".equals(book.getStatus())) {
+                    availableCount++;
+                }
+                if (copy.status() != BookCopyStatus.WITHDRAWN) {
+                    byCategory.computeIfAbsent(book.getCategoryName(), ignored -> new int[1])[0]++;
+                }
+            }
+            Map<String, Integer> bookCountByCategory = new java.util.LinkedHashMap<>();
+            for (BookDTO book : books) {
+                bookCountByCategory.merge(book.getCategoryName(), 1, Integer::sum);
+            }
+            List<CategoryStatisticDTO> categories = bookCountByCategory.entrySet().stream()
+                    .map(entry -> new CategoryStatisticDTO(entry.getKey(), entry.getValue(),
+                            byCategory.getOrDefault(entry.getKey(), new int[1])[0]))
+                    .sorted(Comparator.comparingInt(CategoryStatisticDTO::getCopyCount).reversed()
+                            .thenComparing(CategoryStatisticDTO::getCategoryName))
+                    .toList();
+
+            int activeBorrowCount = 0;
+            int overdueCount = 0;
+            int historyBorrowCount = 0;
+            int unpaidFeeCount = 0;
+            int unpaidFeeFen = 0;
+            int settledFeeFen = 0;
+            Map<String, Integer> borrowsByBook = new java.util.LinkedHashMap<>();
+            for (BorrowRecord record : borrowRecords) {
+                if (record.status() == BorrowStatus.BORROWED) {
+                    activeBorrowCount++;
+                    if (record.isOverdueAt(now)) {
+                        overdueCount++;
+                    }
+                } else {
+                    historyBorrowCount++;
+                }
+                int feeFen = feeFenOf(record);
+                if (feeFen > 0) {
+                    if (record.feeSettledAt() == null) {
+                        unpaidFeeCount++;
+                        unpaidFeeFen += feeFen;
+                    } else {
+                        settledFeeFen += feeFen;
+                    }
+                }
+                bookCopyRepository.findById(record.copyId()).ifPresent(copy ->
+                        borrowsByBook.merge(copy.bookId(), 1, Integer::sum));
+            }
+
+            List<PopularBookDTO> popularBooks = borrowsByBook.entrySet().stream()
+                    .map(entry -> new PopularBookDTO(entry.getKey(),
+                            booksById.containsKey(entry.getKey())
+                                    ? booksById.get(entry.getKey()).getTitle() : entry.getKey(),
+                            entry.getValue()))
+                    .sorted(Comparator.comparingInt(PopularBookDTO::getBorrowCount).reversed()
+                            .thenComparing(PopularBookDTO::getBookId))
+                    .limit(POPULAR_BOOK_LIMIT)
+                    .toList();
+
+            return new LibraryStatisticsDTO(books.size(), copyCount, availableCount,
+                    withdrawnCount, activeBorrowCount, overdueCount, historyBorrowCount,
+                    (int) reservations.stream()
+                            .filter(value -> value.status() == ReservationStatus.WAITING).count(),
+                    (int) reservations.stream()
+                            .filter(value -> value.status() == ReservationStatus.READY_FOR_PICKUP)
+                            .count(),
+                    unpaidFeeCount, unpaidFeeFen, settledFeeFen, categories, popularBooks);
         }
     }
 

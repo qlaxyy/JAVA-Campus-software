@@ -95,6 +95,9 @@ public final class LibraryActions {
     /** Queries the reservation queue across all readers; library administrators only. */
     public static final String ADMIN_QUERY_RESERVATIONS =
             ActionNames.of(ModuleNames.LIBRARY, "ADMIN_QUERY_RESERVATIONS");
+    /** Reads the whole-library statistics snapshot; library administrators only. */
+    public static final String ADMIN_STATISTICS =
+            ActionNames.of(ModuleNames.LIBRARY, "ADMIN_STATISTICS");
 
     private LibraryActions() {
     }

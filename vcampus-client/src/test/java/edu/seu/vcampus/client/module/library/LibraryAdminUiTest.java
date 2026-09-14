@@ -3,8 +3,11 @@ package edu.seu.vcampus.client.module.library;
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.infrastructure.CampusClient;
 import edu.seu.vcampus.common.library.BookCopyIdRequest;
+import edu.seu.vcampus.common.library.CategoryStatisticDTO;
 import edu.seu.vcampus.common.library.CreateReservationRequest;
 import edu.seu.vcampus.common.library.LibraryActions;
+import edu.seu.vcampus.common.library.LibraryStatisticsDTO;
+import edu.seu.vcampus.common.library.PopularBookDTO;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
 import org.junit.jupiter.api.Test;
 
@@ -148,6 +151,33 @@ class LibraryAdminUiTest {
             assertFalse(button(admin, "恢复单册").isEnabled());
             assertFalse(button(admin, "注销单册").isEnabled());
         }
+    }
+
+    @Test
+    void statisticsCsvQuotesFieldsThatWouldBreakTheFormat() {
+        assertEquals("红楼梦", LibraryAdminPanel.csvField("红楼梦"));
+        assertEquals("", LibraryAdminPanel.csvField(null));
+        assertEquals("\"Java, 卷1\"", LibraryAdminPanel.csvField("Java, 卷1"));
+        assertEquals("\"他说\"\"你好\"\"\"", LibraryAdminPanel.csvField("他说\"你好\""));
+        assertEquals("\"两行\n书名\"", LibraryAdminPanel.csvField("两行\n书名"));
+    }
+
+    @Test
+    void statisticsCsvCarriesTheOverviewCategoryBreakdownAndRanking() {
+        LibraryStatisticsDTO stats = new LibraryStatisticsDTO(
+                5, 20, 18, 2, 3, 1, 7, 2, 1, 2, 1_500, 750,
+                List.of(new CategoryStatisticDTO("计算机", 3, 12)),
+                List.of(new PopularBookDTO("B001", "Java编程思想", 4)));
+
+        String csv = LibraryAdminPanel.statisticsCsv(stats);
+
+        assertTrue(csv.contains("书目数,5"));
+        assertTrue(csv.contains("馆藏数,20"));
+        assertTrue(csv.contains("逾期未还,1"));
+        assertTrue(csv.contains("未结清金额(元),15.00"), "金额以元为单位保留两位小数");
+        assertTrue(csv.contains("已结清金额(元),7.50"));
+        assertTrue(csv.contains("计算机,3,12"));
+        assertTrue(csv.contains("B001,Java编程思想,4"));
     }
 
     private static int onlineTabCount(ClientContext context) throws Exception {

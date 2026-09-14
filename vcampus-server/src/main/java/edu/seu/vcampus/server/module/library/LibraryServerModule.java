@@ -177,6 +177,8 @@ public final class LibraryServerModule implements ServerModule {
         router.register(LibraryActions.ADMIN_QUERY_RESERVATIONS, request -> administer(
                 request, context, AdminReservationQueryRequest.class,
                 (actor, data) -> new ArrayList<>(service.queryReservations(actor, data))));
+        router.register(LibraryActions.ADMIN_STATISTICS, request -> administer(
+                request, context, service::statistics));
     }
 
     private Response searchBooks(Request request, ServerContext context) {
@@ -389,19 +391,47 @@ public final class LibraryServerModule implements ServerModule {
     private <T> Response administer(Request request, ServerContext context, Class<T> type,
             BiFunction<SessionInfo, T, ? extends Serializable> action) {
         Optional<SessionInfo> actor = session(request, context);
-        if (actor.isEmpty()) {
-            return authenticationRequired(request);
-        }
-        if (!actor.orElseThrow().canAdminister(ModuleNames.LIBRARY)) {
-            return Response.failure(request.getRequestId(), ErrorCodes.AUTH_FORBIDDEN,
-                    "需要图书馆管理权限");
+        Optional<Response> rejected = rejectNonAdministrator(request, actor);
+        if (rejected.isPresent()) {
+            return rejected.orElseThrow();
         }
         if (!type.isInstance(request.getData())) {
             return invalidRequest(request, "图书馆管理请求格式不正确");
         }
+        return runAdministration(request, actor.orElseThrow(),
+                caller -> action.apply(caller, type.cast(request.getData())));
+    }
+
+    /** 无请求体的管理员动作：只校验身份与管理权，请求 data 必须为空。 */
+    private Response administer(Request request, ServerContext context,
+            java.util.function.Function<SessionInfo, ? extends Serializable> action) {
+        Optional<SessionInfo> actor = session(request, context);
+        Optional<Response> rejected = rejectNonAdministrator(request, actor);
+        if (rejected.isPresent()) {
+            return rejected.orElseThrow();
+        }
+        if (request.getData() != null) {
+            return invalidRequest(request, "图书馆管理请求格式不正确");
+        }
+        return runAdministration(request, actor.orElseThrow(), action);
+    }
+
+    private Optional<Response> rejectNonAdministrator(
+            Request request, Optional<SessionInfo> actor) {
+        if (actor.isEmpty()) {
+            return Optional.of(authenticationRequired(request));
+        }
+        if (!actor.orElseThrow().canAdminister(ModuleNames.LIBRARY)) {
+            return Optional.of(Response.failure(request.getRequestId(),
+                    ErrorCodes.AUTH_FORBIDDEN, "需要图书馆管理权限"));
+        }
+        return Optional.empty();
+    }
+
+    private Response runAdministration(Request request, SessionInfo actor,
+            java.util.function.Function<SessionInfo, ? extends Serializable> action) {
         try {
-            return Response.success(request, "图书馆管理操作成功",
-                    action.apply(actor.orElseThrow(), type.cast(request.getData())));
+            return Response.success(request, "图书馆管理操作成功", action.apply(actor));
         } catch (LibraryBusinessException exception) {
             return businessFailure(request, exception);
         } catch (IllegalArgumentException exception) {

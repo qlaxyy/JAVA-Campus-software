@@ -704,7 +704,7 @@ classDiagram
 | 馆藏查询 | `LibraryPanel` | 关键词与分类检索、结果表、按馆藏地展示的馆藏详情、预约提交 |
 | 我的图书馆 | `MyLibraryPanel` | 当前借阅 / 历史借阅 / 我的预约三个页签，含续借与取消预约 |
 | 模拟自助终端 | `SelfServicePanel` | 条码输入、服务器预检、按预检结果启用借书或归还 |
-| 图书管理员工作台 | `LibraryAdminPanel` | 书目维护 / 实体单册 / 借阅查询 / 预约查询四个页签 |
+| 图书管理员工作台 | `LibraryAdminPanel` | 书目维护 / 实体单册 / 借阅查询 / 预约查询 / 统计五个页签 |
 
 页面状态约定：
 
@@ -921,6 +921,7 @@ classDiagram
 | `LIBRARY.SHELVE_BOOK_COPY` / `WITHDRAW_BOOK_COPY` / `RESTORE_BOOK_COPY` | `BookCopyIdRequest(copyId)` | `BookCopyDTO` |
 | `LIBRARY.ADMIN_QUERY_BORROWS` | `AdminBorrowQueryRequest(scope, userId)` | `List<AdminBorrowRecordDTO>` |
 | `LIBRARY.ADMIN_QUERY_RESERVATIONS` | `AdminReservationQueryRequest(scope)` | `List<AdminReservationDTO>` |
+| `LIBRARY.ADMIN_STATISTICS` | `null` | `LibraryStatisticsDTO` |
 
 借还类请求 DTO **不含 `userId`**：当前用户一律由 `Request.token -> SessionInfo.userId` 确认，
 防止越权代操作。
@@ -974,7 +975,7 @@ classDiagram
 
 ### 8.9 测试与验收
 
-自动化测试共 **121 个用例**（服务端 11 个测试类、客户端 10 个测试类），详见
+自动化测试共 **125 个用例**（服务端 11 个测试类、客户端 10 个测试类），详见
 [交付说明](../modules/library-borrow-return.md)：
 
 | 测试类 | 覆盖内容 |
@@ -1039,7 +1040,7 @@ classDiagram
 - 按读者检索借阅需要管理员手工输入稳定读者编号（如 `U-STUDENT-001`），
   界面不提供按姓名或学号搜索，也不做用户列表下拉。
 - 管理员不能按读者筛选借阅记录：`AdminBorrowQueryRequest` 只有 `scope` 字段。
-- 无统计报表与导出，只有"共 N 条"的文字计数。
+- 统计的导出只有 CSV，没有图表；统计口径固定在服务端，不能自定义时间范围。
 - 检索字段偏窄：关键词只匹配书名、作者、ISBN 与分类名，不含索书号、出版社、出版年与语种。
 - 无独立馆藏地字典，取书地点由现存单册的 `location` 反推。
 - 逾期只有动态判定与拦截，没有催还动作与状态位。
@@ -1352,7 +1353,7 @@ flowchart LR
 | `LibraryPersistenceIntegrationTest` | 真实 Socket 下演示借阅与预约跨重启保留、已有库不重复补种，以及借书、归还、管理员上架。 |
 | `UserAdministrationIntegrationTest`、`AccessUserAuditRepositoryTest` | 超级管理员账号维护、越权拦截、成功/失败审计记录及 Access 重启后记录保留。 |
 
-图书馆模块的服务端 11 个测试类与客户端 10 个测试类共 121 个用例，完整清单见 8.9 节。
+图书馆模块的服务端 11 个测试类与客户端 10 个测试类共 125 个用例，完整清单见 8.9 节。
 其余模块的测试同样由 `.github/workflows/ci.yml` 在每次 PR 上执行。
 
 ### 16.2 登录模块验收条件

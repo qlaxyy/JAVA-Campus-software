@@ -193,6 +193,50 @@ class LibraryAdminServiceTest {
                 ADMIN, new AdminReservationQueryRequest("UPCOMING")));
     }
 
+    @Test
+    void statisticsSummariseHoldingsAndCirculation() {
+        LibraryStatisticsDTO before = service.statistics(ADMIN);
+        assertEquals(5, before.getBookCount());
+        assertEquals(20, before.getCopyCount(), "演示书目共 20 册");
+        assertEquals(20, before.getAvailableCount());
+        assertEquals(0, before.getWithdrawnCount());
+        assertEquals(0, before.getActiveBorrowCount());
+        assertEquals(0, before.getUnpaidFeeCount());
+
+        service.borrowCopy("U-1", new CopyBorrowRequest("SEU-B001-001"));
+        LibraryStatisticsDTO after = service.statistics(ADMIN);
+        assertEquals(1, after.getActiveBorrowCount());
+        assertEquals(0, after.getOverdueCount());
+        assertEquals(19, after.getAvailableCount(), "借出后应减少可借数");
+
+        failure(ErrorCodes.AUTH_FORBIDDEN, () -> service.statistics(READER));
+    }
+
+    @Test
+    void statisticsCountOverdueUnpaidFeesAndCategoryBreakdown() {
+        BookCopy copy = copies.findById("CP-B001-001").orElseThrow();
+        copies.update(copy.withStatus(BookCopyStatus.LOANED));
+        records.save(new BorrowRecord("S-OVERDUE", "U-1", copy.copyId(),
+                NOW.minusDays(40), NOW.minusDays(10), BorrowStatus.BORROWED));
+        records.save(new BorrowRecord("S-LATE", "U-2", "CP-B002-001",
+                NOW.minusDays(30), NOW, BorrowStatus.BORROWED).returnedAt(NOW.plusDays(15)));
+
+        LibraryStatisticsDTO stats = service.statistics(ADMIN);
+
+        assertEquals(1, stats.getOverdueCount());
+        assertEquals(1, stats.getActiveBorrowCount());
+        assertEquals(1, stats.getHistoryBorrowCount());
+        assertEquals(1, stats.getUnpaidFeeCount());
+        assertEquals(15 * 50, stats.getUnpaidFeeFen(), "逾期 15 天 × 0.5 元");
+        assertEquals(0, stats.getSettledFeeFen());
+
+        assertEquals(3, stats.getCategories().size(), "演示书目覆盖三个分类");
+        assertEquals(20, stats.getCategories().stream()
+                .mapToInt(CategoryStatisticDTO::getCopyCount).sum());
+        assertEquals("B001", stats.getPopularBooks().getFirst().getBookId(),
+                "两本书各借过一次，按书目编号次序取第一个");
+    }
+
     private List<String> currentRecordIds(String userId) {
         return service.queryBorrows(ADMIN,
                         new AdminBorrowQueryRequest(AdminBorrowQueryRequest.CURRENT, userId))

@@ -2,6 +2,7 @@ package edu.seu.vcampus.server.module.card;
 
 import edu.seu.vcampus.common.card.CardActions;
 import edu.seu.vcampus.common.card.CardRechargeRequest;
+import edu.seu.vcampus.common.card.CardRefundDebitRequest;
 import edu.seu.vcampus.common.card.CardTransferRequest;
 import edu.seu.vcampus.common.card.CampusCardLedgerResponse;
 import edu.seu.vcampus.common.protocol.ErrorCodes;
@@ -85,6 +86,26 @@ public final class CardServerModule implements ServerModule {
                             payload.getMerchant(),
                             payload.getReference()));
         }));
+        router.register(CardActions.REFUND_DEBIT,
+                request -> requireSession(request, context, session -> {
+                    if (!(request.getData() instanceof CardRefundDebitRequest payload)) {
+                        return Response.failure(
+                                request.getRequestId(),
+                                ErrorCodes.COMMON_INVALID_REQUEST,
+                                "退款信息不完整。");
+                    }
+                    boolean refunded = wallet.refundDebit(
+                            session,
+                            payload.getTargetUserId(),
+                            payload.getAmountFen(),
+                            payload.getMerchant(),
+                            payload.getDebitReference(),
+                            payload.getRefundReference());
+                    return Response.success(
+                            request,
+                            refunded ? "校园卡退款成功。" : "原扣款不存在，无需退款。",
+                            refunded);
+                }));
         router.register(CardActions.LIST_LEDGER, request -> requireSession(request, context,
                 session -> Response.success(
                         request,
@@ -109,6 +130,11 @@ public final class CardServerModule implements ServerModule {
                     request.getRequestId(),
                     ErrorCodes.COMMON_INVALID_REQUEST,
                     "请求参数无效。");
+        } catch (IllegalStateException exception) {
+            return Response.failure(
+                    request.getRequestId(),
+                    ErrorCodes.COMMON_SERVER_ERROR,
+                    "校园卡服务暂时无法完成操作，请稍后重试。");
         }
     }
 

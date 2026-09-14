@@ -10,6 +10,7 @@ import edu.seu.vcampus.common.hospital.ExaminationStatus;
 import edu.seu.vcampus.common.hospital.HospitalActions;
 import edu.seu.vcampus.common.hospital.PatientHealthProfileView;
 import edu.seu.vcampus.common.hospital.PatientHealthRecordView;
+import edu.seu.vcampus.common.hospital.PaymentStatus;
 import edu.seu.vcampus.common.hospital.PublishDemoExaminationReportRequest;
 import edu.seu.vcampus.common.hospital.UpdatePatientHealthProfileRequest;
 import edu.seu.vcampus.common.protocol.ErrorCodes;
@@ -20,7 +21,6 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
@@ -59,6 +59,7 @@ final class PatientHealthRecordPanel extends JPanel {
 
     private final ClientContext context;
     private final Consumer<ConsultationRecordView> bookFollowUp;
+    private final Runnable openBills;
     private final CardLayout cards = new CardLayout();
     private final JPanel pages = new JPanel(cards);
     private final JPanel overviewContent = new JPanel(new BorderLayout(0, 18));
@@ -80,15 +81,24 @@ final class PatientHealthRecordPanel extends JPanel {
     private int requestVersion;
 
     PatientHealthRecordPanel(ClientContext context, Runnable backToPatientHome) {
-        this(context, backToPatientHome, ignored -> { });
+        this(context, backToPatientHome, ignored -> { }, () -> { });
     }
 
     PatientHealthRecordPanel(
             ClientContext context,
             Runnable backToPatientHome,
             Consumer<ConsultationRecordView> bookFollowUp) {
+        this(context, backToPatientHome, bookFollowUp, () -> { });
+    }
+
+    PatientHealthRecordPanel(
+            ClientContext context,
+            Runnable backToPatientHome,
+            Consumer<ConsultationRecordView> bookFollowUp,
+            Runnable openBills) {
         this.context = context;
         this.bookFollowUp = bookFollowUp;
+        this.openBills = openBills;
         setLayout(new BorderLayout());
         setBackground(HospitalTheme.BACKGROUND);
         pages.setOpaque(false);
@@ -159,7 +169,7 @@ final class PatientHealthRecordPanel extends JPanel {
     private JPanel createOverviewPage(Runnable backToPatientHome) {
         JPanel page = basePage();
         page.add(header(
-                "‹ 返回患者首页",
+                "患者首页",
                 backToPatientHome,
                 "我的健康档案",
                 "从健康摘要进入患者自述信息和历次就诊"), BorderLayout.NORTH);
@@ -174,7 +184,7 @@ final class PatientHealthRecordPanel extends JPanel {
     private JPanel createProfilePage() {
         JPanel page = basePage();
         page.add(header(
-                "‹ 返回健康档案",
+                "健康档案",
                 () -> cards.show(pages, OVERVIEW_PAGE),
                 "患者自述健康信息",
                 "就诊时供医生参考，不替代医生诊断"), BorderLayout.NORTH);
@@ -186,7 +196,7 @@ final class PatientHealthRecordPanel extends JPanel {
     private JPanel createProfileEditPage() {
         JPanel page = basePage();
         page.add(header(
-                "‹ 返回患者自述",
+                "患者自述",
                 () -> cards.show(pages, PROFILE_PAGE),
                 "编辑患者自述",
                 "只填写你确认的信息；医生签署的诊疗记录不会被修改"), BorderLayout.NORTH);
@@ -198,7 +208,7 @@ final class PatientHealthRecordPanel extends JPanel {
     private JPanel createHistoryPage() {
         JPanel page = basePage();
         page.add(header(
-                "‹ 返回健康档案",
+                "健康档案",
                 () -> cards.show(pages, OVERVIEW_PAGE),
                 "历史就诊",
                 "按签署时间从近到远排列"), BorderLayout.NORTH);
@@ -210,7 +220,7 @@ final class PatientHealthRecordPanel extends JPanel {
         JPanel page = basePage();
         JPanel header = new JPanel(new BorderLayout(18, 0));
         header.setOpaque(false);
-        JButton back = HospitalTheme.quietButton("‹ 返回历史就诊");
+        JButton back = HospitalTheme.backButton("历史就诊");
         back.setName("healthRecordDetailBackButton");
         back.addActionListener(event -> cards.show(pages, HISTORY_PAGE));
         JPanel copy = verticalList();
@@ -232,7 +242,7 @@ final class PatientHealthRecordPanel extends JPanel {
     private JPanel createReportsPage() {
         JPanel page = basePage();
         page.add(header(
-                "‹ 返回健康档案",
+                "健康档案",
                 () -> cards.show(pages, OVERVIEW_PAGE),
                 "检查与检验",
                 "查看检查单、结果状态和回诊安排"), BorderLayout.NORTH);
@@ -244,7 +254,7 @@ final class PatientHealthRecordPanel extends JPanel {
         JPanel page = basePage();
         JPanel header = new JPanel(new BorderLayout(18, 0));
         header.setOpaque(false);
-        JButton back = HospitalTheme.quietButton("‹ 返回检查与检验");
+        JButton back = HospitalTheme.backButton("检查与检验");
         back.setName("healthReportDetailBackButton");
         back.addActionListener(event -> cards.show(pages, REPORTS_PAGE));
         JPanel copy = verticalList();
@@ -536,11 +546,9 @@ final class PatientHealthRecordPanel extends JPanel {
                         cards.show(pages, PROFILE_PAGE);
                     } else if (ErrorCodes.HOSPITAL_HEALTH_PROFILE_CONFLICT.equals(
                             response.getCode())) {
-                        JOptionPane.showMessageDialog(
-                                PatientHealthRecordPanel.this,
-                                "档案已在其他窗口更新。系统将载入最新内容，请核对后再修改。",
-                                "档案内容已变化",
-                                JOptionPane.WARNING_MESSAGE);
+                        HospitalDialogs.warning(
+                                PatientHealthRecordPanel.this, "档案内容已变化",
+                                "档案已在其他窗口更新。系统将载入最新内容，请核对后再修改。");
                         loadHealthRecord();
                     } else {
                         save.setEnabled(true);
@@ -752,6 +760,10 @@ final class PatientHealthRecordPanel extends JPanel {
         detail.add(Box.createVerticalStrut(16));
         detail.add(detailRow("当前状态", examinationStatusText(examination)));
         detail.add(Box.createVerticalStrut(16));
+        detail.add(detailRow("检查费用",
+                examination.getPaymentStatus() == PaymentStatus.PAID
+                        ? "已缴费" : "待缴费"));
+        detail.add(Box.createVerticalStrut(16));
         detail.add(detailRow("检查结果", examination.getResultSummary()));
         detail.add(Box.createVerticalStrut(22));
 
@@ -761,7 +773,18 @@ final class PatientHealthRecordPanel extends JPanel {
         actionStatus.setForeground(HospitalTheme.MUTED);
         detail.add(actionStatus);
         detail.add(Box.createVerticalStrut(8));
-        if (examination.getStatus() == ExaminationStatus.ORDERED) {
+        if (examination.getStatus() == ExaminationStatus.ORDERED
+                && examination.getPaymentStatus() != PaymentStatus.PAID) {
+            detail.add(reportActionButton(
+                    "前往费用清单缴费",
+                    "openExaminationBillButton",
+                    button -> openBills.run()));
+            detail.add(Box.createVerticalStrut(12));
+            detail.add(message(
+                    "请先完成检查费缴纳；缴费后重新打开检查详情，即可模拟完成检查并生成报告。",
+                    HospitalTheme.WARNING,
+                    700));
+        } else if (examination.getStatus() == ExaminationStatus.ORDERED) {
             detail.add(reportActionButton(
                     "模拟完成检查并生成报告",
                     "publishDemoReportButton",
@@ -813,13 +836,11 @@ final class PatientHealthRecordPanel extends JPanel {
             ExaminationOrderView examination,
             JButton button,
             JLabel actionStatus) {
-        int choice = JOptionPane.showConfirmDialog(
-                this,
+        boolean confirmed = HospitalDialogs.confirm(
+                this, "生成演示报告",
                 "确认生成虚构演示报告？\n\n这只用于演示检查—报告—回诊流程，不是真实检查结果。",
-                "生成演示报告",
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.WARNING_MESSAGE);
-        if (choice != JOptionPane.OK_OPTION) {
+                "确认生成", true);
+        if (!confirmed) {
             return;
         }
         runReportAction(
@@ -836,16 +857,14 @@ final class PatientHealthRecordPanel extends JPanel {
             ExaminationOrderView examination,
             JButton button,
             JLabel actionStatus) {
-        int choice = JOptionPane.showConfirmDialog(
-                this,
+        boolean confirmed = HospitalDialogs.confirm(
+                this, "确认自动安排回诊",
                 "确认由系统安排检查结果回诊？\n\n"
                         + "系统优先安排原接诊医生未来七天内的可用排班；"
                         + "原医生没有可用号源时，将安排同科室其他医生。\n"
                         + "本次挂号费为 ¥0.00。",
-                "确认自动安排回诊",
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.QUESTION_MESSAGE);
-        if (choice != JOptionPane.OK_OPTION) {
+                "确认安排", false);
+        if (!confirmed) {
             return;
         }
         runReportAction(
@@ -884,8 +903,8 @@ final class PatientHealthRecordPanel extends JPanel {
                         if (bookingAction
                                 && response.getData() instanceof AppointmentBookingView booking) {
                             actionStatus.setText("回诊已安排，可到“我的预约”查看。");
-                            JOptionPane.showMessageDialog(
-                                    PatientHealthRecordPanel.this,
+                            HospitalDialogs.information(
+                                    PatientHealthRecordPanel.this, "回诊安排成功",
                                     "回诊已经安排成功。\n\n"
                                             + "医生：" + booking.getDoctorName() + "\n"
                                             + "科室：" + booking.getDepartmentName() + "\n"
@@ -893,9 +912,7 @@ final class PatientHealthRecordPanel extends JPanel {
                                                     booking.getStartTime()) + "\n"
                                             + "候诊号：" + booking.getQueueNumber() + "\n"
                                             + "挂号费：¥0.00\n\n"
-                                            + "你可以到“我的预约”查看完整信息。",
-                                    "回诊安排成功",
-                                    JOptionPane.INFORMATION_MESSAGE);
+                                            + "你可以到“我的预约”查看完整信息。");
                         } else {
                             actionStatus.setText(
                                     "演示报告已生成，可以继续申请检查结果回诊。");
@@ -959,6 +976,9 @@ final class PatientHealthRecordPanel extends JPanel {
         }
         if (ErrorCodes.HOSPITAL_RESULT_REVIEW_ALREADY_BOOKED.equals(response.getCode())) {
             return "已经安排过检查结果回诊，请到“我的预约”查看。";
+        }
+        if (ErrorCodes.HOSPITAL_EXAMINATION_PAYMENT_REQUIRED.equals(response.getCode())) {
+            return "请先到“费用清单”完成检查费缴纳，再模拟完成检查。";
         }
         if (ErrorCodes.HOSPITAL_SLOT_FULL.equals(response.getCode())) {
             return "七天内暂时没有可安排的同科室回诊号源。";
@@ -1024,23 +1044,8 @@ final class PatientHealthRecordPanel extends JPanel {
             Runnable backAction,
             String titleText,
             String subtitleText) {
-        JPanel header = new JPanel(new BorderLayout(18, 0));
-        header.setOpaque(false);
-        JButton back = HospitalTheme.quietButton(backText);
-        back.addActionListener(event -> backAction.run());
-        JPanel copy = verticalList();
-        JLabel title = new JLabel(titleText);
-        title.setFont(HospitalTheme.uiFont(Font.BOLD, 26F));
-        title.setForeground(HospitalTheme.TEXT);
-        JLabel subtitle = new JLabel(subtitleText);
-        subtitle.setFont(HospitalTheme.uiFont(Font.PLAIN, 13F));
-        subtitle.setForeground(HospitalTheme.MUTED);
-        copy.add(title);
-        copy.add(Box.createVerticalStrut(4));
-        copy.add(subtitle);
-        header.add(back, BorderLayout.WEST);
-        header.add(copy, BorderLayout.CENTER);
-        return HospitalResponsiveLayout.constrainWidth(header);
+        return HospitalResponsiveLayout.constrainWidth(HospitalPageHeader.create(
+                titleText, subtitleText, backText, backAction, null));
     }
 
     private static HospitalTheme.SurfacePanel informationCard(String titleText) {

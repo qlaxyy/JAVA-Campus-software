@@ -5,7 +5,7 @@ import java.io.Serializable;
 import java.util.List;
 import java.util.Objects;
 
-/** Doctors and future schedules needed by the hospital schedule workspace. */
+/** Full doctor directory and future schedules needed by hospital administration. */
 public final class AdminScheduleWorkspaceView implements Serializable {
 
     @Serial

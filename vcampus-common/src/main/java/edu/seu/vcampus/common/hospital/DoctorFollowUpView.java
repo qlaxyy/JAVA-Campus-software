@@ -15,6 +15,7 @@ public final class DoctorFollowUpView implements Serializable {
     private final String examinationOrderId;
     private final String episodeId;
     private final String patientUserId;
+    private final String patientName;
     private final String departmentName;
     private final String examinationItem;
     private final ExaminationStatus examinationStatus;
@@ -54,9 +55,30 @@ public final class DoctorFollowUpView implements Serializable {
             LocalDateTime reviewStartTime,
             List<DoctorClinicalRecordView> episodeRecords,
             List<ExaminationOrderView> episodeExaminations) {
+        this(examinationOrderId, episodeId, patientUserId, patientUserId,
+                departmentName, examinationItem, examinationStatus, orderedAt,
+                resultReviewBooked, reviewDoctorName, reviewStartTime,
+                episodeRecords, episodeExaminations);
+    }
+
+    public DoctorFollowUpView(
+            String examinationOrderId,
+            String episodeId,
+            String patientUserId,
+            String patientName,
+            String departmentName,
+            String examinationItem,
+            ExaminationStatus examinationStatus,
+            LocalDateTime orderedAt,
+            boolean resultReviewBooked,
+            String reviewDoctorName,
+            LocalDateTime reviewStartTime,
+            List<DoctorClinicalRecordView> episodeRecords,
+            List<ExaminationOrderView> episodeExaminations) {
         this.examinationOrderId = requireText(examinationOrderId, "examinationOrderId");
         this.episodeId = requireText(episodeId, "episodeId");
         this.patientUserId = requireText(patientUserId, "patientUserId");
+        this.patientName = requireText(patientName, "patientName");
         this.departmentName = requireText(departmentName, "departmentName");
         this.examinationItem = requireText(examinationItem, "examinationItem");
         this.examinationStatus = Objects.requireNonNull(
@@ -80,6 +102,10 @@ public final class DoctorFollowUpView implements Serializable {
     public String getEpisodeId() { return episodeId; }
 
     public String getPatientUserId() { return patientUserId; }
+
+    public String getPatientName() {
+        return patientName == null ? patientUserId : patientName;
+    }
 
     public String getDepartmentName() { return departmentName; }
 

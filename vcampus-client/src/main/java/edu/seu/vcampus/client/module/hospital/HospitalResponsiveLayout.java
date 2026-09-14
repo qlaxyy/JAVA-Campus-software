@@ -31,7 +31,21 @@ final class HospitalResponsiveLayout {
     }
 
     static JPanel constrainWidth(Component content) {
-        return new WidthTrackingPanel(content);
+        return new WidthTrackingPanel(content, MAXIMUM_CONTENT_WIDTH);
+    }
+
+    static JPanel constrainWidth(Component content, int maximumWidth) {
+        return new WidthTrackingPanel(content, maximumWidth);
+    }
+
+    static JPanel split(
+            Component navigation,
+            Component content,
+            int navigationWidth,
+            int stackBelowWidth,
+            int gap) {
+        return new ResponsiveSplitPanel(
+                navigation, content, navigationWidth, stackBelowWidth, gap);
     }
 
     static JPanel adaptiveRow(
@@ -46,7 +60,7 @@ final class HospitalResponsiveLayout {
         Component view = content instanceof Scrollable scrollable
                 && scrollable.getScrollableTracksViewportWidth()
                 ? content
-                : new WidthTrackingPanel(content);
+                : new WidthTrackingPanel(content, MAXIMUM_CONTENT_WIDTH);
         JScrollPane scroll = new JScrollPane(view);
         scroll.setBorder(BorderFactory.createEmptyBorder());
         scroll.setOpaque(false);
@@ -221,19 +235,97 @@ final class HospitalResponsiveLayout {
         }
     }
 
+    /** A compact navigation rail next to fluid content, stacked on narrow windows. */
+    private static final class ResponsiveSplitPanel extends JPanel {
+
+        private final Component navigation;
+        private final Component content;
+        private final int navigationWidth;
+        private final int stackBelowWidth;
+        private final int gap;
+
+        private ResponsiveSplitPanel(
+                Component navigation,
+                Component content,
+                int navigationWidth,
+                int stackBelowWidth,
+                int gap) {
+            super(null);
+            if (navigationWidth < 1 || stackBelowWidth < 1 || gap < 0) {
+                throw new IllegalArgumentException("responsive split dimensions are invalid");
+            }
+            this.navigation = navigation;
+            this.content = content;
+            this.navigationWidth = navigationWidth;
+            this.stackBelowWidth = stackBelowWidth;
+            this.gap = gap;
+            setOpaque(false);
+            add(navigation);
+            add(content);
+        }
+
+        @Override
+        public void doLayout() {
+            Insets insets = getInsets();
+            int width = Math.max(0, getWidth() - insets.left - insets.right);
+            int height = Math.max(0, getHeight() - insets.top - insets.bottom);
+            if (width < stackBelowWidth) {
+                int preferredNavigationHeight = Math.max(
+                        230, navigation.getPreferredSize().height);
+                int navigationHeight = Math.min(
+                        Math.max(0, height - gap),
+                        Math.min(360, preferredNavigationHeight));
+                navigation.setBounds(insets.left, insets.top, width, navigationHeight);
+                content.setBounds(insets.left, insets.top + navigationHeight + gap,
+                        width, Math.max(0, height - navigationHeight - gap));
+                return;
+            }
+            int railWidth = Math.min(navigationWidth, Math.max(0, width / 3));
+            navigation.setBounds(insets.left, insets.top, railWidth, height);
+            content.setBounds(insets.left + railWidth + gap, insets.top,
+                    Math.max(0, width - railWidth - gap), height);
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            Dimension navigationSize = navigation.getPreferredSize();
+            Dimension contentSize = content.getPreferredSize();
+            Insets insets = getInsets();
+            int availableWidth = getWidth() > 0 ? getWidth()
+                    : navigationWidth + gap + contentSize.width;
+            if (availableWidth < stackBelowWidth) {
+                return new Dimension(
+                        Math.max(navigationSize.width, contentSize.width)
+                                + insets.left + insets.right,
+                        Math.min(360, Math.max(230, navigationSize.height)) + gap
+                                + contentSize.height + insets.top + insets.bottom);
+            }
+            return new Dimension(
+                    navigationWidth + gap + contentSize.width
+                            + insets.left + insets.right,
+                    Math.max(navigationSize.height, contentSize.height)
+                            + insets.top + insets.bottom);
+        }
+    }
+
     private static final class WidthTrackingPanel extends JPanel implements Scrollable {
 
+        private final int maximumWidth;
         private int horizontalGutter;
 
-        private WidthTrackingPanel(Component content) {
+        private WidthTrackingPanel(Component content, int maximumWidth) {
             super(new BorderLayout());
+            if (maximumWidth < 1) {
+                throw new IllegalArgumentException("maximum width must be positive");
+            }
+            this.maximumWidth = maximumWidth;
             setOpaque(false);
             add(content, BorderLayout.CENTER);
         }
 
         @Override
         public void doLayout() {
-            int desiredGutter = Math.max(0, (getWidth() - MAXIMUM_CONTENT_WIDTH) / 2);
+            int desiredGutter = Math.max(0, (getWidth() - maximumWidth) / 2);
             if (desiredGutter != horizontalGutter) {
                 horizontalGutter = desiredGutter;
                 setBorder(BorderFactory.createEmptyBorder(

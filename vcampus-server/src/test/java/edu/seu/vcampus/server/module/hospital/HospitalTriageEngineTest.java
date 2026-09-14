@@ -18,7 +18,14 @@ class HospitalTriageEngineTest {
             department("dept-general", "全科门诊"),
             department("dept-respiratory", "呼吸内科"),
             department("dept-gastroenterology", "消化内科"),
-            department("dept-sports-medicine", "运动医学科"));
+            department("dept-sports-medicine", "运动医学科"),
+            department("dept-cardiovascular", "心血管内科"),
+            department("dept-general-surgery", "普通外科"),
+            department("dept-ent", "耳鼻咽喉诊疗"),
+            department("dept-dermatology", "皮肤综合诊疗"),
+            department("dept-gynecology", "妇科综合诊疗"),
+            department("dept-tcm", "中医综合诊疗"),
+            department("dept-rehabilitation", "康复评估与理疗"));
 
     @Test
     void recommendsExistingBookableDepartmentWithExplainableMatch() {
@@ -108,6 +115,24 @@ class HospitalTriageEngineTest {
         assertTrue(neurological.getSafetyMessage().contains("肢体活动"));
         assertTrue(poisoning.isUrgent());
         assertFalse(negated.isUrgent());
+    }
+
+    @Test
+    void coversEveryExpandedSpecialtyWithDeterministicLocalGuidance() {
+        assertDepartment("心慌，感觉心跳很乱", "dept-cardiovascular");
+        assertDepartment("发现一个皮下肿块", "dept-general-surgery");
+        assertDepartment("耳鸣，而且听力下降", "dept-ent");
+        assertDepartment("皮肤起红疹，很瘙痒", "dept-dermatology");
+        assertDepartment("月经不调并且痛经", "dept-gynecology");
+        assertDepartment("想看中医做中医调理", "dept-tcm");
+        assertDepartment("术后想做康复评估和功能训练", "dept-rehabilitation");
+    }
+
+    private void assertDepartment(String description, String expectedDepartmentId) {
+        var result = engine.triage(new TriageRequest(description, false), departments);
+        assertFalse(result.isUrgent(), description);
+        assertEquals(expectedDepartmentId,
+                result.getRecommendations().getFirst().getDepartmentId(), description);
     }
 
     private static HospitalDepartment department(String id, String name) {

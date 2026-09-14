@@ -16,7 +16,6 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
@@ -55,7 +54,7 @@ final class AdminAppointmentPanel extends JPanel {
         setBackground(HospitalTheme.BACKGROUND);
         setBorder(BorderFactory.createEmptyBorder(22, 26, 22, 26));
         add(HospitalResponsiveLayout.constrainWidth(header(back)), BorderLayout.NORTH);
-        add(body(), BorderLayout.CENTER);
+        add(HospitalResponsiveLayout.constrainWidth(body()), BorderLayout.CENTER);
         configureActions();
     }
 
@@ -64,27 +63,12 @@ final class AdminAppointmentPanel extends JPanel {
     }
 
     private JPanel header(Runnable back) {
-        JPanel header = new JPanel(new BorderLayout(16, 0));
-        header.setOpaque(false);
-        JPanel copy = verticalList();
-        JLabel eyebrow = new JLabel("OPERATIONS LEDGER");
-        eyebrow.setFont(HospitalTheme.dataFont(Font.BOLD, 11F));
-        eyebrow.setForeground(HospitalTheme.PRIMARY);
-        JLabel title = new JLabel("号源与预约管理");
-        title.setFont(HospitalTheme.uiFont(Font.BOLD, 28F));
-        title.setForeground(HospitalTheme.TEXT);
-        JLabel subtitle = new JLabel("查询预约流转；仅处理尚未开始的异常预约，不展示诊断和病历内容");
-        subtitle.setForeground(HospitalTheme.MUTED);
-        copy.add(eyebrow);
-        copy.add(Box.createVerticalStrut(3));
-        copy.add(title);
-        copy.add(Box.createVerticalStrut(4));
-        copy.add(subtitle);
-        JButton backButton = HospitalTheme.quietButton("‹ 返回管理首页");
-        backButton.addActionListener(event -> back.run());
-        header.add(copy, BorderLayout.CENTER);
-        header.add(backButton, BorderLayout.EAST);
-        return header;
+        return HospitalPageHeader.create(
+                "号源与预约管理",
+                "查询预约流转；仅处理尚未开始的异常预约，不展示诊断和病历内容",
+                "管理首页",
+                back,
+                null);
     }
 
     private JPanel body() {
@@ -219,7 +203,7 @@ final class AdminAppointmentPanel extends JPanel {
         JLabel ids = new JLabel("患者 " + item.getPatientUserId()
                 + "  ·  预约 " + item.getAppointmentId()
                 + "  ·  排班 " + item.getScheduleId());
-        ids.setFont(HospitalTheme.dataFont(Font.PLAIN, 12F));
+        ids.setFont(HospitalTheme.uiFont(Font.PLAIN, 12F));
         ids.setForeground(HospitalTheme.MUTED);
         copy.add(title);
         copy.add(Box.createVerticalStrut(5));
@@ -229,7 +213,7 @@ final class AdminAppointmentPanel extends JPanel {
 
         JPanel money = verticalList();
         JLabel amount = new JLabel(String.format("¥%.2f", item.getAmountCents() / 100.0));
-        amount.setFont(HospitalTheme.dataFont(Font.BOLD, 17F));
+        amount.setFont(HospitalTheme.valueFont(amount.getText(), Font.BOLD, 17F));
         amount.setForeground(HospitalTheme.TEXT);
         JLabel payment = new JLabel(paymentText(item.getPaymentStatus()));
         payment.setForeground(HospitalTheme.MUTED);
@@ -254,17 +238,15 @@ final class AdminAppointmentPanel extends JPanel {
     }
 
     private void confirmCancellation(AdminAppointmentView item) {
-        int choice = JOptionPane.showConfirmDialog(
-                this,
+        boolean confirmed = HospitalDialogs.confirm(
+                this, "取消异常预约",
                 "确认由医院管理员取消这条异常预约？\n\n"
                         + item.getDepartmentName() + " · " + item.getDoctorName() + "\n"
                         + item.getStartTime().format(DATE_TIME) + "\n"
                         + "患者：" + item.getPatientUserId() + "\n\n"
-                        + "已支付挂号费将同步执行模拟退款。",
-                "取消异常预约",
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.WARNING_MESSAGE);
-        if (choice == JOptionPane.OK_OPTION) cancel(item);
+                        + "已通过校园卡支付的挂号费将原路退回患者账户。",
+                "确认取消", true);
+        if (confirmed) cancel(item);
     }
 
     private void cancel(AdminAppointmentView item) {

@@ -113,7 +113,14 @@ final class HybridHospitalTriageEngine {
         }
     }
 
-    private static List<TriageRecommendationView> validatedRecommendations(
+    edu.seu.vcampus.common.hospital.TriageChatResult chat(
+            edu.seu.vcampus.common.hospital.TriageChatRequest request,
+            List<HospitalDepartment> departments) {
+        return new HospitalConversationEngine(localEngine, aiClient, aiPermits)
+                .chat(request, departments);
+    }
+
+    static List<TriageRecommendationView> validatedRecommendations(
             List<HospitalAiDepartmentCandidate> candidates,
             List<HospitalDepartment> bookable,
             List<TriageRecommendationView> local) {

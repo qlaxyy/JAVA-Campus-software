@@ -32,23 +32,12 @@ final class PatientCareGuidePanel extends JPanel {
     }
 
     private JComponent createHeader(Runnable back) {
-        JPanel header = new JPanel(new BorderLayout(18, 0));
-        header.setOpaque(false);
-        JPanel copy = verticalPanel();
-        JLabel title = new JLabel("就医指南");
-        title.setFont(HospitalTheme.uiFont(Font.BOLD, 28F));
-        title.setForeground(HospitalTheme.TEXT);
-        JLabel subtitle = new JLabel("第一次来校医院时，先确认自己应该走哪条就诊路线");
-        subtitle.setFont(HospitalTheme.uiFont(Font.PLAIN, 14F));
-        subtitle.setForeground(HospitalTheme.MUTED);
-        copy.add(title);
-        copy.add(Box.createVerticalStrut(5));
-        copy.add(subtitle);
-        JButton backButton = HospitalTheme.quietButton("返回医院首页");
-        backButton.addActionListener(event -> back.run());
-        header.add(copy, BorderLayout.CENTER);
-        header.add(backButton, BorderLayout.EAST);
-        return header;
+        return HospitalPageHeader.create(
+                "就医指南与帮助",
+                "根据当前情况选择就诊入口，并了解预约、回诊和费用流程",
+                "医院首页",
+                back,
+                null);
     }
 
     private JComponent createContent(
@@ -94,8 +83,8 @@ final class PatientCareGuidePanel extends JPanel {
                 HospitalTheme.PRIMARY_DARK, 16);
         board.setLayout(new BorderLayout(0, 14));
         board.setBorder(BorderFactory.createEmptyBorder(18, 20, 20, 20));
-        JLabel caption = new JLabel("CAMPUS CLINIC · 就诊路线");
-        caption.setFont(HospitalTheme.dataFont(Font.BOLD, 12F));
+        JLabel caption = new JLabel("就诊流程");
+        caption.setFont(HospitalTheme.uiFont(Font.BOLD, 12F));
         caption.setForeground(HospitalTheme.NAVIGATION_MUTED);
         board.add(caption, BorderLayout.NORTH);
 
@@ -140,19 +129,19 @@ final class PatientCareGuidePanel extends JPanel {
         JPanel choices = HospitalResponsiveLayout.grid(3, 230, 14, 14);
         choices.setOpaque(false);
         choices.add(choiceCard(
-                "第一次看这个问题",
+                "第一次就诊",
                 "选择具体科室、医生和日期，建立一次新的初诊预约。",
                 "预约挂号",
                 "guideRegistrationButton",
                 openRegistration));
         choices.add(choiceCard(
-                "以前看过，需要再次就诊",
+                "一周内已有初诊，需要再次就诊",
                 "从一条已完成的诊疗记录发起普通复诊，并重新选择排班。",
-                "选择复诊记录",
+                "选择初诊记录",
                 "guideFollowUpButton",
                 openFollowUp));
         choices.add(choiceCard(
-                "医生让我检查后回来",
+                "做完检查后回诊",
                 "先在健康档案查看检查状态；报告出具后再申请检查结果回诊。",
                 "查看检查与回诊",
                 "guideHealthRecordButton",
@@ -216,8 +205,8 @@ final class PatientCareGuidePanel extends JPanel {
         card.setBorder(BorderFactory.createEmptyBorder(16, 20, 16, 20));
         JLabel title = sectionTitle("开放时间与地点");
         JLabel detail = new JLabel(
-                "<html>课程项目不保存真实校医院地址和排班政策。具体开放时间、地点、"
-                        + "停诊通知及急救联系方式请以学校官方公告为准。</html>");
+                "<html>具体开放时间、地点、停诊通知及急救联系方式，"
+                        + "请以学校官方公告为准。</html>");
         detail.setFont(HospitalTheme.uiFont(Font.PLAIN, 13F));
         detail.setForeground(HospitalTheme.MUTED);
         card.add(title, BorderLayout.WEST);

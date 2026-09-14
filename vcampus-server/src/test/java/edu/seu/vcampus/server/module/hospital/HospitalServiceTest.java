@@ -40,6 +40,10 @@ import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.user.Role;
 import edu.seu.vcampus.common.user.AdminScope;
 import edu.seu.vcampus.common.user.SessionInfo;
+import edu.seu.vcampus.common.card.CampusCardLedgerEntry;
+import edu.seu.vcampus.server.module.card.InMemoryCampusCardWallet;
+import edu.seu.vcampus.server.security.UserDirectory;
+import edu.seu.vcampus.server.security.UserIdentity;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.InvocationTargetException;
@@ -92,6 +96,94 @@ class HospitalServiceTest {
         assertTrue(administrator.canAccess(HospitalMode.PATIENT));
         assertFalse(administrator.canAccess(HospitalMode.DOCTOR));
         assertTrue(administrator.canAccess(HospitalMode.ADMIN));
+    }
+
+    @Test
+    void doctorWorkspaceUsesPatientNameFromSharedUserDirectory() {
+        SessionInfo patient = session("U-PATIENT-NAMED", Role.USER);
+        SessionInfo doctor = session("U-DOCTOR-001", Role.USER);
+        AppointmentBookingView booking = service.bookAppointment(
+                patient, BookAppointmentRequest.firstVisit("slot-general-1"));
+        UserDirectory users = new UserDirectory() {
+            @Override
+            public java.util.Optional<UserIdentity> findByUserId(String userId) {
+                return "U-PATIENT-NAMED".equals(userId)
+                        ? java.util.Optional.of(new UserIdentity(
+                                userId, "20261234", "林同学", true))
+                        : java.util.Optional.empty();
+            }
+
+            @Override
+            public java.util.Optional<UserIdentity> findByCampusCardNumber(String number) {
+                return java.util.Optional.empty();
+            }
+        };
+
+        DoctorWorkspaceView workspace = service.getDoctorWorkspace(doctor, users);
+        assertEquals("林同学", workspace.getSchedules().stream()
+                .flatMap(schedule -> schedule.getPendingAppointments().stream())
+                .filter(item -> item.getAppointmentId().equals(booking.getAppointmentId()))
+                .findFirst().orElseThrow().getPatientName());
+        assertEquals("林同学", service.getDoctorConsultationContext(
+                        doctor,
+                        new DoctorConsultationContextRequest(booking.getAppointmentId()),
+                        users)
+                .getAppointment().getPatientName());
+    }
+
+    @Test
+    void registrationUsesCampusCardAndPatientCancellationRefundsIt() {
+        InMemoryHospitalRepository repository = new InMemoryHospitalRepository(FIXED_CLOCK);
+        InMemoryCampusCardWallet wallet = new InMemoryCampusCardWallet();
+        HospitalService paidService = new HospitalService(repository, FIXED_CLOCK, wallet);
+        SessionInfo patient = session("U-STUDENT-001", Role.USER);
+        int before = wallet.view(patient).getBalanceFen();
+
+        AppointmentBookingView booking = paidService.bookAppointment(
+                patient, BookAppointmentRequest.firstVisit("slot-general-1"));
+        assertEquals(before - Math.toIntExact(booking.getAmountCents()),
+                wallet.view(patient).getBalanceFen());
+        assertEquals(CampusCardLedgerEntry.DEBIT,
+                wallet.listLedger(patient).getFirst().getEntryType());
+
+        paidService.cancelAppointment(
+                patient, new CancelAppointmentRequest(booking.getAppointmentId()));
+        assertEquals(before, wallet.view(patient).getBalanceFen());
+        assertEquals(CampusCardLedgerEntry.CREDIT,
+                wallet.listLedger(patient).getFirst().getEntryType());
+    }
+
+    @Test
+    void administratorCancellationRefundsThePatientsCampusCard() {
+        InMemoryHospitalRepository repository = new InMemoryHospitalRepository(FIXED_CLOCK);
+        InMemoryCampusCardWallet wallet = new InMemoryCampusCardWallet();
+        HospitalService paidService = new HospitalService(repository, FIXED_CLOCK, wallet);
+        SessionInfo patient = session("U-STUDENT-001", Role.USER);
+        SessionInfo administrator = session(
+                "U-HOSPITAL-ADMIN-001", Role.USER, Set.of(AdminScope.HOSPITAL));
+        int before = wallet.view(patient).getBalanceFen();
+        AppointmentBookingView booking = paidService.bookAppointment(
+                patient, BookAppointmentRequest.firstVisit("slot-general-1"));
+
+        paidService.cancelAppointmentAsAdmin(
+                administrator, new AdminCancelAppointmentRequest(booking.getAppointmentId()));
+
+        assertEquals(before, wallet.view(patient).getBalanceFen());
+        assertEquals(CampusCardLedgerEntry.CREDIT,
+                wallet.listLedger(patient).getFirst().getEntryType());
+    }
+
+    @Test
+    void insufficientCampusCardBalanceDoesNotCreateAppointment() {
+        InMemoryHospitalRepository repository = new InMemoryHospitalRepository(FIXED_CLOCK);
+        InMemoryCampusCardWallet wallet = new InMemoryCampusCardWallet();
+        HospitalService paidService = new HospitalService(repository, FIXED_CLOCK, wallet);
+        SessionInfo patient = session("U-NO-BALANCE", Role.USER);
+
+        assertBusinessFailure(ErrorCodes.CARD_INSUFFICIENT_BALANCE,
+                () -> paidService.bookAppointment(
+                        patient, BookAppointmentRequest.firstVisit("slot-general-1")));
+        assertTrue(repository.findBookingsByPatientUserId(patient.getUserId()).isEmpty());
     }
 
     @Test
@@ -283,7 +375,7 @@ class HospitalServiceTest {
         AppointmentBookingView otherDoctor = service.bookAppointment(
                 doctorAsPatient,
                 BookAppointmentRequest.firstVisit("slot-general-3"));
-        assertEquals("刘医生", otherDoctor.getDoctorName());
+        assertEquals("钱宁", otherDoctor.getDoctorName());
     }
 
     @Test
@@ -337,6 +429,8 @@ class HospitalServiceTest {
                         "血常规",
                         "按检查部门要求准备",
                         ""));
+        payExaminationBill(
+                legacyService, doctorAsPatient, legacyAppointment.appointmentId());
         legacyService.publishDemoExaminationReport(
                 doctorAsPatient,
                 new PublishDemoExaminationReportRequest(order.getOrderId()));
@@ -349,7 +443,7 @@ class HospitalServiceTest {
                 .orElseThrow();
         HospitalSlot selectedSlot = repository.findSlotById(savedReview.scheduleId())
                 .orElseThrow();
-        assertEquals("doctor-liu", selectedSlot.doctorId());
+        assertEquals("doctor-wang", selectedSlot.doctorId());
     }
 
     @Test
@@ -393,7 +487,7 @@ class HospitalServiceTest {
     @Test
     void appliesDoctorFilterAndIncludesSeventhCalendarDay() {
         SlotListResponse response = service.searchSlots(
-                SearchSlotsRequest.firstVisit("dept-dental", "doctor-zhao"));
+                SearchSlotsRequest.firstVisit("dept-dental", "doctor-wu"));
 
         assertEquals(2, response.getSlots().size());
         assertEquals(
@@ -405,9 +499,9 @@ class HospitalServiceTest {
     @Test
     void returnsMultipleDailySchedulesForTheSelectedDoctor() {
         SlotListResponse response = service.searchSlots(
-                SearchSlotsRequest.firstVisit("dept-joint-surgery", "doctor-lin"));
+                SearchSlotsRequest.firstVisit("dept-joint-surgery", "doctor-qian"));
 
-        assertEquals(2, response.getSlots().size());
+        assertEquals(3, response.getSlots().size());
         assertEquals(
                 response.getSlots().get(0).getStartTime().toLocalDate(),
                 response.getSlots().get(1).getStartTime().toLocalDate());
@@ -715,7 +809,7 @@ class HospitalServiceTest {
         assertTrue(candidates.getSlots().getFirst().getAvailability()
                 == SlotAvailability.AVAILABLE);
         assertTrue(candidates.getSlots().stream()
-                .anyMatch(slot -> slot.getDoctorId().equals("doctor-liu")));
+                .anyMatch(slot -> slot.getDoctorId().equals("doctor-wang")));
 
         AppointmentBookingView followUp = followUpService.bookAppointment(
                 patient,
@@ -736,7 +830,7 @@ class HospitalServiceTest {
 
         DoctorConsultationContextView followUpContext = followUpService
                 .getDoctorConsultationContext(
-                        session("U-DOCTOR-002", Role.USER),
+                        session("U-DOCTOR-009", Role.USER),
                         new DoctorConsultationContextRequest(
                                 followUp.getAppointmentId()));
         assertEquals(firstVisit.getAppointmentId(),
@@ -869,6 +963,17 @@ class HospitalServiceTest {
                         session("U-OTHER-PATIENT", Role.USER),
                         new PublishDemoExaminationReportRequest(ordered.getOrderId())));
 
+        assertEquals(PaymentStatus.UNPAID, ordered.getPaymentStatus());
+        assertBusinessFailure(
+                ErrorCodes.HOSPITAL_EXAMINATION_PAYMENT_REQUIRED,
+                () -> service.publishDemoExaminationReport(
+                        patient,
+                        new PublishDemoExaminationReportRequest(ordered.getOrderId())));
+        payExaminationBill(service, patient, firstVisit.getAppointmentId());
+        assertEquals(PaymentStatus.PAID,
+                service.getMyHealthRecord(patient).getExaminations().getFirst()
+                        .getPaymentStatus());
+
         ExaminationOrderView reported = service.publishDemoExaminationReport(
                 patient,
                 new PublishDemoExaminationReportRequest(ordered.getOrderId()));
@@ -943,6 +1048,7 @@ class HospitalServiceTest {
                 doctor,
                 new SubmitExaminationPlanRequest(
                         firstVisit.getAppointmentId(), "待查", "血常规", "", ""));
+        payExaminationBill(initialService, patient, firstVisit.getAppointmentId());
         initialService.publishDemoExaminationReport(
                 patient,
                 new PublishDemoExaminationReportRequest(order.getOrderId()));
@@ -986,6 +1092,7 @@ class HospitalServiceTest {
                 doctor,
                 new SubmitExaminationPlanRequest(
                         firstVisit.getAppointmentId(), "发热待查", "血常规", "", ""));
+        payExaminationBill(repeatedService, patient, firstVisit.getAppointmentId());
         repeatedService.publishDemoExaminationReport(
                 patient, new PublishDemoExaminationReportRequest(firstOrder.getOrderId()));
         AppointmentBookingView firstReview = repeatedService.bookResultReview(
@@ -1015,6 +1122,7 @@ class HospitalServiceTest {
                 .findFirst().orElseThrow().getStatus());
         assertEquals(2, waitingAgain.getConsultations().size());
 
+        payExaminationBill(repeatedService, patient, firstReview.getAppointmentId());
         ExaminationOrderView secondReport = repeatedService.publishDemoExaminationReport(
                 patient, new PublishDemoExaminationReportRequest(secondOrder.getOrderId()));
         assertFalse(secondReport.isResultReviewBooked());
@@ -1059,6 +1167,7 @@ class HospitalServiceTest {
                 session("U-DOCTOR-001", Role.USER),
                 new SubmitExaminationPlanRequest(
                         firstVisit.getAppointmentId(), "待查", "血常规", "", ""));
+        payExaminationBill(setupService, patient, firstVisit.getAppointmentId());
         setupService.publishDemoExaminationReport(
                 patient, new PublishDemoExaminationReportRequest(order.getOrderId()));
 
@@ -1146,6 +1255,7 @@ class HospitalServiceTest {
                 session("U-DOCTOR-001", Role.USER),
                 new SubmitExaminationPlanRequest(
                         firstVisit.getAppointmentId(), "待查", "血常规", "", ""));
+        payExaminationBill(setupService, patient, firstVisit.getAppointmentId());
         setupService.publishDemoExaminationReport(
                 patient, new PublishDemoExaminationReportRequest(order.getOrderId()));
         HospitalSlot candidate = repository.findSlotById("slot-general-3").orElseThrow();
@@ -1453,7 +1563,7 @@ class HospitalServiceTest {
                     BookAppointmentRequest.firstVisit("slot-general-3"));
         }
         assertEquals(1, service.searchSlots(
-                SearchSlotsRequest.firstVisit("dept-general", "doctor-liu"))
+                SearchSlotsRequest.firstVisit("dept-general", "doctor-wang"))
                 .getSlots().stream()
                 .filter(slot -> slot.getScheduleId().equals("slot-general-3"))
                 .findFirst()
@@ -1499,8 +1609,8 @@ class HospitalServiceTest {
             assertEquals(3, results.stream()
                     .filter(ErrorCodes.HOSPITAL_SLOT_FULL::equals)
                     .count());
-            assertEquals(0, service.searchSlots(
-                    SearchSlotsRequest.firstVisit("dept-general", "doctor-liu"))
+        assertEquals(0, service.searchSlots(
+                SearchSlotsRequest.firstVisit("dept-general", "doctor-wang"))
                     .getSlots().stream()
                     .filter(slot -> slot.getScheduleId().equals("slot-general-3"))
                     .findFirst()
@@ -1516,6 +1626,19 @@ class HospitalServiceTest {
         HospitalBusinessException exception = assertThrows(
                 HospitalBusinessException.class, action::run);
         assertEquals(expectedCode, exception.errorCode());
+    }
+
+    private static void payExaminationBill(
+            HospitalService target,
+            SessionInfo patient,
+            String appointmentId) {
+        String billId = target.listMyBills(patient).getBills().stream()
+                .filter(bill -> bill.getBillType() == HospitalBillType.EXAMINATION)
+                .filter(bill -> bill.getAppointmentId().equals(appointmentId))
+                .map(edu.seu.vcampus.common.hospital.PatientBillView::getBillId)
+                .findFirst()
+                .orElseThrow();
+        target.payBill(patient, new PayHospitalBillRequest(billId));
     }
 
     private static SubmitConsultationRequest consultationRequest(String appointmentId) {

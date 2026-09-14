@@ -13,6 +13,7 @@ public final class DoctorAppointmentView implements Serializable {
 
     private final String appointmentId;
     private final String patientUserId;
+    private final String patientName;
     private final int queueNumber;
     private final AppointmentStatus appointmentStatus;
     private final VisitType visitType;
@@ -38,8 +39,22 @@ public final class DoctorAppointmentView implements Serializable {
             VisitType visitType,
             String sourceAppointmentId,
             LocalDateTime bookedAt) {
+        this(appointmentId, patientUserId, patientUserId, queueNumber,
+                appointmentStatus, visitType, sourceAppointmentId, bookedAt);
+    }
+
+    public DoctorAppointmentView(
+            String appointmentId,
+            String patientUserId,
+            String patientName,
+            int queueNumber,
+            AppointmentStatus appointmentStatus,
+            VisitType visitType,
+            String sourceAppointmentId,
+            LocalDateTime bookedAt) {
         this.appointmentId = requireText(appointmentId, "appointmentId");
         this.patientUserId = requireText(patientUserId, "patientUserId");
+        this.patientName = requireText(patientName, "patientName");
         if (queueNumber <= 0) {
             throw new IllegalArgumentException("queueNumber must be positive");
         }
@@ -57,6 +72,10 @@ public final class DoctorAppointmentView implements Serializable {
 
     public String getPatientUserId() {
         return patientUserId;
+    }
+
+    public String getPatientName() {
+        return patientName == null ? patientUserId : patientName;
     }
 
     public int getQueueNumber() {

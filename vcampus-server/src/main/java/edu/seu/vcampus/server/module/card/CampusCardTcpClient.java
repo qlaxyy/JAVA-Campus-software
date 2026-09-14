@@ -2,6 +2,7 @@ package edu.seu.vcampus.server.module.card;
 
 import edu.seu.vcampus.common.card.CardActions;
 import edu.seu.vcampus.common.card.CardRechargeRequest;
+import edu.seu.vcampus.common.card.CardRefundDebitRequest;
 import edu.seu.vcampus.common.card.CardTransferRequest;
 import edu.seu.vcampus.common.card.CampusCardLedgerEntry;
 import edu.seu.vcampus.common.card.CampusCardLedgerResponse;
@@ -60,6 +61,24 @@ public final class CampusCardTcpClient implements CampusCardWallet {
                 session,
                 CardActions.CREDIT,
                 new CardTransferRequest(amountFen, merchant, reference)));
+    }
+
+    @Override
+    public boolean refundDebit(
+            SessionInfo actor,
+            String targetUserId,
+            int amountFen,
+            String merchant,
+            String debitReference,
+            String refundReference) {
+        Response response = send(actor, CardActions.REFUND_DEBIT,
+                new CardRefundDebitRequest(targetUserId, amountFen, merchant,
+                        debitReference, refundReference));
+        if (response.getData() instanceof Boolean refunded) {
+            return refunded;
+        }
+        throw new CardBusinessException(
+                ErrorCodes.COMMON_SERVER_ERROR, "校园卡退款响应格式无效。");
     }
 
     @Override

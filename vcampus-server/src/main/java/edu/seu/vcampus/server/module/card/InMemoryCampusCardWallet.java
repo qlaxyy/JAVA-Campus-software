@@ -88,6 +88,60 @@ public final class InMemoryCampusCardWallet implements CampusCardWallet {
     }
 
     @Override
+    public synchronized boolean refundDebit(
+            SessionInfo actor,
+            String targetUserId,
+            int amountFen,
+            String merchant,
+            String debitReference,
+            String refundReference) {
+        Objects.requireNonNull(actor, "actor must not be null");
+        requireTransfer(amountFen, merchant, debitReference);
+        requireTransfer(amountFen, merchant, refundReference);
+        if (!refundReference.equals(debitReference + ":refund")) {
+            throw new CardBusinessException(
+                    ErrorCodes.COMMON_INVALID_REQUEST, "退款业务单号与原扣款不匹配。");
+        }
+        boolean self = actor.getUserId().equals(targetUserId);
+        boolean hospitalAdministrator = ModuleNames.HOSPITAL.equals(merchant)
+                && actor.canAdminister(ModuleNames.HOSPITAL);
+        if (!self && !hospitalAdministrator) {
+            throw new CardBusinessException(ErrorCodes.AUTH_FORBIDDEN, "无权为该账户退款。");
+        }
+        CampusCardLedgerEntry debit = ledger.stream()
+                .filter(entry -> entry.getUserId().equals(targetUserId))
+                .filter(entry -> entry.getMerchant().equals(merchant))
+                .filter(entry -> entry.getReference().equals(debitReference))
+                .filter(entry -> CampusCardLedgerEntry.DEBIT.equals(entry.getEntryType()))
+                .findFirst().orElse(null);
+        if (debit == null) {
+            return false;
+        }
+        if (debit.getAmountFen() != amountFen) {
+            throw new CardBusinessException(
+                    ErrorCodes.COMMON_INVALID_REQUEST, "退款金额与原扣款不一致。");
+        }
+        if (alreadyPosted(targetUserId, merchant,
+                refundReference, CampusCardLedgerEntry.CREDIT)) {
+            return true;
+        }
+        CampusCardView current = cards.get(targetUserId);
+        if (current == null) {
+            throw new CardBusinessException(
+                    ErrorCodes.COMMON_SERVER_ERROR, "原扣款校园卡不存在。");
+        }
+        int next = Math.addExact(current.getBalanceFen(), amountFen);
+        if (next > MAX_BALANCE_FEN) {
+            throw new CardBusinessException(
+                    ErrorCodes.COMMON_INVALID_REQUEST, "校园卡余额已达上限。");
+        }
+        replace(current, next);
+        record(targetUserId, merchant, refundReference,
+                CampusCardLedgerEntry.CREDIT, amountFen);
+        return true;
+    }
+
+    @Override
     public synchronized List<CampusCardLedgerEntry> listLedger(SessionInfo session) {
         Objects.requireNonNull(session, "session must not be null");
         List<CampusCardLedgerEntry> mine = new ArrayList<>();
@@ -128,9 +182,18 @@ public final class InMemoryCampusCardWallet implements CampusCardWallet {
             String reference,
             String entryType,
             int amountFen) {
+        record(session.getUserId(), merchant, reference, entryType, amountFen);
+    }
+
+    private void record(
+            String userId,
+            String merchant,
+            String reference,
+            String entryType,
+            int amountFen) {
         ledger.add(new CampusCardLedgerEntry(
                 UUID.randomUUID().toString(),
-                session.getUserId(),
+                userId,
                 merchant,
                 reference,
                 entryType,

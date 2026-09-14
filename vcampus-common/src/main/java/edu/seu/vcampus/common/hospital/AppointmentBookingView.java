@@ -5,7 +5,7 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.Objects;
 
-/** Successful result of atomically booking a schedule and simulating payment. */
+/** Successful result of atomically booking a schedule and paying its registration fee. */
 public final class AppointmentBookingView implements Serializable {
 
     @Serial

@@ -12,6 +12,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 import java.util.Objects;
 
 /** Access-backed campus-card balances shared by every client. */
@@ -24,7 +25,7 @@ final class AccessCampusCardStore implements CampusCardRepository {
     AccessCampusCardStore(AccessDatabase database) {
         this.database = Objects.requireNonNull(database, "database must not be null");
         initializeSchema();
-        seedDemoBalances();
+        synchronizeCampusCards();
     }
 
     @Override
@@ -129,19 +130,40 @@ final class AccessCampusCardStore implements CampusCardRepository {
         }
     }
 
-    private void seedDemoBalances() {
+    /**
+     * Adds missing cards without changing an existing card owner or balance.
+     *
+     * <p>The complete campus server owns its account list in {@code tblUser}; an older
+     * database may use card numbers that have since been reassigned in the final-demo
+     * fixture.  Reading the actual accounts prevents a fixture from taking over those
+     * numbers during startup.  Standalone shop repositories do not have a user table,
+     * so they retain the original demo-fixture behavior.</p>
+     */
+    private void synchronizeCampusCards() {
         try (Connection connection = database.openConnection()) {
             connection.setAutoCommit(false);
-            try (PreparedStatement exists = connection.prepareStatement(
+            try (PreparedStatement userExists = connection.prepareStatement(
                     "SELECT userId FROM tblCampusCard WHERE userId = ?");
+                 PreparedStatement numberExists = connection.prepareStatement(
+                    "SELECT userId FROM tblCampusCard WHERE campusCardNumber = ?");
                  PreparedStatement insert = connection.prepareStatement(
                     "INSERT INTO tblCampusCard (userId, campusCardNumber, balanceFen) VALUES (?, ?, ?)")) {
                 int pendingInsertCount = 0;
-                for (FinalDemoRoster.AccountSeed account : FinalDemoRoster.accounts()) {
-                    exists.setString(1, account.userId());
-                    try (ResultSet result = exists.executeQuery()) {
+                for (CampusCardSeed account : cardSeeds(connection)) {
+                    userExists.setString(1, account.userId());
+                    try (ResultSet result = userExists.executeQuery()) {
                         if (result.next()) {
                             continue;
+                        }
+                    }
+                    numberExists.setString(1, account.campusCardNumber());
+                    try (ResultSet result = numberExists.executeQuery()) {
+                        if (result.next()) {
+                            throw new SQLException(
+                                    "Campus-card number " + account.campusCardNumber()
+                                            + " already belongs to user "
+                                            + result.getString("userId")
+                                            + "; cannot assign it to " + account.userId());
                         }
                     }
                     insert.setString(1, account.userId());
@@ -159,8 +181,27 @@ final class AccessCampusCardStore implements CampusCardRepository {
                 throw exception;
             }
         } catch (SQLException exception) {
-            throw failure("Cannot seed campus cards.", exception);
+            throw failure("Cannot synchronize campus cards with user accounts.", exception);
         }
+    }
+
+    private List<CampusCardSeed> cardSeeds(Connection connection) throws SQLException {
+        if (!tableExists(connection, "tblUser")) {
+            return FinalDemoRoster.accounts().stream()
+                    .map(account -> new CampusCardSeed(
+                            account.userId(), account.campusCardNumber()))
+                    .toList();
+        }
+        List<CampusCardSeed> accounts = new java.util.ArrayList<>();
+        try (Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery(
+                     "SELECT userId, username FROM tblUser ORDER BY username")) {
+            while (result.next()) {
+                accounts.add(new CampusCardSeed(
+                        result.getString("userId"), result.getString("username")));
+            }
+        }
+        return accounts;
     }
 
     private static boolean tableExists(Connection connection, String expected) throws SQLException {
@@ -177,5 +218,8 @@ final class AccessCampusCardStore implements CampusCardRepository {
 
     private IllegalStateException failure(String message, SQLException cause) {
         return new IllegalStateException(message + " Database: " + database.path(), cause);
+    }
+
+    private record CampusCardSeed(String userId, String campusCardNumber) {
     }
 }

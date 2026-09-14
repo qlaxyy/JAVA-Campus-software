@@ -14,21 +14,26 @@ import edu.seu.vcampus.common.hospital.VisitType;
 import edu.seu.vcampus.common.user.Role;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
+import edu.seu.vcampus.server.module.card.AccessCampusCardStore;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AccessHospitalRepositoryTest {
 
@@ -58,6 +63,30 @@ class AccessHospitalRepositoryTest {
     }
 
     @Test
+    void everyFinalBookableDepartmentHasAnActiveDoctorAndPublishedSchedule() {
+        AccessHospitalRepository repository = repository(
+                temporaryDirectory.resolve("expanded-specialties.accdb"));
+        List<HospitalDepartment> departments = repository.findActiveDepartments();
+        List<HospitalDoctor> doctors = repository.findActiveDoctors();
+        List<HospitalSlot> schedules = repository.findAllSlots();
+
+        for (String departmentId : departments.stream()
+                .filter(HospitalDepartment::bookable)
+                .map(HospitalDepartment::departmentId)
+                .toList()) {
+            assertTrue(doctors.stream().anyMatch(doctor ->
+                    doctor.departmentId().equals(departmentId)), departmentId);
+            assertTrue(schedules.stream().anyMatch(schedule ->
+                    schedule.departmentId().equals(departmentId)
+                            && schedule.published()
+                            && doctors.stream().anyMatch(doctor ->
+                                    doctor.doctorId().equals(schedule.doctorId())
+                                            && doctor.departmentId().equals(departmentId))),
+                    departmentId);
+        }
+    }
+
+    @Test
     void savesAndReloadsNewDoctorAccountBinding() {
         Path path = temporaryDirectory.resolve("new-doctor.accdb");
         AccessHospitalRepository repository = repository(path);
@@ -74,14 +103,64 @@ class AccessHospitalRepositoryTest {
     }
 
     @Test
+    void repairsLegacyDemoBindingsWithoutReactivatingAnExplicitlyStoppedDoctor() throws Exception {
+        Path path = temporaryDirectory.resolve("doctor-account-reconciliation.accdb");
+        AccessDatabase database = new AccessDatabase(path);
+        new AccessHospitalRepository(database, CLOCK);
+
+        try (Connection connection = database.openConnection()) {
+            try (PreparedStatement legacyChen = connection.prepareStatement(
+                    "UPDATE tblHospitalDoctor SET userId = ? WHERE doctorId = ?")) {
+                legacyChen.setString(1, "U-TEACHER-001");
+                legacyChen.setString(2, "doctor-chen");
+                assertEquals(1, legacyChen.executeUpdate());
+            }
+            try (PreparedStatement legacyLiu = connection.prepareStatement(
+                    "UPDATE tblHospitalDoctor SET userId = ? WHERE doctorId = ?")) {
+                legacyLiu.setString(1, "U-TEACHER-002");
+                legacyLiu.setString(2, "doctor-liu");
+                assertEquals(1, legacyLiu.executeUpdate());
+            }
+            try (PreparedStatement stopped = connection.prepareStatement(
+                    "INSERT INTO tblHospitalDoctor "
+                            + "(doctorId, userId, departmentId, doctorName, doctorTitle, "
+                            + "[active], createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")) {
+                stopped.setString(1, "doctor-explicitly-stopped");
+                stopped.setString(2, "U-DOCTOR-001");
+                stopped.setString(3, "dept-ent");
+                stopped.setString(4, "已停用医生");
+                stopped.setString(5, "主治医师");
+                stopped.setBoolean(6, false);
+                Timestamp now = Timestamp.valueOf(LocalDateTime.of(2026, 9, 3, 9, 0));
+                stopped.setTimestamp(7, now);
+                stopped.setTimestamp(8, now);
+                assertEquals(1, stopped.executeUpdate());
+            }
+        }
+
+        AccessHospitalRepository reopened = new AccessHospitalRepository(database, CLOCK);
+
+        HospitalDoctor migrated = reopened.findActiveDoctorByUserId("U-DOCTOR-002")
+                .orElseThrow();
+        assertEquals("doctor-liu", migrated.doctorId());
+        assertEquals("刘宁", migrated.doctorName());
+        assertFalse(reopened.isActiveDoctorUser("U-DOCTOR-001"));
+        assertTrue(reopened.findAllDoctors().stream().anyMatch(doctor ->
+                doctor.doctorId().equals("doctor-explicitly-stopped")
+                        && !doctor.active()));
+    }
+
+    @Test
     void insertsUpdatesAndReloadsDepartmentCatalog() {
         Path path = temporaryDirectory.resolve("department-maintenance.accdb");
         AccessHospitalRepository first = repository(path);
+        int initialDepartmentCount = first.findActiveDepartments().size();
         HospitalDepartment created = new HospitalDepartment(
                 "dept-admin-test", "康复医学", null, false, true);
 
         first.insertDepartment(created);
-        assertEquals(16, repository(path).findActiveDepartments().size());
+        assertEquals(initialDepartmentCount + 1,
+                repository(path).findActiveDepartments().size());
 
         first = repository(path);
         first.updateDepartment(new HospitalDepartment(
@@ -414,6 +493,38 @@ class AccessHospitalRepositoryTest {
                 .orElseThrow();
         assertEquals(PaymentStatus.PAID, paid.getPaymentStatus());
         assertEquals(unpaid.getBillId(), paid.getBillId());
+    }
+
+    @Test
+    void paysAClinicalBillThroughTheAccessCampusCardLedger() {
+        Path path = temporaryDirectory.resolve("patient-bill-card-payment.accdb");
+        SessionInfo patient = new SessionInfo(
+                "token-bill-card-patient", "U-CARD-BILL-PATIENT", "20990001",
+                "校园卡缴费患者", Role.USER);
+        SessionInfo doctor = new SessionInfo(
+                "token-bill-card-doctor", "U-DOCTOR-001", "20260029",
+                "陈安", Role.USER);
+        AccessCampusCardStore cards = new AccessCampusCardStore(new AccessDatabase(path));
+        cards.recharge(patient, 10_000);
+        HospitalService service = new HospitalService(repository(path), CLOCK, cards);
+        String appointmentId = service.bookAppointment(
+                        patient, BookAppointmentRequest.firstVisit("slot-general-1"))
+                .getAppointmentId();
+        service.submitConsultation(doctor, new SubmitConsultationRequest(
+                appointmentId, "课程演示诊断", "", "课程演示处置", "无", "必要时复诊"));
+        var unpaid = service.listMyBills(patient).getBills().stream()
+                .filter(bill -> bill.getPaymentStatus() == PaymentStatus.UNPAID)
+                .findFirst().orElseThrow();
+
+        var paid = service.payBill(patient, new PayHospitalBillRequest(unpaid.getBillId()));
+
+        assertEquals(PaymentStatus.PAID, paid.getPaymentStatus());
+        assertEquals(7_000, cards.view(patient).getBalanceFen());
+        String debitReference = cards.listLedger(patient).stream()
+                .filter(entry -> entry.getReference().startsWith("bill:"))
+                .findFirst().orElseThrow().getReference();
+        assertTrue(debitReference.length() <= 73,
+                "the derived refund reference must fit Access TEXT(80)");
     }
 
     @Test

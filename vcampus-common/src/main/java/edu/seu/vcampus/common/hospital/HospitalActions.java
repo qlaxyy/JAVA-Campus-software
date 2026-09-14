@@ -16,6 +16,8 @@ public final class HospitalActions {
             ActionNames.of(ModuleNames.HOSPITAL, "SEARCH_SLOTS");
     public static final String SUBMIT_DOCTOR_APPLICATION =
             ActionNames.of(ModuleNames.HOSPITAL, "SUBMIT_DOCTOR_APPLICATION");
+    public static final String SUBMIT_DOCTOR_DEACTIVATION =
+            ActionNames.of(ModuleNames.HOSPITAL, "SUBMIT_DOCTOR_DEACTIVATION");
     public static final String LIST_DOCTOR_APPLICATIONS =
             ActionNames.of(ModuleNames.HOSPITAL, "LIST_DOCTOR_APPLICATIONS");
     public static final String REVIEW_DOCTOR_APPLICATION =

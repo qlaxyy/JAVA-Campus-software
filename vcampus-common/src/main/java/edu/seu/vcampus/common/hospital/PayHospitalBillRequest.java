@@ -4,7 +4,7 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
-/** Requests simulated payment of one patient-owned hospital bill. */
+/** Requests campus-card payment of one patient-owned hospital bill. */
 public final class PayHospitalBillRequest implements Serializable {
 
     @Serial

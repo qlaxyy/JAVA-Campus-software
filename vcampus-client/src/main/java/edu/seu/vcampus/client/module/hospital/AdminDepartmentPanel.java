@@ -59,7 +59,7 @@ final class AdminDepartmentPanel extends JPanel {
         setBackground(HospitalTheme.BACKGROUND);
         setBorder(BorderFactory.createEmptyBorder(22, 26, 22, 26));
         add(HospitalResponsiveLayout.constrainWidth(header()), BorderLayout.NORTH);
-        add(content(), BorderLayout.CENTER);
+        add(HospitalResponsiveLayout.constrainWidth(content()), BorderLayout.CENTER);
         configureActions();
     }
 
@@ -69,22 +69,12 @@ final class AdminDepartmentPanel extends JPanel {
     }
 
     private JPanel header() {
-        JPanel panel = new JPanel(new BorderLayout(16, 0));
-        panel.setOpaque(false);
-        JPanel copy = verticalList();
-        JLabel title = new JLabel("科室目录");
-        title.setFont(HospitalTheme.uiFont(Font.BOLD, 28F));
-        title.setForeground(HospitalTheme.TEXT);
-        JLabel subtitle = new JLabel("维护科室层级和挂号入口；历史业务数据不会被删除");
-        subtitle.setForeground(HospitalTheme.MUTED);
-        copy.add(title);
-        copy.add(Box.createVerticalStrut(4));
-        copy.add(subtitle);
-        JButton backButton = HospitalTheme.quietButton("‹ 返回管理首页");
-        backButton.addActionListener(event -> back.run());
-        panel.add(copy, BorderLayout.CENTER);
-        panel.add(backButton, BorderLayout.EAST);
-        return panel;
+        return HospitalPageHeader.create(
+                "科室目录",
+                "维护科室层级和挂号入口；历史业务数据不会被删除",
+                "管理首页",
+                back,
+                null);
     }
 
     private JPanel content() {

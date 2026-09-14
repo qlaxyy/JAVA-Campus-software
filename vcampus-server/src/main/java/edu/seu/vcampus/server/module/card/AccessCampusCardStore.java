@@ -91,6 +91,74 @@ public final class AccessCampusCardStore implements CampusCardWallet {
     }
 
     @Override
+    public boolean refundDebit(
+            SessionInfo actor,
+            String targetUserId,
+            int amountFen,
+            String merchant,
+            String debitReference,
+            String refundReference) {
+        Objects.requireNonNull(actor, "actor must not be null");
+        requireRefundAuthority(actor, targetUserId, merchant);
+        if (amountFen < 1 || debitReference == null || debitReference.isBlank()
+                || refundReference == null || refundReference.isBlank()) {
+            throw new CardBusinessException(
+                    ErrorCodes.COMMON_INVALID_REQUEST, "退款金额或业务单号无效。");
+        }
+        if (!refundReference.equals(debitReference + ":refund")) {
+            throw new CardBusinessException(
+                    ErrorCodes.COMMON_INVALID_REQUEST, "退款业务单号与原扣款不匹配。");
+        }
+        synchronized (this) {
+            try (Connection connection = database.openConnection()) {
+                connection.setAutoCommit(false);
+                try {
+                    CampusCardLedgerEntry debit = findLedger(
+                            connection, targetUserId, merchant,
+                            debitReference, CampusCardLedgerEntry.DEBIT);
+                    if (debit == null) {
+                        connection.commit();
+                        return false;
+                    }
+                    if (debit.getAmountFen() != amountFen) {
+                        throw new CardBusinessException(
+                                ErrorCodes.COMMON_INVALID_REQUEST,
+                                "退款金额与原扣款不一致。");
+                    }
+                    if (findLedger(connection, targetUserId, merchant,
+                            refundReference, CampusCardLedgerEntry.CREDIT) != null) {
+                        connection.commit();
+                        return true;
+                    }
+                    CampusCardView current = findCard(connection, targetUserId);
+                    if (current == null) {
+                        throw new CardBusinessException(
+                                ErrorCodes.COMMON_SERVER_ERROR, "原扣款校园卡不存在。");
+                    }
+                    int next = Math.addExact(current.getBalanceFen(), amountFen);
+                    if (next > MAX_BALANCE_FEN) {
+                        throw new CardBusinessException(
+                                ErrorCodes.COMMON_INVALID_REQUEST, "校园卡余额已达上限。");
+                    }
+                    updateBalance(connection, targetUserId, next);
+                    insertLedger(connection, targetUserId, merchant,
+                            refundReference, CampusCardLedgerEntry.CREDIT, amountFen);
+                    connection.commit();
+                    return true;
+                } catch (CardBusinessException exception) {
+                    rollback(connection);
+                    throw exception;
+                } catch (SQLException exception) {
+                    rollback(connection);
+                    throw exception;
+                }
+            } catch (SQLException exception) {
+                throw failure("Cannot refund campus-card debit.", exception);
+            }
+        }
+    }
+
+    @Override
     public List<CampusCardLedgerEntry> listLedger(SessionInfo session) {
         Objects.requireNonNull(session, "session must not be null");
         String sql = "SELECT * FROM tblCampusCardLedger WHERE userId = ? ORDER BY createdAt DESC";
@@ -235,18 +303,43 @@ public final class AccessCampusCardStore implements CampusCardWallet {
             String reference,
             String entryType,
             int amountFen) throws SQLException {
+        insertLedger(connection, session.getUserId(), merchant, reference, entryType, amountFen);
+    }
+
+    private void insertLedger(
+            Connection connection,
+            String userId,
+            String merchant,
+            String reference,
+            String entryType,
+            int amountFen) throws SQLException {
         String sql = "INSERT INTO tblCampusCardLedger "
                 + "(txnId, userId, merchant, reference, entryType, amountFen, createdAt) "
                 + "VALUES (?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, UUID.randomUUID().toString());
-            statement.setString(2, session.getUserId());
+            statement.setString(2, userId);
             statement.setString(3, merchant);
             statement.setString(4, reference);
             statement.setString(5, entryType);
             statement.setInt(6, amountFen);
             statement.setTimestamp(7, Timestamp.valueOf(LocalDateTime.now()));
             statement.executeUpdate();
+        }
+    }
+
+    private static void requireRefundAuthority(
+            SessionInfo actor, String targetUserId, String merchant) {
+        if (targetUserId == null || targetUserId.isBlank()
+                || merchant == null || merchant.isBlank()) {
+            throw new CardBusinessException(
+                    ErrorCodes.COMMON_INVALID_REQUEST, "退款对象或商户无效。");
+        }
+        boolean self = actor.getUserId().equals(targetUserId);
+        boolean hospitalAdministrator = ModuleNames.HOSPITAL.equals(merchant)
+                && actor.canAdminister(ModuleNames.HOSPITAL);
+        if (!self && !hospitalAdministrator) {
+            throw new CardBusinessException(ErrorCodes.AUTH_FORBIDDEN, "无权为该账户退款。");
         }
     }
 

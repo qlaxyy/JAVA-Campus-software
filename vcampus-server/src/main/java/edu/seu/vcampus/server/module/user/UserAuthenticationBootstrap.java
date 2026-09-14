@@ -14,7 +14,7 @@ public final class UserAuthenticationBootstrap {
     public static InMemoryAuthenticationService createAccessBacked(Path databasePath) {
         AccessUserRepository repository = new AccessUserRepository(
                 new AccessDatabase(databasePath));
-        DemoUserAccounts.seedIfEmpty(repository);
+        DemoUserAccounts.seedMissingAccounts(repository);
         return new InMemoryAuthenticationService(repository);
     }
 }

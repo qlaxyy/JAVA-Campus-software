@@ -40,6 +40,8 @@ public final class ErrorCodes {
             "HOSPITAL_BILL_NOT_FOUND";
     public static final String HOSPITAL_BILL_NOT_PAYABLE =
             "HOSPITAL_BILL_NOT_PAYABLE";
+    public static final String HOSPITAL_EXAMINATION_PAYMENT_REQUIRED =
+            "HOSPITAL_EXAMINATION_PAYMENT_REQUIRED";
     public static final String HOSPITAL_SLOT_FULL = "HOSPITAL_SLOT_FULL";
     public static final String HOSPITAL_DUPLICATE_APPOINTMENT =
             "HOSPITAL_DUPLICATE_APPOINTMENT";

@@ -7,6 +7,7 @@ import edu.seu.vcampus.common.hospital.PatientBillListResponse;
 import edu.seu.vcampus.common.hospital.PatientBillView;
 import edu.seu.vcampus.common.hospital.PayHospitalBillRequest;
 import edu.seu.vcampus.common.hospital.PaymentStatus;
+import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.Response;
 
 import javax.swing.BorderFactory;
@@ -15,7 +16,6 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.SwingWorker;
@@ -33,7 +33,7 @@ import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Predicate;
 
-/** Patient-owned hospital fee statement and simulated payment workflow. */
+/** Patient-owned hospital fee statement and campus-card payment workflow. */
 final class PatientBillsPanel extends JPanel {
 
     private static final int AUTO_REFRESH_MILLIS = 15_000;
@@ -63,7 +63,8 @@ final class PatientBillsPanel extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(24, 28, 24, 28));
         add(HospitalResponsiveLayout.constrainWidth(createHeader(back)),
                 BorderLayout.NORTH);
-        add(createContent(), BorderLayout.CENTER);
+        add(HospitalResponsiveLayout.constrainWidth(createContent()),
+                BorderLayout.CENTER);
 
         billList.setName("patientBillList");
         allButton.setName("allBillsFilterButton");
@@ -101,37 +102,25 @@ final class PatientBillsPanel extends JPanel {
     }
 
     private JComponent createHeader(Runnable back) {
-        JPanel header = new JPanel(new BorderLayout(18, 0));
-        header.setOpaque(false);
-        JPanel copy = new JPanel();
-        copy.setOpaque(false);
-        copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
-        JLabel title = new JLabel("费用清单");
-        title.setFont(HospitalTheme.uiFont(Font.BOLD, 28F));
-        title.setForeground(HospitalTheme.TEXT);
-        JLabel subtitle = new JLabel("查看挂号、检查和诊疗费用；支付仅为课程流程模拟");
-        subtitle.setFont(HospitalTheme.uiFont(Font.PLAIN, 14F));
-        subtitle.setForeground(HospitalTheme.MUTED);
-        copy.add(title);
-        copy.add(Box.createVerticalStrut(5));
-        copy.add(subtitle);
-        JButton backButton = HospitalTheme.quietButton("返回医院首页");
-        backButton.addActionListener(event -> back.run());
-        header.add(copy, BorderLayout.CENTER);
-        header.add(backButton, BorderLayout.EAST);
-        return header;
+        return HospitalPageHeader.create(
+                "费用清单",
+                "查看挂号、检查和诊疗费用，并使用校园卡完成支付",
+                "医院首页",
+                back,
+                null);
     }
 
     private JComponent createContent() {
         JPanel content = new JPanel(new BorderLayout(0, 14));
+        content.setName("patientBillContent");
         content.setOpaque(false);
 
         HospitalTheme.SurfacePanel statement = new HospitalTheme.SurfacePanel(
                 HospitalTheme.PRIMARY_DARK, 16);
         statement.setLayout(new BorderLayout(16, 0));
         statement.setBorder(BorderFactory.createEmptyBorder(16, 20, 16, 20));
-        JLabel caption = new JLabel("PATIENT ACCOUNT · 校医院收费流水");
-        caption.setFont(HospitalTheme.dataFont(Font.BOLD, 12F));
+        JLabel caption = new JLabel("校医院收费记录");
+        caption.setFont(HospitalTheme.uiFont(Font.BOLD, 12F));
         caption.setForeground(new Color(179, 215, 209));
         summaryLabel.setFont(HospitalTheme.uiFont(Font.BOLD, 17F));
         summaryLabel.setForeground(Color.WHITE);
@@ -307,7 +296,7 @@ final class PatientBillsPanel extends JPanel {
         visit.setForeground(HospitalTheme.MUTED);
         JLabel billNumber = new JLabel("费用单 " + bill.getBillId()
                 + "  · 生成于 " + DATE_TIME_FORMAT.format(bill.getCreatedAt()));
-        billNumber.setFont(HospitalTheme.dataFont(Font.PLAIN, 12F));
+        billNumber.setFont(HospitalTheme.uiFont(Font.PLAIN, 12F));
         billNumber.setForeground(HospitalTheme.MUTED);
         copy.add(heading);
         copy.add(Box.createVerticalStrut(7));
@@ -323,7 +312,7 @@ final class PatientBillsPanel extends JPanel {
         state.setFont(HospitalTheme.uiFont(Font.BOLD, 13F));
         state.setAlignmentX(Component.RIGHT_ALIGNMENT);
         JLabel value = new JLabel(money(bill.getAmountCents()));
-        value.setFont(HospitalTheme.dataFont(Font.BOLD, 23F));
+        value.setFont(HospitalTheme.valueFont(value.getText(), Font.BOLD, 23F));
         value.setForeground(HospitalTheme.TEXT);
         value.setAlignmentX(Component.RIGHT_ALIGNMENT);
         amount.add(state);
@@ -331,7 +320,7 @@ final class PatientBillsPanel extends JPanel {
         amount.add(value);
         amount.add(Box.createVerticalStrut(10));
         if (bill.getPaymentStatus() == PaymentStatus.UNPAID) {
-            JButton pay = HospitalTheme.primaryButton("模拟缴费");
+            JButton pay = HospitalTheme.primaryButton("校园卡缴费");
             pay.setName("payHospitalBillButton");
             pay.setActionCommand(bill.getBillId());
             pay.setAlignmentX(Component.RIGHT_ALIGNMENT);
@@ -355,15 +344,12 @@ final class PatientBillsPanel extends JPanel {
         if (busy) {
             return;
         }
-        int choice = JOptionPane.showConfirmDialog(
-                this,
-                "确认模拟支付以下费用？\n\n"
+        if (HospitalDialogs.confirm(
+                this, "校园卡缴费",
+                "确认使用校园卡支付以下费用？\n\n"
                         + bill.getItemName() + "\n" + money(bill.getAmountCents())
-                        + "\n\n本操作只用于课程项目，不会发生真实扣款。",
-                "模拟缴费",
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.QUESTION_MESSAGE);
-        if (choice == JOptionPane.OK_OPTION) {
+                        + "\n\n确认后将从当前账号的校园卡余额中扣除。",
+                "确认并支付", false)) {
             payBill(bill);
         }
     }
@@ -372,7 +358,7 @@ final class PatientBillsPanel extends JPanel {
         int version = ++requestVersion;
         String requestedUserId = currentUserId();
         busy = true;
-        statusLabel.setText("正在完成模拟缴费……");
+        statusLabel.setText("正在使用校园卡缴费……");
         new SwingWorker<Response, Void>() {
             @Override
             protected Response doInBackground() throws Exception {
@@ -393,7 +379,7 @@ final class PatientBillsPanel extends JPanel {
                         busy = false;
                         loadBills();
                     } else {
-                        statusLabel.setText("缴费失败：" + safeMessage(response.getMessage()));
+                        statusLabel.setText("缴费失败：" + paymentFailureMessage(response));
                         statusLabel.setForeground(HospitalTheme.WARNING);
                         busy = false;
                     }
@@ -452,6 +438,16 @@ final class PatientBillsPanel extends JPanel {
             return "支付于 " + DATE_TIME_FORMAT.format(bill.getPaidAt());
         }
         return "状态已完成";
+    }
+
+    private static String paymentFailureMessage(Response response) {
+        if (ErrorCodes.CARD_INSUFFICIENT_BALANCE.equals(response.getCode())) {
+            return "校园卡余额不足，请先充值。";
+        }
+        if (ErrorCodes.COMMON_SERVER_ERROR.equals(response.getCode())) {
+            return "服务器暂时无法完成缴费，请稍后重试。";
+        }
+        return safeMessage(response.getMessage());
     }
 
     private static String safeMessage(String message) {

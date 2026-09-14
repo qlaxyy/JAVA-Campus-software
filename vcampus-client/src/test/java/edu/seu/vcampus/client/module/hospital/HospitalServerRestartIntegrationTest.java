@@ -15,6 +15,9 @@ import edu.seu.vcampus.common.hospital.DoctorConsultationContextView;
 import edu.seu.vcampus.common.hospital.ExaminationOrderView;
 import edu.seu.vcampus.common.hospital.ExaminationStatus;
 import edu.seu.vcampus.common.hospital.HospitalActions;
+import edu.seu.vcampus.common.hospital.HospitalBillType;
+import edu.seu.vcampus.common.hospital.PatientBillListResponse;
+import edu.seu.vcampus.common.hospital.PayHospitalBillRequest;
 import edu.seu.vcampus.common.hospital.PatientHealthRecordView;
 import edu.seu.vcampus.common.hospital.PaymentStatus;
 import edu.seu.vcampus.common.hospital.PublishDemoExaminationReportRequest;
@@ -116,6 +119,16 @@ class HospitalServerRestartIntegrationTest {
             assertEquals(ConsultationOutcome.WAITING_FOR_RESULTS, stage.getOutcome());
             assertEquals("检查期间留意体温。", stage.getTreatmentAdvice());
             assertEquals(AppointmentStatus.COMPLETED, appointment(patient, appointmentId).getAppointmentStatus());
+            PatientBillListResponse bills = send(
+                    patient, HospitalActions.LIST_MY_BILLS, null,
+                    PatientBillListResponse.class);
+            String examinationBillId = bills.getBills().stream()
+                    .filter(bill -> bill.getBillType() == HospitalBillType.EXAMINATION)
+                    .filter(bill -> bill.getAppointmentId().equals(appointmentId))
+                    .findFirst().orElseThrow().getBillId();
+            send(patient, HospitalActions.PAY_BILL,
+                    new PayHospitalBillRequest(examinationBillId),
+                    edu.seu.vcampus.common.hospital.PatientBillView.class);
             ExaminationOrderView reported = send(patient, HospitalActions.PUBLISH_DEMO_EXAMINATION_REPORT,
                     new PublishDemoExaminationReportRequest(order.getOrderId()), ExaminationOrderView.class);
             assertEquals(ExaminationStatus.RESULT_READY, reported.getStatus());

@@ -15,6 +15,7 @@ public final class CardActions {
     public static final String RECHARGE = ActionNames.of(ModuleNames.CARD, "RECHARGE");
     public static final String DEBIT = ActionNames.of(ModuleNames.CARD, "DEBIT");
     public static final String CREDIT = ActionNames.of(ModuleNames.CARD, "CREDIT");
+    public static final String REFUND_DEBIT = ActionNames.of(ModuleNames.CARD, "REFUND_DEBIT");
     public static final String LIST_LEDGER = ActionNames.of(ModuleNames.CARD, "LIST_LEDGER");
 
     private CardActions() {

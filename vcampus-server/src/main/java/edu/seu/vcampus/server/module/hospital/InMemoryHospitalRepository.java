@@ -138,40 +138,40 @@ final class InMemoryHospitalRepository implements HospitalRepository {
                         "doctor-chen", "陈医生", "主治医师",
                         today.plusDays(3), 14, 0, 1_200, 10, 0, true),
                 slot("slot-general-3", "dept-general", "全科门诊",
-                        "doctor-liu", "刘医生", "副主任医师",
+                        "doctor-wang", "钱宁", "医师",
                         today.plusDays(2), 9, 30, 1_800, 8, 2, true),
                 slot("slot-general-4", "dept-general", "全科门诊",
                         "doctor-chen", "陈医生", "主治医师",
                         today.plusDays(4), 10, 0, 1_200, 10, 0, true),
                 slot("slot-respiratory-1", "dept-respiratory", "呼吸内科",
-                        "doctor-zhou", "周医生", "主治医师",
+                        "doctor-liu", "刘宁", "副主任医师",
                         today.plusDays(1), 10, 0, 1_600, 8, 3, true),
                 slot("slot-gastroenterology-1", "dept-gastroenterology", "消化内科",
-                        "doctor-qian", "钱医生", "副主任医师",
+                        "doctor-zhou", "周岚", "主治医师",
                         today.plusDays(2), 14, 30, 1_800, 8, 1, true),
                 slot("slot-joint-lin-am", "dept-joint-surgery", "骨关节外科",
-                        "doctor-lin", "林医生", "副主任医师",
+                        "doctor-qian", "何远", "副主任医师",
                         today.plusDays(1), 8, 30, 2_200, 8, 3, true),
                 slot("slot-joint-lin-pm", "dept-joint-surgery", "骨关节外科",
-                        "doctor-lin", "林医生", "副主任医师",
+                        "doctor-qian", "何远", "副主任医师",
                         today.plusDays(1), 14, 0, 2_200, 6, 1, true),
                 slot("slot-joint-he-1", "dept-joint-surgery", "骨关节外科",
-                        "doctor-he", "何医生", "主治医师",
+                        "doctor-qian", "何远", "副主任医师",
                         today.plusDays(2), 9, 0, 1_800, 10, 4, true),
                 slot("slot-sports-1", "dept-sports-medicine", "运动医学科",
-                        "doctor-wu", "吴医生", "主治医师",
+                        "doctor-lin", "王清", "主治医师",
                         today.plusDays(3), 15, 30, 1_800, 8, 2, true),
                 slot("slot-psychology-1", "dept-psychology", "心理咨询",
-                        "doctor-zhang", "张医生", "主治医师",
+                        "doctor-he", "赵健", "医师",
                         today.plusDays(1), 9, 0, 2_000, 6, 2, true),
                 slot("slot-psychology-2", "dept-psychology", "心理咨询",
-                        "doctor-wang", "王医生", "副主任医师",
+                        "doctor-he", "赵健", "医师",
                         today.plusDays(4), 15, 0, 2_600, 5, 5, true),
                 slot("slot-dental-1", "dept-dental", "口腔综合门诊",
-                        "doctor-zhao", "赵医生", "主治医师",
+                        "doctor-wu", "孙悦", "主治医师",
                         today.plusDays(2), 10, 0, 1_500, 8, 3, true),
                 slot("slot-dental-2", "dept-dental", "口腔综合门诊",
-                        "doctor-zhao", "赵医生", "主治医师",
+                        "doctor-wu", "孙悦", "主治医师",
                         today.plusDays(6), 13, 30, 1_500, 8, 1, true),
                 slot("slot-eye-1", "dept-eye", "眼科门诊",
                         "doctor-zhang", "林川", "主治医师",
@@ -224,6 +224,34 @@ final class InMemoryHospitalRepository implements HospitalRepository {
 
     @Override
     public void saveDoctorApplication(DoctorApplication application) {
+        doctorApplications.put(application.requestId(), application);
+    }
+
+    @Override
+    public synchronized void approveDoctorDeactivation(DoctorApplication application) {
+        String doctorId = application.targetDoctorId();
+        int index = -1;
+        for (int candidate = 0; candidate < doctors.size(); candidate++) {
+            if (doctors.get(candidate).doctorId().equals(doctorId)) {
+                index = candidate;
+                break;
+            }
+        }
+        if (index < 0 || !doctors.get(index).active()) {
+            throw new IllegalStateException("doctor is missing or inactive");
+        }
+        HospitalDoctor current = doctors.get(index);
+        doctors.set(index, new HospitalDoctor(
+                current.doctorId(), current.userId(), current.departmentId(),
+                current.doctorName(), current.doctorTitle(), false));
+        if (current.userId() != null) {
+            DoctorProfile profile = doctorProfiles.get(current.userId());
+            if (profile != null) {
+                doctorProfiles.put(current.userId(), new DoctorProfile(
+                        profile.userId(), profile.departmentId(), profile.doctorName(),
+                        profile.doctorTitle(), false));
+            }
+        }
         doctorApplications.put(application.requestId(), application);
     }
 

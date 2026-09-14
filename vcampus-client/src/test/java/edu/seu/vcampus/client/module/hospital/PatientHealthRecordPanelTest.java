@@ -8,6 +8,9 @@ import edu.seu.vcampus.common.hospital.BookResultReviewRequest;
 import edu.seu.vcampus.common.hospital.ConsultationRecordView;
 import edu.seu.vcampus.common.hospital.ExaminationOrderView;
 import edu.seu.vcampus.common.hospital.HospitalActions;
+import edu.seu.vcampus.common.hospital.HospitalBillType;
+import edu.seu.vcampus.common.hospital.PatientBillListResponse;
+import edu.seu.vcampus.common.hospital.PayHospitalBillRequest;
 import edu.seu.vcampus.common.hospital.PublishDemoExaminationReportRequest;
 import edu.seu.vcampus.common.hospital.SubmitConsultationRequest;
 import edu.seu.vcampus.common.hospital.SubmitExaminationPlanRequest;
@@ -163,8 +166,11 @@ class PatientHealthRecordPanelTest {
                     "20260006", "123456".toCharArray()).isSuccess());
 
             PatientHealthRecordPanel[] panel = new PatientHealthRecordPanel[1];
+            AtomicBoolean openedBills = new AtomicBoolean();
             SwingUtilities.invokeAndWait(() -> {
-                panel[0] = new PatientHealthRecordPanel(context, () -> { });
+                panel[0] = new PatientHealthRecordPanel(
+                        context, () -> { }, ignored -> { },
+                        () -> openedBills.set(true));
                 panel[0].activate();
             });
             assertTrue(awaitCondition(() -> namedButtons(
@@ -173,6 +179,30 @@ class PatientHealthRecordPanelTest {
                     panel[0], "openPatientReportsButton").getFirst().doClick());
             assertEquals(1, namedButtons(
                     panel[0], "openPatientReportDetailButton").size());
+            SwingUtilities.invokeAndWait(() -> namedButtons(
+                    panel[0], "openPatientReportDetailButton").getFirst().doClick());
+            assertEquals(1, namedButtons(
+                    panel[0], "openExaminationBillButton").size());
+            assertTrue(namedButtons(panel[0], "publishDemoReportButton").isEmpty());
+            SwingUtilities.invokeAndWait(() -> namedButtons(
+                    panel[0], "openExaminationBillButton").getFirst().doClick());
+            assertTrue(openedBills.get());
+
+            PatientBillListResponse bills = assertInstanceOf(
+                    PatientBillListResponse.class,
+                    context.send(HospitalActions.LIST_MY_BILLS, null).getData());
+            String examinationBillId = bills.getBills().stream()
+                    .filter(bill -> bill.getBillType() == HospitalBillType.EXAMINATION)
+                    .filter(bill -> bill.getAppointmentId().equals(booking.getAppointmentId()))
+                    .findFirst().orElseThrow().getBillId();
+            assertTrue(context.send(
+                    HospitalActions.PAY_BILL,
+                    new PayHospitalBillRequest(examinationBillId)).isSuccess());
+            SwingUtilities.invokeAndWait(panel[0]::activate);
+            assertTrue(awaitCondition(() -> namedButtons(
+                    panel[0], "openPatientReportsButton").size() == 1));
+            SwingUtilities.invokeAndWait(() -> namedButtons(
+                    panel[0], "openPatientReportsButton").getFirst().doClick());
             SwingUtilities.invokeAndWait(() -> namedButtons(
                     panel[0], "openPatientReportDetailButton").getFirst().doClick());
             assertEquals(1, namedButtons(panel[0], "publishDemoReportButton").size());

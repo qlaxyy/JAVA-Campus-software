@@ -76,7 +76,8 @@ final class AdminSchedulePanel extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(24, 28, 24, 28));
         add(HospitalResponsiveLayout.constrainWidth(createHeader(back)),
                 BorderLayout.NORTH);
-        add(createBody(), BorderLayout.CENTER);
+        add(HospitalResponsiveLayout.constrainWidth(createBody()),
+                BorderLayout.CENTER);
 
         doctorBox.setName("adminScheduleDoctorBox");
         dateField.setName("adminScheduleDateField");
@@ -98,25 +99,12 @@ final class AdminSchedulePanel extends JPanel {
     }
 
     private JComponent createHeader(Runnable back) {
-        JPanel header = new JPanel(new BorderLayout(18, 0));
-        header.setOpaque(false);
-        JPanel copy = new JPanel();
-        copy.setOpaque(false);
-        copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
-        JLabel title = new JLabel("排班管理");
-        title.setFont(HospitalTheme.uiFont(Font.BOLD, 28F));
-        title.setForeground(HospitalTheme.TEXT);
-        JLabel subtitle = new JLabel("先建立草稿，核对时间和号数后再向患者发布");
-        subtitle.setFont(HospitalTheme.uiFont(Font.PLAIN, 14F));
-        subtitle.setForeground(HospitalTheme.MUTED);
-        copy.add(title);
-        copy.add(Box.createVerticalStrut(5));
-        copy.add(subtitle);
-        JButton backButton = HospitalTheme.quietButton("返回管理工作台");
-        backButton.addActionListener(event -> back.run());
-        header.add(copy, BorderLayout.CENTER);
-        header.add(backButton, BorderLayout.EAST);
-        return header;
+        return HospitalPageHeader.create(
+                "排班管理",
+                "先建立草稿，核对时间和号数后再向患者发布",
+                "管理首页",
+                back,
+                null);
     }
 
     private JComponent createBody() {
@@ -138,17 +126,12 @@ final class AdminSchedulePanel extends JPanel {
         JPanel heading = new JPanel();
         heading.setOpaque(false);
         heading.setLayout(new BoxLayout(heading, BoxLayout.Y_AXIS));
-        JLabel eyebrow = new JLabel("NEW SCHEDULE");
-        eyebrow.setFont(HospitalTheme.dataFont(Font.BOLD, 11F));
-        eyebrow.setForeground(HospitalTheme.PRIMARY);
         JLabel title = new JLabel("新建排班草稿");
         title.setFont(HospitalTheme.uiFont(Font.BOLD, 21F));
         title.setForeground(HospitalTheme.TEXT);
         JLabel note = new JLabel("草稿不会出现在患者挂号和医生工作台中。");
         note.setFont(HospitalTheme.uiFont(Font.PLAIN, 13F));
         note.setForeground(HospitalTheme.MUTED);
-        heading.add(eyebrow);
-        heading.add(Box.createVerticalStrut(5));
         heading.add(title);
         heading.add(Box.createVerticalStrut(4));
         heading.add(note);
@@ -279,6 +262,9 @@ final class AdminSchedulePanel extends JPanel {
         String selectedDoctorId = selected == null ? null : selected.getDoctorId();
         doctorBox.removeAllItems();
         for (AdminDoctorView doctor : data.getDoctors()) {
+            if (!doctor.isActive()) {
+                continue;
+            }
             doctorBox.addItem(doctor);
             if (doctor.getDoctorId().equals(selectedDoctorId)) {
                 doctorBox.setSelectedItem(doctor);
@@ -342,7 +328,7 @@ final class AdminSchedulePanel extends JPanel {
         JLabel quota = new JLabel("号数 " + schedule.getCapacity()
                 + " · 已预约 " + booked
                 + " · 挂号费 ¥" + String.format("%.2f", schedule.getPriceCents() / 100.0));
-        quota.setFont(HospitalTheme.dataFont(Font.PLAIN, 13F));
+        quota.setFont(HospitalTheme.uiFont(Font.PLAIN, 13F));
         quota.setForeground(HospitalTheme.TEXT);
         copy.add(time);
         copy.add(Box.createVerticalStrut(5));

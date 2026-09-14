@@ -94,7 +94,7 @@ final class ConsultationRecordsPanel extends JPanel {
     private JPanel createListPage(Runnable backToPatientHome) {
         JPanel page = basePage();
         page.add(header(
-                "‹ 返回患者首页",
+                "患者首页",
                 backToPatientHome,
                 "问诊记录",
                 "查看医生完成并签署的诊断与处置"), BorderLayout.NORTH);
@@ -109,7 +109,7 @@ final class ConsultationRecordsPanel extends JPanel {
         JPanel page = basePage();
         JPanel header = new JPanel(new BorderLayout(18, 0));
         header.setOpaque(false);
-        JButton back = HospitalTheme.quietButton("‹ 返回问诊记录");
+        JButton back = HospitalTheme.backButton("问诊记录");
         back.setName("consultationBackButton");
         back.addActionListener(event -> cards.show(pages, LIST_PAGE));
         JPanel copy = verticalList();
@@ -159,7 +159,7 @@ final class ConsultationRecordsPanel extends JPanel {
         card.setLayout(new BorderLayout(18, 0));
         card.setBorder(BorderFactory.createEmptyBorder(16, 18, 16, 18));
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 136));
-        card.setPreferredSize(new Dimension(850, 136));
+        card.setPreferredSize(new Dimension(1, 136));
 
         HospitalTheme.SurfacePanel date = new HospitalTheme.SurfacePanel(
                 HospitalTheme.PRIMARY_LIGHT, 12);
@@ -193,7 +193,7 @@ final class ConsultationRecordsPanel extends JPanel {
         diagnosis.setFont(HospitalTheme.uiFont(Font.PLAIN, 13F));
         diagnosis.setForeground(HospitalTheme.TEXT);
         JLabel id = new JLabel("记录编号 " + record.getConsultationId());
-        id.setFont(HospitalTheme.dataFont(Font.PLAIN, 11F));
+        id.setFont(HospitalTheme.uiFont(Font.PLAIN, 11F));
         id.setForeground(HospitalTheme.MUTED);
         copy.add(heading);
         copy.add(Box.createVerticalStrut(8));
@@ -308,23 +308,8 @@ final class ConsultationRecordsPanel extends JPanel {
             Runnable backAction,
             String titleText,
             String subtitleText) {
-        JPanel header = new JPanel(new BorderLayout(18, 0));
-        header.setOpaque(false);
-        JButton back = HospitalTheme.quietButton(backText);
-        back.addActionListener(event -> backAction.run());
-        JPanel copy = verticalList();
-        JLabel title = new JLabel(titleText);
-        title.setFont(HospitalTheme.uiFont(Font.BOLD, 26F));
-        title.setForeground(HospitalTheme.TEXT);
-        JLabel subtitle = new JLabel(subtitleText);
-        subtitle.setFont(HospitalTheme.uiFont(Font.PLAIN, 13F));
-        subtitle.setForeground(HospitalTheme.MUTED);
-        copy.add(title);
-        copy.add(Box.createVerticalStrut(4));
-        copy.add(subtitle);
-        header.add(back, BorderLayout.WEST);
-        header.add(copy, BorderLayout.CENTER);
-        return HospitalResponsiveLayout.constrainWidth(header);
+        return HospitalResponsiveLayout.constrainWidth(HospitalPageHeader.create(
+                titleText, subtitleText, backText, backAction, null));
     }
 
     private static HospitalTheme.SurfacePanel informationCard(String titleText) {

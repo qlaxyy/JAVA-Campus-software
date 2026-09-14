@@ -6,11 +6,14 @@ import edu.seu.vcampus.common.hospital.DoctorApplicationListResponse;
 import edu.seu.vcampus.common.hospital.DoctorApplicationStatus;
 import edu.seu.vcampus.common.hospital.DoctorApplicationType;
 import edu.seu.vcampus.common.hospital.DoctorApplicationView;
+import edu.seu.vcampus.common.hospital.AdminScheduleWorkspaceView;
 import edu.seu.vcampus.common.hospital.HospitalActions;
 import edu.seu.vcampus.common.hospital.HospitalMode;
 import edu.seu.vcampus.common.hospital.HospitalModeAccessView;
 import edu.seu.vcampus.common.hospital.ReviewDoctorApplicationRequest;
 import edu.seu.vcampus.common.hospital.SubmitDoctorApplicationRequest;
+import edu.seu.vcampus.common.hospital.SubmitDoctorDeactivationRequest;
+import edu.seu.vcampus.common.hospital.SetSchedulePublicationRequest;
 import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
@@ -129,6 +132,100 @@ class DoctorOnboardingIntegrationTest {
                     new ReviewDoctorApplicationRequest("missing", true));
             assertFalse(reviewed.isSuccess());
             assertEquals(ErrorCodes.AUTH_FORBIDDEN, reviewed.getCode());
+
+            Response deactivation = student.send(
+                    HospitalActions.SUBMIT_DOCTOR_DEACTIVATION,
+                    new SubmitDoctorDeactivationRequest("doctor-liu", "测试越权"));
+            assertFalse(deactivation.isSuccess());
+            assertEquals(ErrorCodes.AUTH_FORBIDDEN, deactivation.getCode());
+        }
+    }
+
+    @Test
+    void approvedDeactivationRemovesDoctorAccessButKeepsTheApplicationHistory()
+            throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext hospitalAdministrator = client(server);
+            assertTrue(hospitalAdministrator.login("20260005", password()).isSuccess());
+            Response submitted = hospitalAdministrator.send(
+                    HospitalActions.SUBMIT_DOCTOR_DEACTIVATION,
+                    new SubmitDoctorDeactivationRequest(
+                            "doctor-liu", "已离开校医院，不再安排接诊"));
+            assertTrue(submitted.isSuccess());
+            DoctorApplicationView request = assertInstanceOf(
+                    DoctorApplicationView.class, submitted.getData());
+            assertEquals(DoctorApplicationType.DEACTIVATE_DOCTOR,
+                    request.getApplicationType());
+            assertEquals("doctor-liu", request.getTargetDoctorId());
+            Response closed = hospitalAdministrator.send(
+                    HospitalActions.SET_SCHEDULE_PUBLICATION,
+                    new SetSchedulePublicationRequest("slot-respiratory-1", false));
+            assertTrue(closed.isSuccess(), closed.getMessage());
+
+            ClientContext administrator = client(server);
+            assertTrue(administrator.login("20260000", password()).isSuccess());
+            Response approved = administrator.send(
+                    HospitalActions.REVIEW_DOCTOR_APPLICATION,
+                    new ReviewDoctorApplicationRequest(request.getRequestId(), true));
+            assertTrue(approved.isSuccess(), approved.getMessage());
+
+            ClientContext formerDoctor = client(server);
+            assertTrue(formerDoctor.login("20260030", password()).isSuccess());
+            HospitalModeAccessView access = assertInstanceOf(
+                    HospitalModeAccessView.class,
+                    formerDoctor.send(HospitalActions.GET_MODE_ACCESS, null).getData());
+            assertFalse(access.canAccess(HospitalMode.DOCTOR));
+
+            AdminScheduleWorkspaceView workspace = assertInstanceOf(
+                    AdminScheduleWorkspaceView.class,
+                    hospitalAdministrator.send(
+                            HospitalActions.GET_ADMIN_SCHEDULE_WORKSPACE, null).getData());
+            assertTrue(workspace.getDoctors().stream()
+                    .anyMatch(doctor -> "doctor-liu".equals(doctor.getDoctorId())
+                            && !doctor.isActive()));
+            DoctorApplicationListResponse history = assertInstanceOf(
+                    DoctorApplicationListResponse.class,
+                    hospitalAdministrator.send(
+                            HospitalActions.LIST_DOCTOR_APPLICATIONS, null).getData());
+            assertTrue(history.getApplications().stream()
+                    .anyMatch(item -> item.getRequestId().equals(request.getRequestId())
+                            && item.getStatus() == DoctorApplicationStatus.APPROVED));
+
+            Response republish = hospitalAdministrator.send(
+                    HospitalActions.SET_SCHEDULE_PUBLICATION,
+                    new SetSchedulePublicationRequest("slot-respiratory-1", true));
+            assertFalse(republish.isSuccess());
+            assertEquals(ErrorCodes.HOSPITAL_SCHEDULE_CONFLICT,
+                    republish.getCode());
+        }
+    }
+
+    @Test
+    void deactivationApprovalIsBlockedWhileFuturePublishedSchedulesRemain()
+            throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext hospitalAdministrator = client(server);
+            assertTrue(hospitalAdministrator.login("20260005", password()).isSuccess());
+            DoctorApplicationView request = assertInstanceOf(
+                    DoctorApplicationView.class,
+                    hospitalAdministrator.send(
+                            HospitalActions.SUBMIT_DOCTOR_DEACTIVATION,
+                            new SubmitDoctorDeactivationRequest(
+                                    "doctor-chen", "停止后续排班"))
+                            .getData());
+
+            ClientContext administrator = client(server);
+            assertTrue(administrator.login("20260000", password()).isSuccess());
+            Response response = administrator.send(
+                    HospitalActions.REVIEW_DOCTOR_APPLICATION,
+                    new ReviewDoctorApplicationRequest(request.getRequestId(), true));
+
+            assertFalse(response.isSuccess());
+            assertEquals(ErrorCodes.HOSPITAL_DOCTOR_APPLICATION_CONFLICT,
+                    response.getCode());
+            assertTrue(response.getMessage().contains("未来已发布排班"));
         }
     }
 
@@ -166,6 +263,60 @@ class DoctorOnboardingIntegrationTest {
                     HospitalModeAccessView.class,
                     doctor.send(HospitalActions.GET_MODE_ACCESS, null).getData());
             assertTrue(access.canAccess(HospitalMode.DOCTOR));
+        }
+    }
+
+    @Test
+    void approvedDoctorDeactivationSurvivesServerRestart() throws Exception {
+        Path database = temporaryDirectory.resolve("doctor-deactivation.accdb");
+        String requestId;
+        try (CampusServer first = new CampusServer(
+                0, ServerModules.createPersistentRouter(database))) {
+            first.start();
+            ClientContext hospitalAdministrator = client(first);
+            assertTrue(hospitalAdministrator.login("20260005", password()).isSuccess());
+            DoctorApplicationView submitted = assertInstanceOf(
+                    DoctorApplicationView.class,
+                    hospitalAdministrator.send(
+                            HospitalActions.SUBMIT_DOCTOR_DEACTIVATION,
+                            new SubmitDoctorDeactivationRequest(
+                                    "doctor-liu", "持久化停用验收"))
+                            .getData());
+            requestId = submitted.getRequestId();
+            Response closed = hospitalAdministrator.send(
+                    HospitalActions.SET_SCHEDULE_PUBLICATION,
+                    new SetSchedulePublicationRequest("slot-respiratory-1", false));
+            assertTrue(closed.isSuccess(), closed.getMessage());
+
+            ClientContext administrator = client(first);
+            assertTrue(administrator.login("20260000", password()).isSuccess());
+            Response approved = administrator.send(
+                    HospitalActions.REVIEW_DOCTOR_APPLICATION,
+                    new ReviewDoctorApplicationRequest(requestId, true));
+            assertTrue(approved.isSuccess(), approved.getMessage());
+        }
+
+        try (CampusServer restarted = new CampusServer(
+                0, ServerModules.createPersistentRouter(database))) {
+            restarted.start();
+            ClientContext formerDoctor = client(restarted);
+            assertTrue(formerDoctor.login("20260030", password()).isSuccess());
+            HospitalModeAccessView access = assertInstanceOf(
+                    HospitalModeAccessView.class,
+                    formerDoctor.send(HospitalActions.GET_MODE_ACCESS, null).getData());
+            assertFalse(access.canAccess(HospitalMode.DOCTOR));
+
+            ClientContext hospitalAdministrator = client(restarted);
+            assertTrue(hospitalAdministrator.login("20260005", password()).isSuccess());
+            DoctorApplicationListResponse history = assertInstanceOf(
+                    DoctorApplicationListResponse.class,
+                    hospitalAdministrator.send(
+                            HospitalActions.LIST_DOCTOR_APPLICATIONS, null).getData());
+            assertTrue(history.getApplications().stream()
+                    .anyMatch(item -> item.getRequestId().equals(requestId)
+                            && item.getApplicationType()
+                            == DoctorApplicationType.DEACTIVATE_DOCTOR
+                            && item.getStatus() == DoctorApplicationStatus.APPROVED));
         }
     }
 
@@ -213,7 +364,8 @@ class DoctorOnboardingIntegrationTest {
     }
 
     @Test
-    void legacyHospitalTablesAreMigratedWithoutLosingDoctorBinding() throws Exception {
+    void legacyHospitalTablesMoveBuiltInDoctorToTheDedicatedDoctorAccount()
+            throws Exception {
         Path database = temporaryDirectory.resolve("legacy-hospital.accdb");
         prepareLegacyHospitalTables(database);
 
@@ -221,11 +373,19 @@ class DoctorOnboardingIntegrationTest {
                 0, ServerModules.createPersistentRouter(database))) {
             server.start();
             ClientContext doctor = client(server);
-            assertTrue(doctor.login("20260021", password()).isSuccess());
+            assertTrue(doctor.login("20260029", password()).isSuccess());
             HospitalModeAccessView access = assertInstanceOf(
                     HospitalModeAccessView.class,
                     doctor.send(HospitalActions.GET_MODE_ACCESS, null).getData());
             assertTrue(access.canAccess(HospitalMode.DOCTOR));
+
+            ClientContext previousTeacherAccount = client(server);
+            assertTrue(previousTeacherAccount.login("20260021", password()).isSuccess());
+            HospitalModeAccessView previousAccess = assertInstanceOf(
+                    HospitalModeAccessView.class,
+                    previousTeacherAccount.send(
+                            HospitalActions.GET_MODE_ACCESS, null).getData());
+            assertFalse(previousAccess.canAccess(HospitalMode.DOCTOR));
 
             ClientContext administrator = client(server);
             assertTrue(administrator.login("20260000", password()).isSuccess());

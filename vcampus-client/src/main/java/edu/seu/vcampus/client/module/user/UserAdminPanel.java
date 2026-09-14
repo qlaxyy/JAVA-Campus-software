@@ -587,10 +587,17 @@ public final class UserAdminPanel extends JPanel {
         int index = java.util.Arrays.asList(choices).indexOf(selected);
         DoctorApplicationView application = pending.get(index);
         Object[] options = {"批准", "拒绝", "取消"};
-        String accountDescription = application.getApplicationType()
-                == DoctorApplicationType.EXISTING_ACCOUNT
-                ? "关联已有一卡通号：" + application.getUsername()
-                : "外来医生：批准后由系统生成下一张一卡通号";
+        String accountDescription = switch (application.getApplicationType()) {
+            case EXISTING_ACCOUNT -> "关联已有一卡通号：" + application.getUsername();
+            case EXTERNAL_DOCTOR -> "外来医生：批准后由系统生成下一张一卡通号";
+            case DEACTIVATE_DOCTOR -> "停用对象：" + application.getDisplayName()
+                    + "（" + application.getTargetDoctorId() + "）"
+                    + "\n申请原因：" + application.getRequestReason();
+        };
+        String approvalEffect = application.getApplicationType()
+                == DoctorApplicationType.DEACTIVATE_DOCTOR
+                ? "批准后将回收医生模式权限并禁止新排班；既往诊疗记录保留。"
+                : "批准后将绑定医生档案；新账号初始密码为 123456。";
         int decision = JOptionPane.showOptionDialog(
                 this,
                 "类型：" + applicationTypeText(application)
@@ -598,7 +605,7 @@ public final class UserAdminPanel extends JPanel {
                         + "\n姓名：" + application.getDisplayName()
                         + "\n科室：" + application.getDepartmentName()
                         + "\n职称：" + application.getDoctorTitle()
-                        + "\n\n批准后将绑定医生档案；新账号初始密码为 123456。",
+                        + "\n\n" + approvalEffect,
                 "确认审核",
                 JOptionPane.DEFAULT_OPTION,
                 JOptionPane.QUESTION_MESSAGE,
@@ -621,7 +628,9 @@ public final class UserAdminPanel extends JPanel {
                     if (response.isSuccess()) {
                         String message = response.getMessage();
                         if (approved
-                                && response.getData() instanceof DoctorApplicationView reviewed) {
+                                && response.getData() instanceof DoctorApplicationView reviewed
+                                && reviewed.getApplicationType()
+                                != DoctorApplicationType.DEACTIVATE_DOCTOR) {
                             message += "\n一卡通号：" + reviewed.getUsername();
                             if (reviewed.getApplicationType()
                                     == DoctorApplicationType.EXTERNAL_DOCTOR) {
@@ -637,9 +646,11 @@ public final class UserAdminPanel extends JPanel {
     }
 
     private static String applicationTypeText(DoctorApplicationView application) {
-        return application.getApplicationType() == DoctorApplicationType.EXISTING_ACCOUNT
-                ? "关联已有一卡通号 " + application.getUsername()
-                : "新建外来医生账号";
+        return switch (application.getApplicationType()) {
+            case EXISTING_ACCOUNT -> "关联已有一卡通号 " + application.getUsername();
+            case EXTERNAL_DOCTOR -> "新建外来医生账号";
+            case DEACTIVATE_DOCTOR -> "停用医生";
+        };
     }
 
     private void runMutation(String action, java.io.Serializable data, String progress) {

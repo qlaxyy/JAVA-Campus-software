@@ -158,7 +158,8 @@ public final class DemoDatabaseRebuilder {
             statement.setString(6, "DEMO_DATABASE_INITIALIZED");
             statement.setString(7, "database/vCampus.accdb");
             statement.setBoolean(8, true);
-            statement.setString(9, "已生成39个最终演示账号并完成跨表校验。");
+            statement.setString(9, "已生成" + FinalDemoRoster.accounts().size()
+                    + "个最终演示账号并完成跨表校验。");
             statement.executeUpdate();
         } catch (SQLException exception) {
             throw new IllegalStateException("Cannot append initialization audit.", exception);
@@ -240,15 +241,19 @@ public final class DemoDatabaseRebuilder {
     public static void validate(Path databasePath) {
         AccessDatabase database = new AccessDatabase(databasePath);
         try (Connection connection = database.openConnection()) {
-            requireCount(connection, "SELECT COUNT(*) FROM tblUser WHERE enabled = TRUE", 39, "enabled accounts");
-            requireCount(connection, "SELECT COUNT(*) FROM tblUser", 39, "all accounts");
+            requireCount(connection, "SELECT COUNT(*) FROM tblUser WHERE enabled = TRUE",
+                    FinalDemoRoster.accounts().size(), "enabled accounts");
+            requireCount(connection, "SELECT COUNT(*) FROM tblUser",
+                    FinalDemoRoster.accounts().size(), "all accounts");
             requireCount(connection, "SELECT COUNT(*) FROM tblUser WHERE roleCode = 'SUPER_ADMIN'", 1, "super administrators");
             requireCount(connection, "SELECT COUNT(*) FROM tblUser u INNER JOIN tblUserAdminScope s "
                     + "ON u.userId = s.userId WHERE u.roleCode = 'USER'", 5, "subsystem administrator scopes");
             requireCount(connection, "SELECT COUNT(*) FROM tblTeacherProfile WHERE active = TRUE", 8, "teachers");
             requireCount(connection, "SELECT COUNT(*) FROM tblStudentProfile", 15, "student profiles");
-            requireCount(connection, "SELECT COUNT(*) FROM tblHospitalDoctor WHERE active = TRUE", 10, "doctors");
-            requireCount(connection, "SELECT COUNT(*) FROM tblCampusCard", 39, "campus cards");
+            requireCount(connection, "SELECT COUNT(*) FROM tblHospitalDoctor WHERE active = TRUE",
+                    FinalDemoRoster.doctors().size(), "doctors");
+            requireCount(connection, "SELECT COUNT(*) FROM tblCampusCard",
+                    FinalDemoRoster.accounts().size(), "campus cards");
             requireCount(connection, "SELECT COUNT(*) FROM tblCourse", 8, "course catalogue entries");
             requireCount(connection, "SELECT COUNT(*) FROM tblCourseOffering", 8, "open teaching classes");
             requireCount(connection, "SELECT COUNT(*) FROM tblOfferingTeacher WHERE teacherUserId IS NOT NULL", 8, "teaching assignments");
@@ -257,7 +262,7 @@ public final class DemoDatabaseRebuilder {
             requireCount(connection, "SELECT COUNT(*) FROM tblEnrollment WHERE enrollmentStatus = 'SELECTED'", 15, "demo enrollments");
             requireCount(connection, "SELECT COUNT(*) FROM tblBook", 5, "book titles");
             requireCount(connection, "SELECT COUNT(*) FROM tblBookCopy", 20, "book copies");
-            requireCount(connection, "SELECT COUNT(*) FROM tblBorrowRecord", 2, "borrow demonstrations");
+            requireCount(connection, "SELECT COUNT(*) FROM tblBorrowRecord", 3, "borrow demonstrations");
             requireCount(connection, "SELECT COUNT(*) FROM tblReservation", 1, "reservation demonstrations");
             requireCount(connection, "SELECT COUNT(*) FROM (SELECT username FROM tblUser GROUP BY username HAVING COUNT(*) > 1)", 0, "duplicate card numbers");
             requireCount(connection, "SELECT COUNT(*) FROM (SELECT userId FROM tblUser GROUP BY userId HAVING COUNT(*) > 1)", 0, "duplicate user ids");
@@ -300,8 +305,13 @@ public final class DemoDatabaseRebuilder {
             try (Statement statement = connection.createStatement();
                  ResultSet result = statement.executeQuery("SELECT MAX(username) FROM tblUser WHERE username LIKE '2026%'") ) {
                 result.next();
-                if (!"20260038".equals(result.getString(1))) {
-                    throw new IllegalStateException("Expected maximum demo card number 20260038.");
+                String expected = FinalDemoRoster.accounts().stream()
+                        .map(FinalDemoRoster.AccountSeed::campusCardNumber)
+                        .max(String::compareTo)
+                        .orElseThrow();
+                if (!expected.equals(result.getString(1))) {
+                    throw new IllegalStateException(
+                            "Expected maximum demo card number " + expected + ".");
                 }
             }
             for (FinalDemoRoster.AccountSeed account : FinalDemoRoster.accounts()) requireAccount(connection, account);

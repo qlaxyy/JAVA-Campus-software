@@ -49,7 +49,7 @@ class LoginPanelTest {
         assertFalse(labels.contains("开发期基础登录"));
         assertTrue(labels.contains("超级管理员  20260000"));
         assertTrue(labels.contains("学生账号  20260006"));
-        assertTrue(labels.contains("医生账号  20260029"));
+        assertTrue(labels.contains("医生账号  20260030"));
         assertTrue(labels.contains("学籍管理员  20260001"));
         assertTrue(labels.contains("选课管理员  20260002"));
         assertTrue(labels.contains("图书馆管理员  20260003"));
@@ -65,7 +65,7 @@ class LoginPanelTest {
                 "医院管理员  20260005",
                 "学生账号  20260006",
                 "教师账号  20260021",
-                "医生账号  20260029"),
+                "医生账号  20260030"),
                 labels.stream().filter(text -> text.matches(".*2026\\d{4}"))
                         .toList());
     }

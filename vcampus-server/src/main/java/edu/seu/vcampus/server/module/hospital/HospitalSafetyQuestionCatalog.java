@@ -40,6 +40,8 @@ final class HospitalSafetyQuestionCatalog {
                     option("one_side_weak", "一边胳膊或腿突然抬不起来"),
                     option("face_or_speech", "嘴角突然歪斜或说话含糊"),
                     option("sudden_vision_loss", "一只或两只眼睛突然看不见"),
+                    option("sudden_severe_headache", "突然出现从未有过的剧烈头痛"),
+                    option("collapse_or_seizure", "突然晕倒、抽搐或怎么叫都叫不醒"),
                     option("unknown", "不确定")),
             question("safety_allergy", "过敏后是否出现以下情况？",
                     List.of("过敏", "皮疹", "荨麻疹", "嘴唇肿", "舌头肿"),
@@ -60,7 +62,34 @@ final class HospitalSafetyQuestionCatalog {
                     option("uncontrolled_bleeding", "出血很多，按压后仍停不下来"),
                     option("head_neck_spine", "头、颈部或背部受到严重撞击"),
                     option("large_burn", "烧伤或烫伤面积很大"),
+                    option("unknown", "不确定")),
+            question("safety_self_harm", "你现在有没有伤害自己或他人的想法？",
+                    List.of("情绪低落", "抑郁", "绝望", "活着没意思", "自伤", "自杀"),
+                    option("none", "没有"),
+                    option("thoughts", "有这样的想法，但没有具体计划"),
+                    option("plan", "已经想过具体时间或做法"),
                     option("unknown", "不确定")));
+
+    /** Only map unambiguous text for the exact server question; never infer absence. */
+    Optional<TriageFollowUpAnswer> explicitChatAnswer(String previousReply, String text) {
+        for (SafetyQuestion question : QUESTIONS) {
+            if (!previousReply.endsWith(question.prompt())) continue;
+            for (TriageFollowUpOptionView option : question.options()) {
+                boolean exact = text.trim().equals(option.getLabel());
+                boolean breathingNo = question.questionId().equals("safety_breathing")
+                        && option.getOptionId().equals("normal")
+                        && List.of("没有", "没有的", "没有，能正常说话", "没有，可以正常说话",
+                                "呼吸正常", "能正常说话").contains(text.trim());
+                boolean unknown = option.getOptionId().equals("unknown")
+                        && List.of("不知道", "不清楚", "不确定").contains(text.trim());
+                if (exact || breathingNo || unknown) {
+                    return Optional.of(new TriageFollowUpAnswer(question.questionId(),
+                            question.prompt(), option.getOptionId(), text));
+                }
+            }
+        }
+        return Optional.empty();
+    }
 
     Optional<SafetyQuestion> nextQuestion(TriageRequest request) {
         Set<String> answered = request.getFollowUpAnswers().stream()
@@ -108,7 +137,9 @@ final class HospitalSafetyQuestionCatalog {
         answers.put("safety_neurological", Map.of(
                 "one_side_weak", "突发单侧肢体活动异常",
                 "face_or_speech", "突发面部或语言异常",
-                "sudden_vision_loss", "突发视力丧失"));
+                "sudden_vision_loss", "突发视力丧失",
+                "sudden_severe_headache", "突发且从未有过的剧烈头痛",
+                "collapse_or_seizure", "突然晕倒、抽搐或无法唤醒"));
         answers.put("safety_allergy", Map.of(
                 "mouth_swelling", "唇、舌或咽喉突然肿胀的危险信号",
                 "breathing_or_swallowing", "过敏后呼吸或吞咽明显困难"));
@@ -120,6 +151,9 @@ final class HospitalSafetyQuestionCatalog {
                 "uncontrolled_bleeding", "无法停止的大量出血",
                 "head_neck_spine", "严重头颈或脊柱创伤",
                 "large_burn", "大面积烧伤或烫伤"));
+        answers.put("safety_self_harm", Map.of(
+                "thoughts", "当前存在伤害自己或他人的想法",
+                "plan", "当前存在具体的自伤或伤人计划"));
         return Map.copyOf(answers);
     }
 

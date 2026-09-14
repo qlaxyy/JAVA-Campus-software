@@ -1,11 +1,14 @@
 package edu.seu.vcampus.server.module.library;
 
 import edu.seu.vcampus.common.library.AddBookCopyRequest;
+import edu.seu.vcampus.common.library.AddBookCategoryRequest;
 import edu.seu.vcampus.common.library.AddBookRequest;
 import edu.seu.vcampus.common.library.AdminBorrowQueryRequest;
 import edu.seu.vcampus.common.library.BookCopyIdRequest;
 import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BookSearchResult;
+import edu.seu.vcampus.common.library.BorrowRecordDTO;
+import edu.seu.vcampus.common.library.BorrowRecordIdRequest;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
 import edu.seu.vcampus.common.library.CopyInspectionDTO;
 import edu.seu.vcampus.common.library.CopyInspectionRequest;
@@ -127,6 +130,8 @@ public final class LibraryServerModule implements ServerModule {
                 request -> inspectCopy(request, context));
         router.register(LibraryActions.GET_BORROW_RECORDS,
                 request -> getBorrowRecords(request, context));
+        router.register(LibraryActions.RENEW_BORROW,
+                request -> renewBorrow(request, context));
         router.register(LibraryActions.CREATE_RESERVATION,
                 request -> createReservation(request, context));
         router.register(LibraryActions.GET_MY_RESERVATIONS,
@@ -135,6 +140,8 @@ public final class LibraryServerModule implements ServerModule {
                 request -> cancelReservation(request, context));
         router.register(LibraryActions.LIST_CATEGORIES,
                 request -> listCategories(request, context));
+        router.register(LibraryActions.ADD_BOOK_CATEGORY, request -> administer(
+                request, context, AddBookCategoryRequest.class, service::addCategory));
 
         router.register(LibraryActions.ADMIN_SEARCH_BOOKS, request -> administer(
                 request, context, BookSearchRequest.class, service::searchBooksForAdmin));
@@ -244,6 +251,26 @@ public final class LibraryServerModule implements ServerModule {
         }
         return Response.success(request, "借阅记录已加载",
                 new ArrayList<>(service.getBorrowRecords(session.orElseThrow().getUserId())));
+    }
+
+    private Response renewBorrow(Request request, ServerContext context) {
+        Optional<SessionInfo> session = session(request, context);
+        if (session.isEmpty()) {
+            return authenticationRequired(request);
+        }
+        if (!(request.getData() instanceof BorrowRecordIdRequest data)) {
+            return invalidRequest(request, "续借请求格式不正确");
+        }
+        try {
+            BorrowRecordDTO renewed = service.renewBorrow(
+                    session.orElseThrow().getUserId(), data);
+            return Response.success(request, "续借成功，新到期时间为 "
+                    + renewed.getDueTime(), renewed);
+        } catch (LibraryBusinessException exception) {
+            return businessFailure(request, exception);
+        } catch (IllegalArgumentException exception) {
+            return invalidArgument(request, exception);
+        }
     }
 
     private Response createReservation(Request request, ServerContext context) {

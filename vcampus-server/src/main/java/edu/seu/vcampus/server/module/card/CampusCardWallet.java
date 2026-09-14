@@ -51,6 +51,22 @@ public interface CampusCardWallet {
     CampusCardView credit(SessionInfo session, int amountFen, String merchant, String reference);
 
     /**
+     * Refunds an existing debit to its original owner.
+     *
+     * <p>A caller may refund itself. A hospital administrator may refund a
+     * patient's hospital debit when cancelling an appointment. The operation
+     * is idempotent and returns {@code false} when no matching debit exists,
+     * so legacy simulated payments never create real card balance.
+     */
+    boolean refundDebit(
+            SessionInfo actor,
+            String targetUserId,
+            int amountFen,
+            String merchant,
+            String debitReference,
+            String refundReference);
+
+    /**
      * Lists recent movements for the caller, newest first.
      *
      * @param session authenticated payer

@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Read-only Access category dictionary. */
+/** Access-backed category dictionary. */
 final class AccessBookCategoryRepository implements BookCategoryRepository {
 
     private final AccessLibraryStore store;
@@ -43,6 +43,21 @@ final class AccessBookCategoryRepository implements BookCategoryRepository {
                 try (ResultSet result = statement.executeQuery()) {
                     return result.next()
                             ? Optional.of(readCategory(result)) : Optional.empty();
+                }
+            }
+        });
+    }
+
+    @Override
+    public void save(BookCategoryDTO category) {
+        Objects.requireNonNull(category, "category must not be null");
+        store.write("Cannot insert library category.", connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "INSERT INTO tblBookCategory (categoryId, categoryName) VALUES (?, ?)")) {
+                statement.setString(1, category.getCategoryId());
+                statement.setString(2, category.getCategoryName());
+                if (statement.executeUpdate() != 1) {
+                    throw new java.sql.SQLException("Category was not inserted.");
                 }
             }
         });

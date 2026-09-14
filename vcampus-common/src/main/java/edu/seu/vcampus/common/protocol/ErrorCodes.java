@@ -40,6 +40,8 @@ public final class ErrorCodes {
             "HOSPITAL_BILL_NOT_FOUND";
     public static final String HOSPITAL_BILL_NOT_PAYABLE =
             "HOSPITAL_BILL_NOT_PAYABLE";
+    public static final String HOSPITAL_EXAMINATION_PAYMENT_REQUIRED =
+            "HOSPITAL_EXAMINATION_PAYMENT_REQUIRED";
     public static final String HOSPITAL_SLOT_FULL = "HOSPITAL_SLOT_FULL";
     public static final String HOSPITAL_DUPLICATE_APPOINTMENT =
             "HOSPITAL_DUPLICATE_APPOINTMENT";
@@ -116,6 +118,14 @@ public final class ErrorCodes {
             "LIBRARY_INVALID_PICKUP_LOCATION";
     public static final String LIBRARY_COPY_RESERVED_FOR_OTHER =
             "LIBRARY_COPY_RESERVED_FOR_OTHER";
+    public static final String LIBRARY_RENEWAL_NOT_ALLOWED =
+            "LIBRARY_RENEWAL_NOT_ALLOWED";
+    public static final String LIBRARY_RENEWAL_LIMIT_REACHED =
+            "LIBRARY_RENEWAL_LIMIT_REACHED";
+    public static final String LIBRARY_RENEWAL_BLOCKED_BY_RESERVATION =
+            "LIBRARY_RENEWAL_BLOCKED_BY_RESERVATION";
+    public static final String LIBRARY_DUPLICATE_CATEGORY =
+            "LIBRARY_DUPLICATE_CATEGORY";
 
     private ErrorCodes() {
     }

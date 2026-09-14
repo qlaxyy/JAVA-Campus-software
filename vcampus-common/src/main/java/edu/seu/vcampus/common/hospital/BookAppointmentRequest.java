@@ -4,7 +4,7 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
-/** Request for atomically booking a hospital schedule and simulating payment. */
+/** Request for atomically booking a hospital schedule and paying its registration fee. */
 public final class BookAppointmentRequest implements Serializable {
 
     @Serial

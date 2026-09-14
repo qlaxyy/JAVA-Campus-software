@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 /** Immutable administrator view of one borrow record. */
 public final class AdminBorrowRecordDTO implements Serializable {
     @Serial
-    private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 2L;
 
     private final String recordId;
     private final String userId;
@@ -20,11 +20,12 @@ public final class AdminBorrowRecordDTO implements Serializable {
     private final LocalDateTime returnTime;
     private final String status;
     private final boolean overdue;
+    private final int renewalCount;
 
     public AdminBorrowRecordDTO(String recordId, String userId, String bookId,
             String bookTitle, String copyId, String barcode,
             LocalDateTime borrowTime, LocalDateTime dueTime, LocalDateTime returnTime,
-            String status, boolean overdue) {
+            String status, boolean overdue, int renewalCount) {
         this.recordId = recordId;
         this.userId = userId;
         this.bookId = bookId;
@@ -36,6 +37,7 @@ public final class AdminBorrowRecordDTO implements Serializable {
         this.returnTime = returnTime;
         this.status = status;
         this.overdue = overdue;
+        this.renewalCount = renewalCount;
     }
 
     public String getRecordId() { return recordId; }
@@ -49,4 +51,5 @@ public final class AdminBorrowRecordDTO implements Serializable {
     public LocalDateTime getReturnTime() { return returnTime; }
     public String getStatus() { return status; }
     public boolean isOverdue() { return overdue; }
+    public int getRenewalCount() { return renewalCount; }
 }

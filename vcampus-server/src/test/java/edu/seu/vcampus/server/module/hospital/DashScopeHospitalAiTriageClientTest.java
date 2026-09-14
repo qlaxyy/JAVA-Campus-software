@@ -106,6 +106,62 @@ class DashScopeHospitalAiTriageClientTest {
     }
 
     @Test
+    void chatSendsOriginalTranscriptAndRejectsMalformedFacts() throws Exception {
+        AtomicReference<JsonNode> captured = new AtomicReference<>();
+        java.util.concurrent.atomic.AtomicBoolean malformed = new java.util.concurrent.atomic.AtomicBoolean();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/chat", exchange -> {
+            captured.set(mapper.readTree(exchange.getRequestBody()));
+            ObjectNode analysis = mapper.createObjectNode();
+            analysis.put("reply", "请核对后查看科室。").put("summary", "眼睛干涩两天")
+                    .put("ready", true).put("urgentEvidence", "").put("urgentMessageIndex", -1);
+            analysis.putArray("missingInformation");
+            analysis.putArray("candidates").addObject()
+                    .put("departmentId", "dept-eye").put("reason", "眼部不适");
+            analysis.putArray("facts").addObject().put("topic", "主要不适").put("state", "reported")
+                    .put("evidence", "眼睛干涩两天").put("messageIndex", 2);
+            if (malformed.get()) analysis.put("facts", "not an array");
+            ObjectNode envelope = mapper.createObjectNode();
+            envelope.putArray("choices").addObject().putObject("message")
+                    .put("content", analysis.toString());
+            byte[] bytes = mapper.writeValueAsBytes(envelope);
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        try {
+            var client = DashScopeHospitalAiTriageClient.forTesting(
+                    URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/chat"),
+                    "test-key", "test-model", Duration.ofSeconds(2));
+            var request = new edu.seu.vcampus.common.hospital.TriageChatRequest(List.of(
+                    new edu.seu.vcampus.common.hospital.TriageChatMessage("user", "牙疼"),
+                    new edu.seu.vcampus.common.hospital.TriageChatMessage("assistant", "哪里疼？"),
+                    new edu.seu.vcampus.common.hospital.TriageChatMessage("user", "说错了，眼睛干涩两天")));
+            var result = client.chat(request, List.of(
+                    new HospitalDepartment("dept-eye", "眼科", null, true, true)));
+            JsonNode input = mapper.readTree(captured.get().path("messages").path(1).path("content").asText());
+            assertEquals(3, input.path("transcript").size());
+            assertEquals("牙疼", input.path("transcript").path(0).path("text").asText());
+            assertEquals("说错了，眼睛干涩两天", input.path("transcript").path(2).path("text").asText());
+            assertEquals(1, input.path("statementsToCover").size());
+            assertEquals(2, input.path("statementsToCover").path(0)
+                    .path("messageIndex").asInt());
+            assertEquals("眼睛干涩两天", input.path("statementsToCover").path(0)
+                    .path("text").asText());
+            assertTrue(captured.get().path("messages").path(0).path("content").asText()
+                    .contains("不能只记录一条消息中的部分不适"));
+            assertEquals(2, result.facts().getFirst().messageIndex());
+            assertTrue(result.ready());
+            malformed.set(true);
+            org.junit.jupiter.api.Assertions.assertThrows(HospitalAiTriageException.class,
+                    () -> client.chat(request, List.of()));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void loadsAllRequiredSettingsFromOneLocalPropertiesFile() throws Exception {
         Path path = temporaryDirectory.resolve("hospital-ai.properties");
         Files.writeString(path, """

@@ -1,6 +1,7 @@
 package edu.seu.vcampus.server.module.library;
 
 import edu.seu.vcampus.common.library.AddBookCopyRequest;
+import edu.seu.vcampus.common.library.AddBookCategoryRequest;
 import edu.seu.vcampus.common.library.AddBookRequest;
 import edu.seu.vcampus.common.library.AdminBorrowQueryRequest;
 import edu.seu.vcampus.common.library.AdminBorrowRecordDTO;
@@ -12,6 +13,7 @@ import edu.seu.vcampus.common.library.BookLocationDTO;
 import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BookSearchResult;
 import edu.seu.vcampus.common.library.BorrowRecordDTO;
+import edu.seu.vcampus.common.library.BorrowRecordIdRequest;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
 import edu.seu.vcampus.common.library.CopyInspectionDTO;
 import edu.seu.vcampus.common.library.CopyInspectionRequest;
@@ -46,6 +48,7 @@ final class LibraryService {
     private static final int MAX_KEYWORD_LENGTH = 50;
     private static final int MAX_ACTIVE_BORROWS = 5;
     private static final int BORROW_DAYS = 30;
+    private static final int MAX_RENEWALS = 1;
     private static final int MAX_ACTIVE_RESERVATIONS = 3;
     private static final int RESERVATION_HOLD_HOURS = 24;
     private static final int RESERVATION_COOLDOWN_DAYS = 7;
@@ -157,6 +160,25 @@ final class LibraryService {
     }
 
     List<BookCategoryDTO> listCategories() { return categoryRepository.findAll(); }
+
+    BookCategoryDTO addCategory(SessionInfo actor, AddBookCategoryRequest request) {
+        requireAdministrator(actor);
+        Objects.requireNonNull(request, "request must not be null");
+        synchronized (circulationLock) {
+            String name = boundedText(request.getCategoryName(), "分类名称", 50);
+            if (categoryRepository.findAll().stream().anyMatch(category ->
+                    category.getCategoryName().equalsIgnoreCase(name))) {
+                throw failure(ErrorCodes.LIBRARY_DUPLICATE_CATEGORY, "该分类已经存在");
+            }
+            String id;
+            do {
+                id = "C" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+            } while (categoryRepository.findById(id).isPresent());
+            BookCategoryDTO category = new BookCategoryDTO(id, name);
+            categoryRepository.save(category);
+            return category;
+        }
+    }
 
     BookDTO addBook(SessionInfo actor, AddBookRequest request) {
         requireAdministrator(actor);
@@ -679,6 +701,47 @@ final class LibraryService {
         }
     }
 
+    BorrowRecordDTO renewBorrow(String userId, BorrowRecordIdRequest request) {
+        String validatedUserId = requireText(userId, "userId");
+        Objects.requireNonNull(request, "request must not be null");
+        String recordId = requireText(request.getRecordId(), "recordId");
+        synchronized (circulationLock) {
+            return inTransaction(() -> {
+                LocalDateTime now = now();
+                expireReservations(now);
+                BorrowRecord record = borrowRecordRepository.findById(recordId)
+                        .filter(value -> value.userId().equals(validatedUserId))
+                        .orElseThrow(() -> failure(
+                                ErrorCodes.LIBRARY_BORROW_RECORD_NOT_FOUND,
+                                "借阅记录不存在，请刷新后重试"));
+                if (record.status() != BorrowStatus.BORROWED) {
+                    throw failure(ErrorCodes.LIBRARY_RENEWAL_NOT_ALLOWED,
+                            "已归还的图书不能续借");
+                }
+                if (record.isOverdueAt(now)) {
+                    throw failure(ErrorCodes.LIBRARY_RENEWAL_NOT_ALLOWED,
+                            "图书已经逾期，请先归还");
+                }
+                if (record.renewalCount() >= MAX_RENEWALS) {
+                    throw failure(ErrorCodes.LIBRARY_RENEWAL_LIMIT_REACHED,
+                            "每次借阅最多续借 1 次");
+                }
+                BookCopy copy = requireCopyForRecord(record);
+                boolean queued = reservationRepository.findAll().stream()
+                        .filter(Reservation::isActive)
+                        .anyMatch(value -> value.bookId().equals(copy.bookId()));
+                if (queued) {
+                    throw failure(ErrorCodes.LIBRARY_RENEWAL_BLOCKED_BY_RESERVATION,
+                            "该书已有读者预约，不能续借");
+                }
+                BorrowRecord renewed = record.renewedUntil(
+                        record.dueTime().plusDays(BORROW_DAYS));
+                borrowRecordRepository.update(renewed);
+                return toBorrowRecordDTO(renewed, now);
+            });
+        }
+    }
+
     List<AdminBorrowRecordDTO> queryBorrows(
             SessionInfo actor, AdminBorrowQueryRequest request) {
         requireAdministrator(actor);
@@ -937,7 +1000,8 @@ final class LibraryService {
                 .orElse("图书信息不可用（" + copy.bookId() + "）");
         return new BorrowRecordDTO(record.recordId(), copy.bookId(), title,
                 copy.copyId(), copy.barcode(), record.borrowTime(), record.dueTime(),
-                record.returnTime(), record.status().name(), record.isOverdueAt(now));
+                record.returnTime(), record.status().name(), record.isOverdueAt(now),
+                record.renewalCount());
     }
 
     private AdminBorrowRecordDTO toAdminBorrowRecordDTO(
@@ -948,7 +1012,8 @@ final class LibraryService {
                 .orElse("图书信息不可用（" + copy.bookId() + "）");
         return new AdminBorrowRecordDTO(record.recordId(), record.userId(), copy.bookId(),
                 title, copy.copyId(), copy.barcode(), record.borrowTime(), record.dueTime(),
-                record.returnTime(), record.status().name(), record.isOverdueAt(now));
+                record.returnTime(), record.status().name(), record.isOverdueAt(now),
+                record.renewalCount());
     }
 
     private BookCopy requireCopyForRecord(BorrowRecord record) {

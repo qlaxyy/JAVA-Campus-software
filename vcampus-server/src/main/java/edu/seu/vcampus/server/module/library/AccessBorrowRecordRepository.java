@@ -13,7 +13,7 @@ import java.util.Optional;
 final class AccessBorrowRecordRepository implements BorrowRecordRepository {
 
     private static final String SELECT_RECORD = "SELECT recordId, userId, copyId, "
-            + "borrowTime, dueTime, returnTime, [status] FROM tblBorrowRecord";
+            + "borrowTime, dueTime, renewalCount, returnTime, [status] FROM tblBorrowRecord";
 
     private final AccessLibraryStore store;
 
@@ -63,8 +63,8 @@ final class AccessBorrowRecordRepository implements BorrowRecordRepository {
             }
             store.write("Cannot insert library borrow record.", connection -> {
                 String sql = "INSERT INTO tblBorrowRecord (recordId, userId, copyId, "
-                        + "borrowTime, dueTime, returnTime, [status]) "
-                        + "VALUES (?, ?, ?, ?, ?, ?, ?)";
+                        + "borrowTime, dueTime, renewalCount, returnTime, [status]) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
                 try (PreparedStatement statement = connection.prepareStatement(sql)) {
                     bindRecord(statement, record, true);
                     requireOne(statement.executeUpdate(), "Borrow record was not inserted.");
@@ -80,14 +80,21 @@ final class AccessBorrowRecordRepository implements BorrowRecordRepository {
             BorrowRecord original = findById(record.recordId())
                     .orElseThrow(() -> new IllegalStateException(
                             "Borrow record does not exist."));
-            requireReturnTransition(original, record);
+            requireUpdateTransition(original, record);
             store.write("Cannot update library borrow record.", connection -> {
-                String sql = "UPDATE tblBorrowRecord SET returnTime = ?, [status] = ? "
+                String sql = "UPDATE tblBorrowRecord SET dueTime = ?, renewalCount = ?, "
+                        + "returnTime = ?, [status] = ? "
                         + "WHERE recordId = ?";
                 try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                    statement.setTimestamp(1, Timestamp.valueOf(record.returnTime()));
-                    statement.setString(2, record.status().name());
-                    statement.setString(3, record.recordId());
+                    statement.setTimestamp(1, Timestamp.valueOf(record.dueTime()));
+                    statement.setInt(2, record.renewalCount());
+                    if (record.returnTime() == null) {
+                        statement.setNull(3, Types.TIMESTAMP);
+                    } else {
+                        statement.setTimestamp(3, Timestamp.valueOf(record.returnTime()));
+                    }
+                    statement.setString(4, record.status().name());
+                    statement.setString(5, record.recordId());
                     requireOne(statement.executeUpdate(), "Borrow record does not exist.");
                 }
             });
@@ -129,23 +136,15 @@ final class AccessBorrowRecordRepository implements BorrowRecordRepository {
     private BorrowRecord readRecord(ResultSet result) throws java.sql.SQLException {
         Timestamp returnTime = result.getTimestamp("returnTime");
         BorrowStatus status = BorrowStatus.valueOf(result.getString("status"));
-        if (status == BorrowStatus.BORROWED) {
-            return new BorrowRecord(
-                    result.getString("recordId"),
-                    result.getString("userId"),
-                    result.getString("copyId"),
-                    result.getTimestamp("borrowTime").toLocalDateTime(),
-                    result.getTimestamp("dueTime").toLocalDateTime(),
-                    status);
-        }
-        BorrowRecord borrowed = new BorrowRecord(
+        return new BorrowRecord(
                 result.getString("recordId"),
                 result.getString("userId"),
                 result.getString("copyId"),
                 result.getTimestamp("borrowTime").toLocalDateTime(),
                 result.getTimestamp("dueTime").toLocalDateTime(),
-                BorrowStatus.BORROWED);
-        return borrowed.returnedAt(returnTime.toLocalDateTime());
+                status,
+                returnTime == null ? null : returnTime.toLocalDateTime(),
+                result.getInt("renewalCount"));
     }
 
     private void bindRecord(PreparedStatement statement, BorrowRecord record,
@@ -157,6 +156,7 @@ final class AccessBorrowRecordRepository implements BorrowRecordRepository {
             statement.setString(index++, record.copyId());
             statement.setTimestamp(index++, Timestamp.valueOf(record.borrowTime()));
             statement.setTimestamp(index++, Timestamp.valueOf(record.dueTime()));
+            statement.setInt(index++, record.renewalCount());
         }
         if (record.returnTime() == null) {
             statement.setNull(index++, Types.TIMESTAMP);
@@ -166,13 +166,21 @@ final class AccessBorrowRecordRepository implements BorrowRecordRepository {
         statement.setString(index, record.status().name());
     }
 
-    private void requireReturnTransition(BorrowRecord original, BorrowRecord updated) {
+    private void requireUpdateTransition(BorrowRecord original, BorrowRecord updated) {
         if (!original.userId().equals(updated.userId())
                 || !original.copyId().equals(updated.copyId())
                 || !original.borrowTime().equals(updated.borrowTime())
-                || !original.dueTime().equals(updated.dueTime())
-                || original.status() != BorrowStatus.BORROWED
-                || updated.status() != BorrowStatus.RETURNED) {
+                || original.status() != BorrowStatus.BORROWED) {
+            throw new IllegalArgumentException("Invalid borrow-record state transition.");
+        }
+        boolean returned = updated.status() == BorrowStatus.RETURNED
+                && original.dueTime().equals(updated.dueTime())
+                && original.renewalCount() == updated.renewalCount();
+        boolean renewed = updated.status() == BorrowStatus.BORROWED
+                && updated.returnTime() == null
+                && updated.dueTime().isAfter(original.dueTime())
+                && updated.renewalCount() == original.renewalCount() + 1;
+        if (!(returned || renewed)) {
             throw new IllegalArgumentException("Invalid borrow-record state transition.");
         }
     }

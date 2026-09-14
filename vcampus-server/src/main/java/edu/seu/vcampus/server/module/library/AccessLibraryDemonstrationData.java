@@ -9,12 +9,15 @@ import java.util.Objects;
 final class AccessLibraryDemonstrationData {
 
     static final String DEMO_USER_ID = "U-STUDENT-001";
+    static final String OVERDUE_USER_ID = "U-LIBRARY-ADMIN-001";
     static final String CURRENT_RECORD_ID = "DEMO-BORROW-CURRENT-001";
     static final String HISTORY_RECORD_ID = "DEMO-BORROW-HISTORY-001";
     static final String READY_RESERVATION_ID = "DEMO-RESERVATION-READY-001";
+    static final String OVERDUE_RECORD_ID = "DEMO-BORROW-OVERDUE-001";
     static final String LOANED_BARCODE = "SEU-B001-001";
     static final String RETURNED_BARCODE = "SEU-B002-001";
     static final String RESERVED_BARCODE = "SEU-B003-001";
+    static final String OVERDUE_BARCODE = "SEU-B005-002";
 
     private AccessLibraryDemonstrationData() {
     }
@@ -42,7 +45,24 @@ final class AccessLibraryDemonstrationData {
             seedCurrentBorrow(copies, records, now);
             seedBorrowHistory(copies, records, now);
             seedReadyReservation(copies, reservations, now);
+            seedOverdueBorrow(copies, records, now);
         });
+    }
+
+    private static void seedOverdueBorrow(
+            BookCopyRepository copies,
+            BorrowRecordRepository records,
+            LocalDateTime now) {
+        BookCopy copy = requireAvailableCopy(copies, OVERDUE_BARCODE);
+        LocalDateTime borrowedAt = now.minusDays(45);
+        copies.update(copy.withStatus(BookCopyStatus.LOANED));
+        records.save(new BorrowRecord(
+                OVERDUE_RECORD_ID,
+                OVERDUE_USER_ID,
+                copy.copyId(),
+                borrowedAt,
+                borrowedAt.plusDays(30),
+                BorrowStatus.BORROWED));
     }
 
     private static void seedCurrentBorrow(

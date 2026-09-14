@@ -33,6 +33,22 @@ class LibraryAdminServiceTest {
             () -> "R-" + sequence.incrementAndGet(), new InMemoryBookCategoryRepository(), copies);
 
     @Test
+    void administratorCanExtendReusableCategoryDictionary() {
+        assertEquals(3, service.listCategories().size());
+        BookCategoryDTO added = service.addCategory(
+                ADMIN, new AddBookCategoryRequest("  艺术设计  "));
+        assertEquals("艺术设计", added.getCategoryName());
+        assertTrue(service.listCategories().stream()
+                .anyMatch(category -> category.getCategoryId().equals(added.getCategoryId())));
+        failure(ErrorCodes.LIBRARY_DUPLICATE_CATEGORY,
+                () -> service.addCategory(ADMIN,
+                        new AddBookCategoryRequest("艺术设计")));
+        failure(ErrorCodes.AUTH_FORBIDDEN,
+                () -> service.addCategory(READER,
+                        new AddBookCategoryRequest("医学")));
+    }
+
+    @Test
     void catalogMetadataAndCopyLifecycleStaySeparate() {
         AddBookRequest request = new AddBookRequest("978-7-111-00000-0", "新书", "作者", "C001",
                 "出版社", 2026, "中文");

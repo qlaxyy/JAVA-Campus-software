@@ -13,6 +13,7 @@ final class BorrowRecord {
     private final LocalDateTime dueTime;
     private final BorrowStatus status;
     private final LocalDateTime returnTime;
+    private final int renewalCount;
 
     BorrowRecord(
             String recordId,
@@ -21,12 +22,12 @@ final class BorrowRecord {
             LocalDateTime borrowTime,
             LocalDateTime dueTime,
             BorrowStatus status) {
-        this(recordId, userId, copyId, borrowTime, dueTime, status, null);
+        this(recordId, userId, copyId, borrowTime, dueTime, status, null, 0);
     }
 
-    private BorrowRecord(String recordId, String userId, String copyId,
+    BorrowRecord(String recordId, String userId, String copyId,
             LocalDateTime borrowTime, LocalDateTime dueTime, BorrowStatus status,
-            LocalDateTime returnTime) {
+            LocalDateTime returnTime, int renewalCount) {
         this.recordId = required(recordId, "recordId");
         this.userId = required(userId, "userId");
         this.copyId = required(copyId, "copyId");
@@ -34,6 +35,10 @@ final class BorrowRecord {
         this.dueTime = Objects.requireNonNull(dueTime, "dueTime must not be null");
         this.status = Objects.requireNonNull(status, "status must not be null");
         this.returnTime = returnTime;
+        if (renewalCount < 0) {
+            throw new IllegalArgumentException("renewalCount must not be negative");
+        }
+        this.renewalCount = renewalCount;
         if (dueTime.isBefore(borrowTime)) {
             throw new IllegalArgumentException("dueTime must not be before borrowTime");
         }
@@ -73,12 +78,28 @@ final class BorrowRecord {
         return returnTime;
     }
 
+    int renewalCount() {
+        return renewalCount;
+    }
+
     BorrowRecord returnedAt(LocalDateTime time) {
         if (status != BorrowStatus.BORROWED) {
             throw new IllegalStateException("Only an active borrow can be returned.");
         }
         return new BorrowRecord(recordId, userId, copyId, borrowTime, dueTime,
-                BorrowStatus.RETURNED, Objects.requireNonNull(time));
+                BorrowStatus.RETURNED, Objects.requireNonNull(time), renewalCount);
+    }
+
+    BorrowRecord renewedUntil(LocalDateTime renewedDueTime) {
+        if (status != BorrowStatus.BORROWED) {
+            throw new IllegalStateException("Only an active borrow can be renewed.");
+        }
+        LocalDateTime requiredDueTime = Objects.requireNonNull(renewedDueTime);
+        if (!requiredDueTime.isAfter(dueTime)) {
+            throw new IllegalArgumentException("Renewed due time must be later.");
+        }
+        return new BorrowRecord(recordId, userId, copyId, borrowTime,
+                requiredDueTime, status, null, renewalCount + 1);
     }
 
     boolean isOverdueAt(LocalDateTime currentTime) {

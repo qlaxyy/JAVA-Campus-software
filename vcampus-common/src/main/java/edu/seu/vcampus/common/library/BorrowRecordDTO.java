@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 public final class BorrowRecordDTO implements Serializable {
 
     @Serial
-    private static final long serialVersionUID = 2L;
+    private static final long serialVersionUID = 3L;
 
     private final String recordId;
     private final String bookId;
@@ -20,6 +20,7 @@ public final class BorrowRecordDTO implements Serializable {
     private final LocalDateTime returnTime;
     private final String status;
     private final boolean overdue;
+    private final int renewalCount;
 
     /**
      * @param recordId borrow record identifier
@@ -36,7 +37,7 @@ public final class BorrowRecordDTO implements Serializable {
     public BorrowRecordDTO(String recordId, String bookId, String bookTitle,
             String copyId, String barcode,
             LocalDateTime borrowTime, LocalDateTime dueTime, LocalDateTime returnTime,
-            String status, boolean overdue) {
+            String status, boolean overdue, int renewalCount) {
         this.recordId = recordId;
         this.bookId = bookId;
         this.bookTitle = bookTitle;
@@ -47,6 +48,7 @@ public final class BorrowRecordDTO implements Serializable {
         this.returnTime = returnTime;
         this.status = status;
         this.overdue = overdue;
+        this.renewalCount = renewalCount;
     }
 
     /** @return borrow record identifier */
@@ -78,4 +80,7 @@ public final class BorrowRecordDTO implements Serializable {
 
     /** @return server-computed overdue flag */
     public boolean isOverdue() { return overdue; }
+
+    /** @return number of successful renewals for this loan */
+    public int getRenewalCount() { return renewalCount; }
 }

@@ -5,7 +5,7 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.Objects;
 
-/** Safe doctor-registration request shown to hospital and super administrators. */
+/** Safe doctor lifecycle request shown to hospital and super administrators. */
 public final class DoctorApplicationView implements Serializable {
 
     @Serial
@@ -21,6 +21,8 @@ public final class DoctorApplicationView implements Serializable {
     private final String requestedByUserId;
     private final DoctorApplicationStatus status;
     private final String targetUserId;
+    private final String targetDoctorId;
+    private final String requestReason;
     private final String reviewedByUserId;
     private final LocalDateTime createdAt;
 
@@ -35,6 +37,8 @@ public final class DoctorApplicationView implements Serializable {
             String requestedByUserId,
             DoctorApplicationStatus status,
             String targetUserId,
+            String targetDoctorId,
+            String requestReason,
             String reviewedByUserId,
             LocalDateTime createdAt) {
         this.requestId = Objects.requireNonNull(requestId);
@@ -47,6 +51,8 @@ public final class DoctorApplicationView implements Serializable {
         this.requestedByUserId = Objects.requireNonNull(requestedByUserId);
         this.status = Objects.requireNonNull(status);
         this.targetUserId = targetUserId;
+        this.targetDoctorId = targetDoctorId;
+        this.requestReason = requestReason;
         this.reviewedByUserId = reviewedByUserId;
         this.createdAt = Objects.requireNonNull(createdAt);
     }
@@ -61,6 +67,8 @@ public final class DoctorApplicationView implements Serializable {
     public String getRequestedByUserId() { return requestedByUserId; }
     public DoctorApplicationStatus getStatus() { return status; }
     public String getTargetUserId() { return targetUserId; }
+    public String getTargetDoctorId() { return targetDoctorId; }
+    public String getRequestReason() { return requestReason; }
     public String getReviewedByUserId() { return reviewedByUserId; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 }

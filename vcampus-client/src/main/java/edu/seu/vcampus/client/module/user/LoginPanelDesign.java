@@ -254,7 +254,7 @@ final class LoginPanelDesign {
             "医院管理员  20260005",
             "学生账号  20260006",
             "教师账号  20260021",
-            "医生账号  20260029"
+            "医生账号  20260030"
         };
         for (String text : labels) {
             JLabel label = new JLabel(text);

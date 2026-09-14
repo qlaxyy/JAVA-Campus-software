@@ -117,7 +117,7 @@ class SlotSearchPanelTest {
             click(panel[0], "骨关节外科");
 
             assertTrue(awaitCondition(() -> visibleTextField(panel[0]) != null));
-            SwingUtilities.invokeAndWait(() -> visibleTextField(panel[0]).setText("林医生"));
+            SwingUtilities.invokeAndWait(() -> visibleTextField(panel[0]).setText("何远"));
             assertTrue(awaitCondition(() -> enabledBookingButtons(panel[0]).size() == 2));
 
             AtomicReference<List<String>> labels = new AtomicReference<>();
@@ -161,7 +161,7 @@ class SlotSearchPanelTest {
 
             JTextField doctorSearch = namedTextField(panel[0], "doctorSearchField");
             assertTrue(awaitCondition(() -> doctorSearch.isVisible()));
-            SwingUtilities.invokeAndWait(() -> doctorSearch.setText("林医生"));
+            SwingUtilities.invokeAndWait(() -> doctorSearch.setText("何远"));
             assertTrue(awaitCondition(() -> enabledBookingButtons(panel[0]).size() == 1));
             assertEquals(1, visibleButtons(panel[0], "已预约").size());
         }

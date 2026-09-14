@@ -24,7 +24,6 @@ import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
@@ -203,7 +202,7 @@ final class SlotSearchPanel extends JPanel {
         pages.setOpaque(false);
         pages.add(createDepartmentPage(), DEPARTMENT_PAGE);
         pages.add(createSchedulePage(), SCHEDULE_PAGE);
-        add(pages, BorderLayout.CENTER);
+        add(HospitalResponsiveLayout.constrainWidth(pages), BorderLayout.CENTER);
         add(createStatusBar(), BorderLayout.SOUTH);
         pageCards.show(pages, DEPARTMENT_PAGE);
 
@@ -255,7 +254,7 @@ final class SlotSearchPanel extends JPanel {
     private JPanel createTop(Runnable goBack) {
         JPanel top = new JPanel(new BorderLayout(12, 0));
         top.setOpaque(false);
-        JButton back = HospitalTheme.quietButton("‹ 返回医院首页");
+        JButton back = HospitalTheme.backButton("医院首页");
         back.addActionListener(event -> goBack.run());
         top.add(back, BorderLayout.WEST);
 
@@ -303,25 +302,21 @@ final class SlotSearchPanel extends JPanel {
     }
 
     private JComponent createDepartmentPage() {
-        JPanel page = HospitalResponsiveLayout.grid(2, 300, 18, 18);
-        page.setName("departmentBrowserResponsiveBody");
-        page.setOpaque(false);
-
         HospitalTheme.SurfacePanel majorArea = new HospitalTheme.SurfacePanel(
-                HospitalTheme.NAVIGATION, 16);
+                HospitalTheme.SURFACE, 14, HospitalTheme.BORDER);
         majorArea.setLayout(new BorderLayout(0, 14));
-        majorArea.setBorder(BorderFactory.createEmptyBorder(20, 14, 18, 14));
+        majorArea.setBorder(BorderFactory.createEmptyBorder(18, 14, 14, 14));
         JPanel majorHeading = new JPanel();
         majorHeading.setOpaque(false);
         majorHeading.setLayout(new BoxLayout(majorHeading, BoxLayout.Y_AXIS));
         majorHeading.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
         JLabel majorTitle = new JLabel("科室");
         majorTitle.setFont(HospitalTheme.uiFont(Font.BOLD, 20F));
-        majorTitle.setForeground(Color.WHITE);
+        majorTitle.setForeground(HospitalTheme.TEXT);
         majorTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel searchLabel = new JLabel("搜索科室");
         searchLabel.setFont(HospitalTheme.uiFont(Font.PLAIN, 12F));
-        searchLabel.setForeground(HospitalTheme.NAVIGATION_MUTED);
+        searchLabel.setForeground(HospitalTheme.MUTED);
         searchLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
         departmentSearchField.setName("departmentSearchField");
         departmentSearchField.setFont(HospitalTheme.uiFont(Font.PLAIN, 13F));
@@ -330,7 +325,7 @@ final class SlotSearchPanel extends JPanel {
         departmentSearchField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
         departmentSearchField.setAlignmentX(Component.LEFT_ALIGNMENT);
         departmentSearchField.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(HospitalTheme.NAVIGATION_HOVER),
+                BorderFactory.createLineBorder(HospitalTheme.BORDER),
                 BorderFactory.createEmptyBorder(6, 9, 6, 9)));
         majorHeading.add(majorTitle);
         majorHeading.add(Box.createVerticalStrut(13));
@@ -344,8 +339,6 @@ final class SlotSearchPanel extends JPanel {
                 majorDepartmentPanel);
         majorArea.add(majorHeading, BorderLayout.NORTH);
         majorArea.add(majorScroll, BorderLayout.CENTER);
-        page.add(majorArea);
-
         HospitalTheme.SurfacePanel details = new HospitalTheme.SurfacePanel(
                 HospitalTheme.SURFACE, 14, HospitalTheme.BORDER);
         details.setLayout(new BorderLayout(0, 16));
@@ -364,7 +357,8 @@ final class SlotSearchPanel extends JPanel {
                 departmentDetailPanel);
         details.add(detailHeading, BorderLayout.NORTH);
         details.add(detailScroll, BorderLayout.CENTER);
-        page.add(details);
+        JPanel page = HospitalResponsiveLayout.split(majorArea, details, 270, 760, 18);
+        page.setName("departmentBrowserResponsiveBody");
         return page;
     }
 
@@ -510,11 +504,11 @@ final class SlotSearchPanel extends JPanel {
 
     private static void styleMajorButton(JToggleButton button) {
         if (button.isSelected()) {
-            button.setBackground(Color.WHITE);
-            button.setForeground(HospitalTheme.NAVIGATION);
-        } else {
-            button.setBackground(HospitalTheme.NAVIGATION);
+            button.setBackground(HospitalTheme.PRIMARY);
             button.setForeground(Color.WHITE);
+        } else {
+            button.setBackground(HospitalTheme.SURFACE);
+            button.setForeground(HospitalTheme.TEXT);
         }
     }
 
@@ -725,10 +719,9 @@ final class SlotSearchPanel extends JPanel {
                 HospitalTheme.PRIMARY_LIGHT, 10, HospitalTheme.BORDER);
         card.setLayout(new BorderLayout(10, 0));
         card.setBorder(BorderFactory.createEmptyBorder(9, 12, 9, 12));
-        Dimension cardSize = new Dimension(360, 68);
-        card.setMinimumSize(cardSize);
-        card.setPreferredSize(cardSize);
-        card.setMaximumSize(cardSize);
+        card.setMinimumSize(new Dimension(210, 68));
+        card.setPreferredSize(new Dimension(360, 68));
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 68));
         card.setAlignmentX(Component.LEFT_ALIGNMENT);
         card.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         card.setToolTipText("查看“" + department.getDepartmentName() + "”号源");
@@ -1142,7 +1135,7 @@ final class SlotSearchPanel extends JPanel {
         } else if (available) {
             reserve = HospitalTheme.primaryButton("立即预约");
             reserve.setEnabled(!busy);
-            reserve.setToolTipText("确认挂号并完成模拟支付");
+            reserve.setToolTipText("确认挂号并从校园卡支付挂号费");
         } else {
             reserve = HospitalTheme.quietButton("不可预约");
             reserve.setEnabled(false);
@@ -1183,20 +1176,15 @@ final class SlotSearchPanel extends JPanel {
                 + "\n时间：" + slot.getStartTime().toLocalDate() + " "
                 + TIME.format(slot.getStartTime()) + "–" + TIME.format(slot.getEndTime())
                 + "\n挂号费：¥" + amount
-                + "\n\n本项目使用模拟支付，确认后将直接标记为已支付。";
-        int choice = JOptionPane.showConfirmDialog(
-                this,
-                message,
-                "确认预约",
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.QUESTION_MESSAGE);
-        if (choice == JOptionPane.OK_OPTION) {
+                + "\n\n确认后将从当前账号的校园卡扣除挂号费。";
+        if (HospitalDialogs.confirm(
+                this, "确认预约", message, "确认并支付", false)) {
             bookSlot(slot);
         }
     }
 
     private void bookSlot(SlotView slot) {
-        setBusy(true, "正在预约并完成模拟支付……");
+        setBusy(true, "正在预约并使用校园卡支付……");
         renderSlots();
         new SwingWorker<Response, Void>() {
             @Override
@@ -1220,11 +1208,8 @@ final class SlotSearchPanel extends JPanel {
                     if (!response.isSuccess()) {
                         terminalMessage = bookingErrorMessage(response);
                         refreshAfterBooking = shouldReloadAfterBookingFailure(response);
-                        JOptionPane.showMessageDialog(
-                                SlotSearchPanel.this,
-                                terminalMessage,
-                                "预约未完成",
-                                JOptionPane.WARNING_MESSAGE);
+                        HospitalDialogs.warning(
+                                SlotSearchPanel.this, "预约未完成", terminalMessage);
                     } else {
                         AppointmentBookingView booking = response.getData()
                                 instanceof AppointmentBookingView view ? view : null;
@@ -1233,13 +1218,11 @@ final class SlotSearchPanel extends JPanel {
                         } else {
                             String amount = String.format(
                                     Locale.ROOT, "%.2f", booking.getAmountCents() / 100.0);
-                            JOptionPane.showMessageDialog(
-                                    SlotSearchPanel.this,
+                            HospitalDialogs.information(
+                                    SlotSearchPanel.this, "预约成功",
                                     "预约成功！\n候诊序号：" + booking.getQueueNumber()
                                             + " 号\n医生：" + booking.getDoctorName()
-                                            + "\n挂号费：¥" + amount + "（已模拟支付）",
-                                    "预约成功",
-                                    JOptionPane.INFORMATION_MESSAGE);
+                                            + "\n挂号费：¥" + amount + "（校园卡已支付）");
                             terminalMessage = "预约成功，候诊序号为 "
                                     + booking.getQueueNumber() + " 号。";
                             terminalColor = HospitalTheme.SUCCESS;

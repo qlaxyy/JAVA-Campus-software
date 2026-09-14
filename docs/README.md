@@ -16,6 +16,11 @@
 其他位置：
 
 - 安装、运行、Git、PR 和演示账号：仓库根 [README](../README.md)。
+- 各模块的设计记录与交付说明：[`modules/`](modules/)，例如图书馆的
+  [借阅归还交付说明](modules/library-borrow-return.md)、
+  [管理员维护说明](modules/library-admin-maintenance.md) 与
+  [UML 设计](modules/library-uml.md)。模块内的详细规则以各模块文档为准，
+  本页只保留跨模块的项目级内容。
 - 选课与学籍负责人接入公共教师表：[教师功能接入说明](TEACHER_INTEGRATION_GUIDE.md)。
 - 表和字段：[`database/schema/`](../database/schema/)，每个模块只维护自己的数据字典。
 - 具体功能需求和验收条件：对应 GitHub Epic。

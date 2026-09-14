@@ -35,24 +35,27 @@ final class ShopPhotoSupport {
         return toJpeg(rgb, 0.72F);
     }
 
+    static BufferedImage image(byte[] bytes) {
+        try {
+            if (bytes == null || bytes.length == 0) {
+                return null;
+            }
+            return ImageIO.read(new ByteArrayInputStream(skipToImage(bytes)));
+        } catch (IOException exception) {
+            return null;
+        }
+    }
+
     static ImageIcon icon(byte[] bytes, int width, int height) {
         try {
-            BufferedImage image = ImageIO.read(new ByteArrayInputStream(bytes));
+            BufferedImage image = image(bytes);
             if (image == null) {
                 return new ImageIcon();
             }
             Image scaled = image.getScaledInstance(width, height, Image.SCALE_SMOOTH);
             return new ImageIcon(scaled);
-        } catch (IOException exception) {
+        } catch (RuntimeException exception) {
             return new ImageIcon();
-        }
-    }
-
-    static BufferedImage image(byte[] bytes) {
-        try {
-            return ImageIO.read(new ByteArrayInputStream(bytes));
-        } catch (IOException exception) {
-            return null;
         }
     }
 
@@ -102,5 +105,30 @@ final class ShopPhotoSupport {
             writer.dispose();
         }
         return buffer.toByteArray();
+    }
+
+    private static byte[] skipToImage(byte[] stored) {
+        int jpeg = indexOf(stored, new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF});
+        if (jpeg > 0) {
+            return java.util.Arrays.copyOfRange(stored, jpeg, stored.length);
+        }
+        int png = indexOf(stored, new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A});
+        if (png > 0) {
+            return java.util.Arrays.copyOfRange(stored, png, stored.length);
+        }
+        return stored;
+    }
+
+    private static int indexOf(byte[] haystack, byte[] needle) {
+        outer:
+        for (int index = 0; index <= haystack.length - needle.length; index++) {
+            for (int offset = 0; offset < needle.length; offset++) {
+                if (haystack[index + offset] != needle[offset]) {
+                    continue outer;
+                }
+            }
+            return index;
+        }
+        return -1;
     }
 }

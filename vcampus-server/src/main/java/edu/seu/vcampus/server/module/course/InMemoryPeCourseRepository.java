@@ -59,6 +59,7 @@ final class InMemoryPeCourseRepository
                 "篮球",
                 1.0,
                 "任选",
+                "体育系",
                 false,
                 List.of(
                     offering

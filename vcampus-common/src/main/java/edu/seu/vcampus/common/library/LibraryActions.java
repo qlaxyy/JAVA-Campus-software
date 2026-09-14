@@ -29,6 +29,10 @@ public final class LibraryActions {
     public static final String GET_BORROW_RECORDS =
             ActionNames.of(ModuleNames.LIBRARY, "GET_BORROW_RECORDS");
 
+    /** Renews one active borrow owned by the authenticated user. */
+    public static final String RENEW_BORROW =
+            ActionNames.of(ModuleNames.LIBRARY, "RENEW_BORROW");
+
     /** Creates a reservation for the authenticated user. */
     public static final String CREATE_RESERVATION =
             ActionNames.of(ModuleNames.LIBRARY, "CREATE_RESERVATION");
@@ -43,6 +47,9 @@ public final class LibraryActions {
 
     /** Lists server-owned categories; null request, ArrayList of BookCategoryDTO response. */
     public static final String LIST_CATEGORIES = ActionNames.of(ModuleNames.LIBRARY, "LIST_CATEGORIES");
+    /** Adds a reusable book category; library administrators only. */
+    public static final String ADD_BOOK_CATEGORY =
+            ActionNames.of(ModuleNames.LIBRARY, "ADD_BOOK_CATEGORY");
     /** Adds a book for a library administrator; AddBookRequest -> BookDTO. */
     public static final String ADD_BOOK = ActionNames.of(ModuleNames.LIBRARY, "ADD_BOOK");
     /** Edits metadata for a library administrator; UpdateBookRequest -> BookDTO. */

@@ -8,13 +8,16 @@ import edu.seu.vcampus.common.library.BookDTO;
 import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BookSearchResult;
 import edu.seu.vcampus.common.library.BorrowRecordDTO;
+import edu.seu.vcampus.common.library.BorrowRecordIdRequest;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
 import edu.seu.vcampus.common.library.CopyReturnRequest;
+import edu.seu.vcampus.common.library.CreateReservationRequest;
 import edu.seu.vcampus.common.library.LibraryActions;
 import edu.seu.vcampus.common.library.ListBookCopiesRequest;
 import edu.seu.vcampus.common.library.ReservationDTO;
 import edu.seu.vcampus.common.library.ReservationIdRequest;
 import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
 import edu.seu.vcampus.server.module.ServerModules;
 import org.junit.jupiter.api.Test;
@@ -110,6 +113,19 @@ class LibraryPersistenceIntegrationTest {
                     copies(librarian, "B002"), "SEU-B002-001").getStatus());
             assertEquals("RESERVED", copyWithBarcode(
                     copies(librarian, "B003"), "SEU-B003-001").getStatus());
+            BorrowRecordDTO overdue = recordWithBarcode(
+                    records(librarian), "SEU-B005-002");
+            assertTrue(overdue.isOverdue());
+            assertEquals(ErrorCodes.LIBRARY_OVERDUE_BORROW_EXISTS,
+                    librarian.send(LibraryActions.BORROW_COPY,
+                            new CopyBorrowRequest("SEU-B004-002")).getCode());
+            assertEquals(ErrorCodes.LIBRARY_OVERDUE_BORROW_EXISTS,
+                    librarian.send(LibraryActions.CREATE_RESERVATION,
+                            new CreateReservationRequest(
+                                    "B004", "九龙湖校区—中文图书阅览室3")).getCode());
+            assertEquals(ErrorCodes.LIBRARY_RENEWAL_NOT_ALLOWED,
+                    librarian.send(LibraryActions.RENEW_BORROW,
+                            new BorrowRecordIdRequest(overdue.getRecordId())).getCode());
         }
 
         try (CampusServer second = persistentServer(database)) {

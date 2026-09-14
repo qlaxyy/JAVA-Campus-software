@@ -2,6 +2,7 @@ package edu.seu.vcampus.client.module.library;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.common.library.AddBookCopyRequest;
+import edu.seu.vcampus.common.library.AddBookCategoryRequest;
 import edu.seu.vcampus.common.library.AddBookRequest;
 import edu.seu.vcampus.common.library.AdminBorrowQueryRequest;
 import edu.seu.vcampus.common.library.AdminBorrowRecordDTO;
@@ -47,6 +48,7 @@ public final class LibraryAdminPanel extends JPanel {
     private final JTextField keyword = new JTextField(20);
     private final JButton refreshBooks = new JButton("查询 / 刷新");
     private final JButton newBook = primaryAction("＋ 新建书目");
+    private final JButton addCategory = new JButton("＋ 新增分类");
     private final JButton saveBook = new JButton("保存书目信息");
     private final JButton activateBook = new JButton("开放借阅");
     private final JButton deactivateBook = new JButton("停止借阅");
@@ -82,7 +84,7 @@ public final class LibraryAdminPanel extends JPanel {
     private final JComboBox<String> borrowScope = new JComboBox<>(new String[]{"当前借阅", "借阅历史", "逾期未还"});
     private final JButton refreshBorrows = new JButton("刷新借阅记录");
     private final DefaultTableModel borrowModel = readOnlyModel(new String[]{
-            "用户编号", "书名", "馆藏条码", "借出时间", "应还时间", "归还时间", "状态", "逾期"
+            "用户编号", "书名", "馆藏条码", "借出时间", "应还时间", "续借", "归还时间", "状态"
     });
     private final JTable borrowTable = new JTable(borrowModel);
 
@@ -101,9 +103,11 @@ public final class LibraryAdminPanel extends JPanel {
     public LibraryAdminPanel(ClientContext context) {
         this.context = context;
         setName("library.admin");
-        setLayout(new BorderLayout(8, 8));
-        setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        setLayout(new BorderLayout(12, 12));
+        LibraryUiTheme.installPage(this);
+        setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
         areas.setName("library.admin.tabs");
+        LibraryUiTheme.styleTabbedPane(areas);
         areas.addTab("书目维护", createCatalogArea());
         areas.addTab("实体单册", createCopyArea());
         areas.addTab("借阅查询", createBorrowArea());
@@ -111,11 +115,15 @@ public final class LibraryAdminPanel extends JPanel {
 
         outcome.setName("library.admin.outcome");
         status.setName("library.admin.status");
-        JPanel footer = new JPanel(new GridLayout(0, 1, 0, 4));
+        JPanel footer = new JPanel(new GridLayout(1, 2, 8, 0));
+        footer.setOpaque(false);
+        LibraryUiTheme.styleStatusLabel(outcome);
+        LibraryUiTheme.styleStatusLabel(status);
         footer.add(outcome);
         footer.add(status);
         add(footer, BorderLayout.SOUTH);
 
+        applyVisualTheme();
         wireEvents();
         updateControls();
     }
@@ -131,11 +139,15 @@ public final class LibraryAdminPanel extends JPanel {
         language.setName("library.admin.language");
         LibraryCategories.render(category);
 
-        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        LibraryUiTheme.installPage(panel);
         JPanel search = new JPanel(new BorderLayout(8, 0));
+        LibraryUiTheme.styleCard(search);
+        search.setBorder(LibraryUiTheme.cardBorder(10, 12));
         search.add(new JLabel("书名 / 作者 / ISBN"), BorderLayout.WEST);
         search.add(keyword, BorderLayout.CENTER);
         JPanel searchActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        searchActions.setOpaque(false);
         searchActions.add(refreshBooks);
         searchActions.add(newBook);
         search.add(searchActions, BorderLayout.EAST);
@@ -143,17 +155,28 @@ public final class LibraryAdminPanel extends JPanel {
 
         configureTable(bookTable, "library.admin.books");
         JPanel editor = new JPanel(new GridBagLayout());
-        editor.setBorder(BorderFactory.createTitledBorder("书目元数据（馆藏数量由实体单册统计）"));
+        editor.setName("library.admin.bookEditor");
+        LibraryUiTheme.styleCard(editor);
+        editor.setPreferredSize(new Dimension(330, 500));
+        editor.setMinimumSize(new Dimension(300, 0));
+        editor.setBorder(BorderFactory.createTitledBorder(
+                LibraryUiTheme.cardBorder(10, 10),
+                "书目元数据（馆藏数量由实体单册统计）"));
         GridBagConstraints c = formConstraints();
         row(editor, c, 0, "当前书目", selectedBook);
         row(editor, c, 1, "ISBN", isbn);
         row(editor, c, 2, "书名", title);
         row(editor, c, 3, "作者", author);
-        row(editor, c, 4, "分类", category);
+        JPanel categoryEditor = new JPanel(new BorderLayout(5, 0));
+        categoryEditor.setOpaque(false);
+        categoryEditor.add(category, BorderLayout.CENTER);
+        categoryEditor.add(addCategory, BorderLayout.EAST);
+        row(editor, c, 4, "分类", categoryEditor);
         row(editor, c, 5, "出版社", publisher);
         row(editor, c, 6, "出版年", year);
         row(editor, c, 7, "语种", language);
         JPanel metadataActions = new JPanel(new GridLayout(0, 1, 0, 6));
+        metadataActions.setOpaque(false);
         metadataActions.add(saveBook);
         metadataActions.add(activateBook);
         metadataActions.add(deactivateBook);
@@ -162,10 +185,18 @@ public final class LibraryAdminPanel extends JPanel {
         c.gridwidth = 2;
         editor.add(metadataActions, c);
 
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(bookTable), editor);
-        split.setResizeWeight(0.72);
-        split.setDividerLocation(760);
-        panel.add(split, BorderLayout.CENTER);
+        JPanel workspace = new JPanel(new BorderLayout(10, 0));
+        workspace.setOpaque(false);
+        workspace.add(LibraryUiTheme.tableScrollPane(bookTable), BorderLayout.CENTER);
+        LibraryUiTheme.setColumnWidths(bookTable,
+                95, 125, 190, 110, 80, 130, 60, 60, 80, 55, 55);
+        JScrollPane editorScroll = new JScrollPane(editor);
+        editorScroll.setBorder(null);
+        editorScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        editorScroll.getViewport().setBackground(LibraryUiTheme.SURFACE);
+        editorScroll.setPreferredSize(new Dimension(350, 0));
+        workspace.add(editorScroll, BorderLayout.EAST);
+        panel.add(workspace, BorderLayout.CENTER);
         return panel;
     }
 
@@ -175,22 +206,32 @@ public final class LibraryAdminPanel extends JPanel {
         callNumber.setName("library.admin.callNumber");
         configureTable(copyTable, "library.admin.copies");
 
-        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        LibraryUiTheme.installPage(panel);
         JPanel header = new JPanel(new BorderLayout(8, 0));
+        LibraryUiTheme.styleCard(header);
+        header.setBorder(LibraryUiTheme.cardBorder(10, 12));
         header.add(copyBook, BorderLayout.CENTER);
         JPanel headerActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        headerActions.setOpaque(false);
         headerActions.add(refreshCopies);
         headerActions.add(newCopy);
         header.add(headerActions, BorderLayout.EAST);
         panel.add(header, BorderLayout.NORTH);
 
         JPanel editor = new JPanel(new GridBagLayout());
-        editor.setBorder(BorderFactory.createTitledBorder("单册资料与状态"));
+        editor.setName("library.admin.copyEditor");
+        LibraryUiTheme.styleCard(editor);
+        editor.setPreferredSize(new Dimension(330, 360));
+        editor.setMinimumSize(new Dimension(300, 0));
+        editor.setBorder(BorderFactory.createTitledBorder(
+                LibraryUiTheme.cardBorder(10, 10), "单册资料与状态"));
         GridBagConstraints c = formConstraints();
         row(editor, c, 0, "馆藏条码", barcode);
         row(editor, c, 1, "馆藏地", location);
         row(editor, c, 2, "索书号", callNumber);
         JPanel actions = new JPanel(new GridLayout(0, 1, 0, 6));
+        actions.setOpaque(false);
         actions.add(addCopy);
         actions.add(updateCopy);
         actions.add(shelfCopy);
@@ -201,30 +242,67 @@ public final class LibraryAdminPanel extends JPanel {
         c.gridwidth = 2;
         editor.add(actions, c);
 
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(copyTable), editor);
-        split.setResizeWeight(0.72);
-        split.setDividerLocation(760);
-        panel.add(split, BorderLayout.CENTER);
+        JPanel workspace = new JPanel(new BorderLayout(10, 0));
+        workspace.setOpaque(false);
+        workspace.add(LibraryUiTheme.tableScrollPane(copyTable), BorderLayout.CENTER);
+        LibraryUiTheme.setColumnWidths(copyTable, 115, 130, 240, 110, 100, 120);
+        JScrollPane editorScroll = new JScrollPane(editor);
+        editorScroll.setBorder(null);
+        editorScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        editorScroll.getViewport().setBackground(LibraryUiTheme.SURFACE);
+        editorScroll.setPreferredSize(new Dimension(350, 0));
+        workspace.add(editorScroll, BorderLayout.EAST);
+        panel.add(workspace, BorderLayout.CENTER);
         return panel;
     }
 
     private JPanel createBorrowArea() {
         borrowScope.setName("library.admin.borrowScope");
         configureTable(borrowTable, "library.admin.borrows");
-        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        LibraryUiTheme.installPage(panel);
         JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        LibraryUiTheme.styleCard(header);
+        header.setBorder(LibraryUiTheme.cardBorder(10, 12));
         header.add(new JLabel("查询范围"));
         header.add(borrowScope);
         header.add(refreshBorrows);
         panel.add(header, BorderLayout.NORTH);
-        panel.add(new JScrollPane(borrowTable), BorderLayout.CENTER);
+        panel.add(LibraryUiTheme.tableScrollPane(borrowTable), BorderLayout.CENTER);
+        LibraryUiTheme.setColumnWidths(borrowTable,
+                125, 190, 130, 135, 135, 60, 135, 90);
         return panel;
+    }
+
+    private void applyVisualTheme() {
+        for (JTextField field : List.of(
+                keyword, isbn, title, author, publisher, year,
+                language, barcode, location, callNumber)) {
+            LibraryUiTheme.styleTextField(field);
+        }
+        LibraryUiTheme.styleComboBox(category);
+        LibraryUiTheme.styleComboBox(borrowScope);
+
+        for (JButton button : List.of(
+                refreshBooks, newBook, addCategory, activateBook, newCopy,
+                updateCopy, restoreCopy, refreshCopies, refreshBorrows)) {
+            LibraryUiTheme.styleSecondaryButton(button);
+        }
+        for (JButton button : List.of(saveBook, addCopy, shelfCopy)) {
+            LibraryUiTheme.stylePrimaryButton(button);
+        }
+        for (JButton button : List.of(deactivateBook, withdrawCopy)) {
+            LibraryUiTheme.styleDangerButton(button);
+        }
+        selectedBook.setForeground(LibraryUiTheme.MUTED);
+        copyBook.setForeground(LibraryUiTheme.MUTED);
     }
 
     private void wireEvents() {
         refreshBooks.addActionListener(event -> refresh());
         keyword.addActionListener(event -> refresh());
         newBook.addActionListener(event -> beginNewBook());
+        addCategory.addActionListener(event -> addCategory());
         saveBook.addActionListener(event -> saveBook());
         activateBook.addActionListener(event -> changeBookStatus(ACTIVE));
         deactivateBook.addActionListener(event -> changeBookStatus(INACTIVE));
@@ -308,6 +386,24 @@ public final class LibraryAdminPanel extends JPanel {
         outcome.setText("请填写书目元数据；新增书目初始馆藏为 0");
         updateControls();
         isbn.requestFocusInWindow();
+    }
+
+    private void addCategory() {
+        if (working || uncertainWrite) return;
+        String name = JOptionPane.showInputDialog(this,
+                "输入新分类名称（新增后可被所有书目复用）", "新增图书分类",
+                JOptionPane.PLAIN_MESSAGE);
+        if (name == null) return;
+        if (name.isBlank()) {
+            outcome.setText("分类名称不能为空");
+            return;
+        }
+        submit(LibraryActions.ADD_BOOK_CATEGORY, new AddBookCategoryRequest(name),
+                "新增分类", BookCategoryDTO.class, added -> {
+                    category.addItem(added);
+                    category.setSelectedItem(added);
+                    outcome.setText("分类“" + added.getCategoryName() + "”已新增，可用于新书目");
+                });
     }
 
     private void selectBook() {
@@ -491,8 +587,9 @@ public final class LibraryAdminPanel extends JPanel {
                     borrowModel.setRowCount(0);
                     for (AdminBorrowRecordDTO record : records) {
                         borrowModel.addRow(new Object[]{record.getUserId(), record.getBookTitle(), record.getBarcode(),
-                                format(record.getBorrowTime()), format(record.getDueTime()), format(record.getReturnTime()),
-                                displayBorrowStatus(record.getStatus()), record.isOverdue() ? "是" : "否"});
+                                format(record.getBorrowTime()), format(record.getDueTime()), record.getRenewalCount(),
+                                format(record.getReturnTime()), record.isOverdue()
+                                ? "已逾期" : displayBorrowStatus(record.getStatus())});
                     }
                     status.setText("共 " + records.size() + " 条" + borrowScope.getSelectedItem() + "记录");
                 } catch (InterruptedException exception) {
@@ -630,6 +727,7 @@ public final class LibraryAdminPanel extends JPanel {
         keyword.setEnabled(!working);
         bookTable.setEnabled(!working);
         newBook.setEnabled(ready && category.getItemCount() > 0);
+        addCategory.setEnabled(ready);
         isbn.setEnabled(bookEditable);
         title.setEnabled(bookEditable);
         author.setEnabled(bookEditable);
@@ -671,27 +769,17 @@ public final class LibraryAdminPanel extends JPanel {
     }
 
     private static JButton primaryAction(String text) {
-        JButton button = new JButton(text);
-        Color accent = new Color(15, 118, 110);
-        button.setBackground(Color.WHITE);
-        button.setForeground(accent);
-        button.setFont(button.getFont().deriveFont(Font.BOLD));
-        button.setFocusPainted(false);
-        button.setOpaque(true);
-        button.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(accent, 2),
-                BorderFactory.createEmptyBorder(5, 12, 5, 12)));
-        return button;
+        return new JButton(text);
     }
 
     private static void configureTable(JTable table, String name) {
         table.setName(name);
         table.setFillsViewportHeight(true);
         table.setAutoCreateRowSorter(true);
-        table.setRowHeight(26);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.getTableHeader().setReorderingAllowed(false);
         table.getTableHeader().setResizingAllowed(false);
+        LibraryUiTheme.styleTable(table);
     }
 
     private static GridBagConstraints formConstraints() {

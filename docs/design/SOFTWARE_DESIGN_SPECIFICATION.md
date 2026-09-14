@@ -966,7 +966,7 @@ classDiagram
 
 ### 8.9 测试与验收
 
-自动化测试共 **109 个用例**（服务端 11 个测试类、客户端 9 个测试类），详见
+自动化测试共 **111 个用例**（服务端 11 个测试类、客户端 10 个测试类），详见
 [交付说明](../modules/library-borrow-return.md)：
 
 | 测试类 | 覆盖内容 |
@@ -981,6 +981,7 @@ classDiagram
 | `LibraryFeeServiceTest` | 滞纳金费率与封顶、未归还不计费、缴费幂等、余额不足、扣款后本地写入失败补偿退款、未缴费用阻止借书与预约 |
 | `AccessLibraryRepositoryTest` | 真实 `.accdb` 建表与索引、唯一约束、借还/预约事务回滚、演示种子不变量 |
 | `LibraryPersistenceIntegrationTest` | 真实 Socket 下跨多次服务器重启的状态保留、演示数据不重复播种 |
+| `LibraryFeeGatewayIntegrationTest` | 真实 Socket + 真实卡网关：归还逾期书产生滞纳金、未结清不能借书、缴费扣款、结清后恢复借阅、重复缴费不重复扣款、结清状态与余额跨重启保留 |
 | `LibraryWorkflowUiTest` / `LibraryAdminUiTest` / `LibraryReservationUiTest` / `LibrarySearchIntegrationTest` / `LibraryAdminIntegrationTest` | 模式切换、预约与取消、续借、终端预检、管理员可见性与状态按钮禁用、跨 Socket 全链路 |
 | `LibraryResponsiveLayoutTest` / `LibraryUiThemeTest` | 900×560 与 1280×760 两档布局不越界、按钮禁用态对比度 |
 
@@ -1337,7 +1338,7 @@ flowchart LR
 | `LibraryPersistenceIntegrationTest` | 真实 Socket 下演示借阅与预约跨重启保留、已有库不重复补种，以及借书、归还、管理员上架。 |
 | `UserAdministrationIntegrationTest`、`AccessUserAuditRepositoryTest` | 超级管理员账号维护、越权拦截、成功/失败审计记录及 Access 重启后记录保留。 |
 
-图书馆模块的服务端 11 个测试类与客户端 9 个测试类共 109 个用例，完整清单见 8.9 节。
+图书馆模块的服务端 11 个测试类与客户端 10 个测试类共 111 个用例，完整清单见 8.9 节。
 其余模块的测试同样由 `.github/workflows/ci.yml` 在每次 PR 上执行。
 
 ### 16.2 登录模块验收条件

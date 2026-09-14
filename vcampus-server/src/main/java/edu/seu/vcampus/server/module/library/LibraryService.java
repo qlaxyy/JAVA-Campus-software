@@ -154,40 +154,85 @@ final class LibraryService {
     }
 
     BookSearchResult searchBooks(BookSearchRequest request) {
-        Objects.requireNonNull(request, "request must not be null");
-        String keyword = request.getKeyword() == null ? "" : request.getKeyword().strip();
-        if (keyword.length() > MAX_KEYWORD_LENGTH) {
-            throw new IllegalArgumentException("搜索关键词不能超过 50 个字符");
-        }
-        String categoryId = request.getCategoryId();
-        synchronized (circulationLock) {
-            cleanExpiredReservations();
-            if (categoryId != null) { categoryId = requireCategory(categoryId).getCategoryId(); }
-            String filter = categoryId;
-            return new BookSearchResult(bookRepository.search(keyword).stream()
-                    .filter(book -> filter == null || book.getCategoryId().equals(filter))
-                    .map(this::withInventorySummary)
-                    .toList());
-        }
+        return searchCatalog(request, false);
     }
 
     BookSearchResult searchBooksForAdmin(SessionInfo actor, BookSearchRequest request) {
         requireAdministrator(actor);
+        return searchCatalog(request, true);
+    }
+
+    /**
+     * Runs one catalog query and returns a single page of it.
+     *
+     * <p>The searchable fields span two tables, so neither repository can answer a query alone:
+     * the catalog row supplies title, author, ISBN, category, publisher, language and year through
+     * {@link BookDTO#matchesKeyword}, while the physical copies supply the shelf mark and barcode.
+     * Both halves are matched here so they stay one predicate that cannot drift apart.
+     *
+     * <p>Paging happens before the inventory summary, so a query only reads the copies of the page
+     * it actually returns rather than every match.
+     *
+     * @param request keyword, category filter and page to return
+     * @param includeInactive whether withdrawn catalog rows stay visible; administrators only
+     */
+    private BookSearchResult searchCatalog(BookSearchRequest request, boolean includeInactive) {
         Objects.requireNonNull(request, "request must not be null");
         String keyword = request.getKeyword() == null ? "" : request.getKeyword().strip();
         if (keyword.length() > MAX_KEYWORD_LENGTH) {
             throw new IllegalArgumentException("搜索关键词不能超过 50 个字符");
         }
+        int page = request.getPage();
+        int pageSize = request.getPageSize();
+        if (page < 1) {
+            throw new IllegalArgumentException("页码必须从 1 开始");
+        }
+        if (pageSize < 1 || pageSize > BookSearchRequest.MAX_PAGE_SIZE) {
+            throw new IllegalArgumentException(
+                    "每页数量只能是 1 到 " + BookSearchRequest.MAX_PAGE_SIZE + " 条");
+        }
         synchronized (circulationLock) {
             cleanExpiredReservations();
-            String categoryId = request.getCategoryId();
-            if (categoryId != null) { categoryId = requireCategory(categoryId).getCategoryId(); }
-            String filter = categoryId;
-            return new BookSearchResult(bookRepository.searchAll(keyword).stream()
-                    .filter(book -> filter == null || book.getCategoryId().equals(filter))
+            String filter = request.getCategoryId() == null
+                    ? null : requireCategory(request.getCategoryId()).getCategoryId();
+            List<BookDTO> matched = matchCatalog(keyword, filter, includeInactive);
+            int total = matched.size();
+            long offset = (long) (page - 1) * pageSize;
+            int from = offset >= total ? total : (int) offset;
+            int to = Math.min(from + pageSize, total);
+            return new BookSearchResult(matched.subList(from, to).stream()
                     .map(this::withInventorySummary)
-                    .toList());
+                    .toList(), total, page, pageSize);
         }
+    }
+
+    /**
+     * @return every catalog row matching the keyword and category, in repository order
+     */
+    private List<BookDTO> matchCatalog(String keyword, String categoryId, boolean includeInactive) {
+        String normalised = keyword.toLowerCase(java.util.Locale.ROOT);
+        java.util.Set<String> byShelfMark = normalised.isEmpty()
+                ? java.util.Set.of() : bookIdsMatchingCopies(normalised);
+        return (includeInactive ? bookRepository.searchAll("") : bookRepository.search(""))
+                .stream()
+                .filter(book -> normalised.isEmpty()
+                        || book.matchesKeyword(normalised)
+                        || byShelfMark.contains(book.getBookId()))
+                .filter(book -> categoryId == null || book.getCategoryId().equals(categoryId))
+                .toList();
+    }
+
+    /** @return identifiers of books with a copy whose shelf mark or barcode matches */
+    private java.util.Set<String> bookIdsMatchingCopies(String normalised) {
+        return bookCopyRepository.findAll().stream()
+                .filter(copy -> containsIgnoreCase(copy.callNumber(), normalised)
+                        || containsIgnoreCase(copy.barcode(), normalised))
+                .map(BookCopy::bookId)
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private static boolean containsIgnoreCase(String value, String normalised) {
+        return value != null && value.toLowerCase(java.util.Locale.ROOT).contains(normalised);
     }
 
     List<BookCategoryDTO> listCategories() { return categoryRepository.findAll(); }

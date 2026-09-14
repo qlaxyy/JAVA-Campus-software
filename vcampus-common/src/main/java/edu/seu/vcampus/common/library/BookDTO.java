@@ -100,4 +100,27 @@ public final class BookDTO implements Serializable {
 
     /** @return list price in fen; the base amount for lost-book compensation */
     public int getPriceFen() { return priceFen; }
+
+    /**
+     * Book-level keyword match over title, author, ISBN, category, publisher, language and
+     * publication year. Both repository implementations delegate here so the searchable fields
+     * cannot drift apart; copy-level fields such as the shelf mark are matched by the service.
+     *
+     * @param keyword already normalised to lower case
+     * @return whether this catalog record matches
+     */
+    public boolean matchesKeyword(String keyword) {
+        return containsIgnoreCase(title, keyword)
+                || containsIgnoreCase(author, keyword)
+                || containsIgnoreCase(isbn, keyword)
+                || containsIgnoreCase(categoryName, keyword)
+                || containsIgnoreCase(publisher, keyword)
+                || containsIgnoreCase(language, keyword)
+                || (publicationYear != null
+                        && String.valueOf(publicationYear).contains(keyword));
+    }
+
+    private static boolean containsIgnoreCase(String value, String keyword) {
+        return value != null && value.toLowerCase(java.util.Locale.ROOT).contains(keyword);
+    }
 }

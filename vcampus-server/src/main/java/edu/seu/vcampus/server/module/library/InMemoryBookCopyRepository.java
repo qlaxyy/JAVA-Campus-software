@@ -30,6 +30,11 @@ final class InMemoryBookCopyRepository implements BookCopyRepository {
     }
 
     @Override
+    public synchronized List<BookCopy> findAll() {
+        return List.copyOf(copies.values());
+    }
+
+    @Override
     public synchronized Optional<BookCopy> findById(String copyId) {
         return Optional.ofNullable(copies.get(copyId));
     }

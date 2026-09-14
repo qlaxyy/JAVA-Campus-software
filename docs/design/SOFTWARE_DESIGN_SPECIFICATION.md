@@ -682,6 +682,9 @@ classDiagram
 #### 8.2.1 读者用例
 
 1. **检索馆藏**：按关键词（≤50 字符）与可选分类查询，结果为按馆藏地汇总的馆藏数与可借数；停用书目不可见。
+   关键词**同时匹配书目元数据与实体单册**：书名、作者、ISBN、分类名、出版社、语种、出版年来自书目行，
+   索书号与馆藏条码来自单册行——读者拿到一本书的索书号或条码就能直接查到它在哪。
+   结果分页返回，每页 `pageSize` 条（默认 20，上限 100），响应同时给出 `totalCount` 与总页数。
 2. **线上预约**：选定书目与取书馆藏地提交预约；有可借单册时立即保留 24 小时，否则进入队列。
 3. **查看与取消预约**：查看状态、排队位次、分配条码与取书截止时间；排队中或待取可取消。
 4. **条码借书**：在模拟终端扫描条码，先由服务器预检，界面只启用合法操作；本人预约的保留册可在此时取走。
@@ -701,7 +704,7 @@ classDiagram
 | 页面 | 类 | 职责 |
 |---|---|---|
 | 模式选择 | `LibraryModePanel` | 三张入口卡片：线上图书馆、图书管理员工作台（仅管理员可见）、模拟自助终端 |
-| 馆藏查询 | `LibraryPanel` | 关键词与分类检索、结果表、按馆藏地展示的馆藏详情、预约提交 |
+| 馆藏查询 | `LibraryPanel` | 关键词与分类检索、结果表与翻页控件、按馆藏地展示的馆藏详情、预约提交 |
 | 我的图书馆 | `MyLibraryPanel` | 当前借阅 / 历史借阅 / 我的预约三个页签，含续借与取消预约 |
 | 模拟自助终端 | `SelfServicePanel` | 条码输入、服务器预检、按预检结果启用借书或归还 |
 | 图书管理员工作台 | `LibraryAdminPanel` | 书目维护 / 实体单册 / 借阅查询 / 预约查询 / 统计五个页签 |
@@ -894,7 +897,7 @@ classDiagram
 
 | Action | Request.data | 成功 Response.data | 权限 |
 |---|---|---|---|
-| `LIBRARY.SEARCH_BOOKS` | `BookSearchRequest(keyword, categoryId)` | `BookSearchResult` | 已登录 |
+| `LIBRARY.SEARCH_BOOKS` | `BookSearchRequest(keyword, categoryId, page, pageSize)` | `BookSearchResult` | 已登录 |
 | `LIBRARY.LIST_CATEGORIES` | `null` | `List<BookCategoryDTO>` | 已登录 |
 | `LIBRARY.CREATE_RESERVATION` | `CreateReservationRequest(bookId, pickupLocation)` | `ReservationDTO` | 已登录 |
 | `LIBRARY.GET_MY_RESERVATIONS` | `null` | `List<ReservationDTO>` | 已登录 |
@@ -975,12 +978,13 @@ classDiagram
 
 ### 8.9 测试与验收
 
-自动化测试共 **125 个用例**（服务端 11 个测试类、客户端 10 个测试类），详见
+自动化测试共 **137 个用例**（服务端 12 个测试类、客户端 11 个测试类），详见
 [交付说明](../modules/library-borrow-return.md)：
 
 | 测试类 | 覆盖内容 |
 |---|---|
 | `LibraryServiceTest` | 关键词 trim、分类过滤、馆藏地汇总语义、停用书目对读者的可见性 |
+| `LibraryCatalogSearchTest` | 索书号与条码命中单册所属书目、大小写不敏感、出版社/出版年可检索、逐页取完等于全量且不重不漏、末页余数与总数、越界页码与极大页码返回空页、非法页码与页大小被拒、分类过滤先于分页、管理员检索同样覆盖索书号且保留停用书目 |
 | `LibraryValidationTest` | 字段长度上限（恰好等于上限通过 / 超一字符拒绝）、ISBN 的 10 位与 13 位写法与分隔符归一化、长度检查先于格式检查、出版年 1000–9999 边界 |
 | `LibraryBoundaryTest` | 逾期与预约过期的时刻边界、第五本借阅与第三条预约的恰好边界、借已注销单册、续借已归还记录、有活跃借阅时归架与恢复被拒、未知标识的未找到分支 |
 | `LibraryCirculationPhaseTwoTest` | 条码借还、30 天借期、五本上限、同书目重复、逾期停借、终端预检、他人归还拒绝、并发借同一册、事务回滚 |
@@ -992,6 +996,7 @@ classDiagram
 | `LibraryPersistenceIntegrationTest` | 真实 Socket 下跨多次服务器重启的状态保留、演示数据不重复播种 |
 | `LibraryFeeGatewayIntegrationTest` | 真实 Socket + 真实卡网关：归还逾期书产生滞纳金、未结清不能借书、缴费扣款、结清后恢复借阅、重复缴费不重复扣款、结清状态与余额跨重启保留 |
 | `LibraryWorkflowUiTest` / `LibraryAdminUiTest` / `LibraryReservationUiTest` / `LibrarySearchIntegrationTest` / `LibraryAdminIntegrationTest` | 模式切换、预约与取消、续借、终端预检、管理员可见性与状态按钮禁用、跨 Socket 全链路 |
+| `LibraryCatalogPagingUiTest` | 真实 Socket 下补到 23 本书目后翻页：首页 20 条、末页 3 条、页码与按钮可用性随服务器回显、换关键词回到第一页 |
 | `LibraryResponsiveLayoutTest` / `LibraryUiThemeTest` | 900×560 与 1280×760 两档布局不越界、按钮禁用态对比度 |
 
 验收条件：
@@ -1013,6 +1018,9 @@ classDiagram
 - [ ] 重复申报同一借阅、或申报已归还的借阅，返回 `LIBRARY_LOST_NOT_REPORTABLE`。
 - [ ] 书目定价超出 0.01–9999.99 元时拒绝保存。
 - [ ] 非图书馆管理员调用任一管理 Action 返回 `AUTH_FORBIDDEN`；无 token 返回 `AUTH_REQUIRED`。
+- [ ] 关键词能命中索书号与馆藏条码：用 "C002/" 或 "seu-b004-002" 检索，返回《红楼梦》而不返回其他书目。
+- [ ] 逐页取完检索结果与一次性全量取回完全相同：顺序一致、不重复、不遗漏。
+- [ ] 页码越界（含 `Integer.MAX_VALUE`）返回空列表而不是异常；`pageSize` 超过 100 返回 `COMMON_INVALID_ARGUMENT`。
 - [ ] 同一单册的并发借阅只有一次成功（`LibraryCirculationPhaseTwoTest`）。
 - [ ] 服务器重启后借阅、预约与单册状态保持不变，已有数据库不重新播种演示数据。
 - [ ] `mvn clean verify` 全部通过。
@@ -1034,15 +1042,18 @@ classDiagram
 
 **尚未实现但未在文档中声明排除**（后续 PR 处理）：
 
-- 分页与排序：检索、借阅查询与单册列表均一次性全量返回，无 `pageSize` 一类参数。
+- 分页只做在**检索**路径上；借阅查询与单册列表仍一次性全量返回，也没有排序参数。
+  这是有意的取舍：检索结果随馆藏增长，而"某读者的借阅"受 5 本在借上限约束、
+  "某书目的单册"受复本数约束，两者结果集天然有界。
+- 分页是**跳页式**的，不是游标：两次翻页之间若有其他读者借还，同一本书可能出现在相邻两页，
+  也可能被跳过。演示场景下可接受，真做海量检索应换成基于稳定排序键的游标分页。
 - 管理员对预约是**只读**的：可以查看全馆排队与待取情况，但不能重排、强制取消或人工指定保留册；
   预约的结束方式只有读者取消、到期未取与取书借出三种。
 - 按读者检索借阅需要管理员手工输入稳定读者编号（如 `U-STUDENT-001`），
   界面不提供按姓名或学号搜索，也不做用户列表下拉。
-- 管理员不能按读者筛选借阅记录：`AdminBorrowQueryRequest` 只有 `scope` 字段。
 - 统计的导出只有 CSV，没有图表；统计口径固定在服务端，不能自定义时间范围。
-- 检索字段偏窄：关键词只匹配书名、作者、ISBN 与分类名，不含索书号、出版社、出版年与语种。
-- 无独立馆藏地字典，取书地点由现存单册的 `location` 反推。
+- 无独立馆藏地字典，取书地点由现存单册的 `location` 反推；因此馆藏地既不可枚举，
+  也无法在"取书地点"下拉里呈现一个尚未有单册的新馆藏地。
 - 逾期只有动态判定与拦截，没有催还动作与状态位。
 
 **工程限制**：

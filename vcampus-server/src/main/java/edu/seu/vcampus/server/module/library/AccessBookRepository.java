@@ -83,10 +83,7 @@ final class AccessBookRepository implements BookRepository {
                 .toLowerCase(Locale.ROOT);
         return loadAll().stream()
                 .filter(book -> !activeOnly || "ACTIVE".equals(book.getStatus()))
-                .filter(book -> contains(book.getTitle(), keyword)
-                        || contains(book.getAuthor(), keyword)
-                        || contains(book.getIsbn(), keyword)
-                        || contains(book.getCategoryName(), keyword))
+                .filter(book -> book.matchesKeyword(keyword))
                 .toList();
     }
 
@@ -178,10 +175,6 @@ final class AccessBookRepository implements BookRepository {
                 || "INACTIVE".equals(book.getStatus()))) {
             throw new IllegalArgumentException("Invalid book snapshot.");
         }
-    }
-
-    private boolean contains(String value, String keyword) {
-        return value.toLowerCase(Locale.ROOT).contains(keyword);
     }
 
     private String emptyIfNull(String value) {

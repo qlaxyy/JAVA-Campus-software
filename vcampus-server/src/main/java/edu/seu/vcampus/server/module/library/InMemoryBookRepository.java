@@ -26,18 +26,16 @@ final class InMemoryBookRepository implements BookRepository {
 
     public synchronized List<BookDTO> search(String rawKeyword) {
         String keyword = rawKeyword.toLowerCase(Locale.ROOT);
-        return books.values().stream().filter(this::isActive).filter(book ->
-                contains(book.getTitle(), keyword) || contains(book.getAuthor(), keyword)
-                        || contains(book.getIsbn(), keyword) || contains(book.getCategoryName(), keyword))
+        return books.values().stream().filter(this::isActive)
+                .filter(book -> book.matchesKeyword(keyword))
                 .toList();
     }
 
     @Override
     public synchronized List<BookDTO> searchAll(String rawKeyword) {
         String keyword = rawKeyword.toLowerCase(Locale.ROOT);
-        return books.values().stream().filter(book ->
-                contains(book.getTitle(), keyword) || contains(book.getAuthor(), keyword)
-                        || contains(book.getIsbn(), keyword) || contains(book.getCategoryName(), keyword))
+        return books.values().stream()
+                .filter(book -> book.matchesKeyword(keyword))
                 .toList();
     }
 
@@ -86,10 +84,6 @@ final class InMemoryBookRepository implements BookRepository {
                 || book.getAvailableCount() > book.getTotalCount()) {
             throw new IllegalArgumentException("Invalid book snapshot.");
         }
-    }
-
-    private boolean contains(String value, String keyword) {
-        return value.toLowerCase(Locale.ROOT).contains(keyword);
     }
 
     private boolean isActive(BookDTO book) {

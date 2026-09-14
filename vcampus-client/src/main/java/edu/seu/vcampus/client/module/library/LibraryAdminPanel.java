@@ -54,6 +54,9 @@ public final class LibraryAdminPanel extends JPanel {
     private final JTabbedPane areas = new JTabbedPane();
     private final JTextField keyword = new JTextField(20);
     private final JButton refreshBooks = new JButton("查询 / 刷新");
+    private final JButton previousBookPage = new JButton("上一页");
+    private final JButton nextBookPage = new JButton("下一页");
+    private final JLabel bookPageLabel = new JLabel();
     private final JButton newBook = primaryAction("＋ 新建书目");
     private final JButton addCategory = new JButton("＋ 新增分类");
     private final JButton saveBook = new JButton("保存书目信息");
@@ -120,6 +123,9 @@ public final class LibraryAdminPanel extends JPanel {
     private final JLabel status = new JLabel("正在等待加载数据");
     private List<BookDTO> books = List.of();
     private List<BookCopyDTO> copies = List.of();
+    private int bookPage = 1;
+    private int bookTotalPages = 1;
+    private int bookTotalCount;
     private String selectedBookId;
     private String selectedCopyId;
     private boolean addingBook;
@@ -174,7 +180,7 @@ public final class LibraryAdminPanel extends JPanel {
         JPanel search = new JPanel(new BorderLayout(8, 0));
         LibraryUiTheme.styleCard(search);
         search.setBorder(LibraryUiTheme.cardBorder(10, 12));
-        search.add(new JLabel("书名 / 作者 / ISBN"), BorderLayout.WEST);
+        search.add(new JLabel("书名 / 作者 / ISBN / 索书号 / 条码"), BorderLayout.WEST);
         search.add(keyword, BorderLayout.CENTER);
         JPanel searchActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         searchActions.setOpaque(false);
@@ -216,9 +222,14 @@ public final class LibraryAdminPanel extends JPanel {
         c.gridwidth = 2;
         editor.add(metadataActions, c);
 
+        JPanel catalogArea = new JPanel(new BorderLayout(0, 6));
+        catalogArea.setOpaque(false);
+        catalogArea.add(LibraryUiTheme.tableScrollPane(bookTable), BorderLayout.CENTER);
+        catalogArea.add(buildBookPager(), BorderLayout.SOUTH);
+
         JPanel workspace = new JPanel(new BorderLayout(10, 0));
         workspace.setOpaque(false);
-        workspace.add(LibraryUiTheme.tableScrollPane(bookTable), BorderLayout.CENTER);
+        workspace.add(catalogArea, BorderLayout.CENTER);
         LibraryUiTheme.setColumnWidths(bookTable,
                 95, 125, 190, 110, 80, 130, 60, 60, 80, 55, 55);
         JScrollPane editorScroll = new JScrollPane(editor);
@@ -553,7 +564,8 @@ public final class LibraryAdminPanel extends JPanel {
 
         for (JButton button : List.of(
                 refreshBooks, newBook, addCategory, activateBook, newCopy,
-                updateCopy, restoreCopy, refreshCopies, refreshBorrows)) {
+                updateCopy, restoreCopy, refreshCopies, refreshBorrows,
+                previousBookPage, nextBookPage)) {
             LibraryUiTheme.styleSecondaryButton(button);
         }
         for (JButton button : List.of(saveBook, addCopy, shelfCopy)) {
@@ -567,8 +579,10 @@ public final class LibraryAdminPanel extends JPanel {
     }
 
     private void wireEvents() {
-        refreshBooks.addActionListener(event -> refresh());
-        keyword.addActionListener(event -> refresh());
+        refreshBooks.addActionListener(event -> refreshFromFirstPage());
+        keyword.addActionListener(event -> refreshFromFirstPage());
+        previousBookPage.addActionListener(event -> changeBookPage(-1));
+        nextBookPage.addActionListener(event -> changeBookPage(1));
         newBook.addActionListener(event -> beginNewBook());
         addCategory.addActionListener(event -> addCategory());
         saveBook.addActionListener(event -> saveBook());
@@ -611,10 +625,24 @@ public final class LibraryAdminPanel extends JPanel {
         exportStatistics.addActionListener(event -> exportStatisticsCsv());
     }
 
-    /** Reloads authoritative categories and all catalog snapshots. */
+    /** Reloads authoritative categories and the catalog page currently on screen. */
     void refresh() {
+        loadCatalog(bookPage);
+    }
+
+    /** Reloads from the first page; used whenever the keyword changes the result set. */
+    private void refreshFromFirstPage() {
+        loadCatalog(1);
+    }
+
+    private void changeBookPage(int delta) {
+        loadCatalog(bookPage + delta);
+    }
+
+    private void loadCatalog(int page) {
         if (working) { return; }
         String query = keyword.getText().strip();
+        int requestedPage = Math.max(page, 1);
         setWorking(true);
         status.setText("正在加载书目与分类……");
         new SwingWorker<CatalogLoad, Void>() {
@@ -622,7 +650,8 @@ public final class LibraryAdminPanel extends JPanel {
                 List<BookCategoryDTO> categories = LibraryCategories.read(
                         context.send(LibraryActions.LIST_CATEGORIES, null));
                 return new CatalogLoad(categories, context.send(LibraryActions.ADMIN_SEARCH_BOOKS,
-                        new BookSearchRequest(query, null)));
+                        new BookSearchRequest(query, null, requestedPage,
+                                BookSearchRequest.DEFAULT_PAGE_SIZE)));
             }
             protected void done() {
                 try {
@@ -631,10 +660,16 @@ public final class LibraryAdminPanel extends JPanel {
                     category.removeAllItems();
                     loaded.categories().forEach(category::addItem);
                     books = result.getBooks();
+                    // The server echoes the page it answered, so the pager cannot drift from the
+                    // rows on screen even when the results shrank since the last request.
+                    bookPage = result.getPage();
+                    bookTotalPages = result.getTotalPages();
+                    bookTotalCount = result.getTotalCount();
                     fillBookTable();
                     clearBookForm();
                     uncertainWrite = false;
-                    status.setText("共 " + books.size() + " 条书目；馆藏与可借数量来自实体单册实时汇总");
+                    status.setText("共 " + bookTotalCount + " 条书目，本页 " + books.size()
+                            + " 条；馆藏与可借数量来自实体单册实时汇总");
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
                     status.setText("刷新已中断，可重新查询");
@@ -643,6 +678,31 @@ public final class LibraryAdminPanel extends JPanel {
                 } finally { setWorking(false); }
             }
         }.execute();
+    }
+
+    private JPanel buildBookPager() {
+        previousBookPage.setName("library.admin.previousPage");
+        nextBookPage.setName("library.admin.nextPage");
+        bookPageLabel.setName("library.admin.page");
+        bookPageLabel.setForeground(LibraryUiTheme.MUTED);
+        bookPageLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        JPanel buttons = new JPanel(new GridLayout(1, 2, 6, 0));
+        buttons.setOpaque(false);
+        buttons.add(previousBookPage);
+        buttons.add(nextBookPage);
+        JPanel pager = new JPanel(new BorderLayout(8, 0));
+        pager.setName("library.admin.bookPager");
+        pager.setOpaque(false);
+        pager.add(bookPageLabel, BorderLayout.CENTER);
+        pager.add(buttons, BorderLayout.EAST);
+        return pager;
+    }
+
+    private void updateBookPager() {
+        bookPageLabel.setText("第 " + bookPage + " / " + bookTotalPages + " 页");
+        boolean ready = !working && !uncertainWrite;
+        previousBookPage.setEnabled(ready && bookPage > 1);
+        nextBookPage.setEnabled(ready && bookPage < bookTotalPages);
     }
 
     private void fillBookTable() {
@@ -1028,6 +1088,7 @@ public final class LibraryAdminPanel extends JPanel {
         refreshBooks.setEnabled(!working);
         keyword.setEnabled(!working);
         bookTable.setEnabled(!working);
+        updateBookPager();
         newBook.setEnabled(ready && category.getItemCount() > 0);
         addCategory.setEnabled(ready);
         isbn.setEnabled(bookEditable);

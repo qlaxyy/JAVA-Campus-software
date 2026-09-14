@@ -440,6 +440,10 @@ class LibraryCirculationPhaseTwoTest {
             return delegate.findByBookId(bookId);
         }
 
+        public List<BookCopy> findAll() {
+            return delegate.findAll();
+        }
+
         public Optional<BookCopy> findById(String copyId) {
             return delegate.findById(copyId);
         }

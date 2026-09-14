@@ -31,10 +31,14 @@
 | `publisher` | Short Text(100) | 否 | `NULL` | 出版社 |
 | `publicationYear` | Long Integer | 否 | `NULL` | 出版年 |
 | `language` | Short Text(30) | 否 | `NULL` | 语种 |
+| `priceFen` | Long Integer | 是 | `0` | 定价（分），丢书赔偿的基数；业务校验为 0.01–9999.99 元 |
 | `status` | Short Text(20) | 是 | `ACTIVE` | `ACTIVE`、`INACTIVE` |
 
 `tblBook` 不保存 `totalCount` 或 `availableCount`。馆藏数和可借数由对应
 `tblBookCopy` 汇总，避免书目计数和实体单册状态形成两套事实来源。
+
+`priceFen` 由管理员在书目维护中填写，必填：丢书赔偿以书价为基数，未定价的书无法计算赔偿。
+旧库升级时该列默认补 0，需要管理员补填。
 
 ### `tblBookCopy`
 
@@ -78,7 +82,7 @@
 | `dueTime` | Date/Time | 是 | 无 | 当前到期时间；初借为借阅时间加 30 天，续借后再顺延 30 天 |
 | `renewalCount` | Long Integer | 是 | `0` | 已成功续借次数，本轮最大为 1 |
 | `returnTime` | Date/Time | 否 | `NULL` | 实际归还时间 |
-| `lostReportedAt` | Date/Time | 否 | `NULL` | 读者申报丢失的时间；非空表示该借阅以丢书结案（丢书赔偿尚未实现，本列为后续预留） |
+| `lostReportedAt` | Date/Time | 否 | `NULL` | 读者申报丢失的时间；非空表示该借阅以丢书结案，只产生赔偿、不产生滞纳金 |
 | `feeSettledAt` | Date/Time | 否 | `NULL` | 费用结清时间；`NULL` 表示尚未结清 |
 | `status` | Short Text(20) | 是 | `BORROWED` | `BORROWED`、`RETURNED` |
 
@@ -96,10 +100,14 @@
 
 费用不变量：
 
-- **金额不落库**。已归还记录的费用由 `dueTime` 与 `returnTime` 推导：
-  `min(逾期天数 × 50 分, 5000 分)`；到期时刻本身不算逾期；
+- **金额不落库**，两类费用互斥，都由不可变的输入推导：
+  - 逾期滞纳金（`lostReportedAt` 为空且已归还）：`min(逾期天数 × 50 分, 5000 分)`，
+    到期时刻本身不算逾期；
+  - 丢书赔偿（`lostReportedAt` 非空）：`tblBook.priceFen + 500 分`（5 元手续费）。
 - 只有 `RETURNED` 记录可能产生费用；未归还的逾期记录由"存在逾期未还"拦截，不产生金额；
-- `feeSettledAt` 只在费用大于 0 时才能从 `NULL` 变为非空，且只能变一次。
+- `feeSettledAt` 只在费用大于 0 时才能从 `NULL` 变为非空，且只能变一次；
+- 申报丢失时单册同时变为 `WITHDRAWN`：`BookCopy.status == LOANED` 与"存在当前 `BORROWED`
+  记录"的对应关系因此仍然成立（记录已转为 `RETURNED`）。
 
 ### `tblReservation`
 

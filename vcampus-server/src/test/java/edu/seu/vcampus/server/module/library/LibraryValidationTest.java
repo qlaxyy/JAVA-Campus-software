@@ -37,6 +37,8 @@ class LibraryValidationTest {
     private static final SessionInfo ADMIN = new SessionInfo("admin", "A-1", "libraryadmin", "管理员",
             Role.USER, Set.of(AdminScope.LIBRARY));
 
+    private static final int PRICE_FEN = 5_000;
+
     private final AtomicInteger isbnSequence = new AtomicInteger();
     private final InMemoryBookRepository books = new InMemoryBookRepository();
     private final InMemoryBorrowRecordRepository records = new InMemoryBorrowRecordRepository();
@@ -129,9 +131,11 @@ class LibraryValidationTest {
 
         // 分类编号上限 20
         failure(ErrorCodes.LIBRARY_CATEGORY_NOT_FOUND, () -> service.addBook(ADMIN,
-                new AddBookRequest(nextIsbn(), "书名", "作者", "C".repeat(20), "出版社", 2026, "中文")));
+                new AddBookRequest(nextIsbn(), "书名", "作者", "C".repeat(20), "出版社",
+                        2026, "中文", PRICE_FEN)));
         assertThrows(IllegalArgumentException.class, () -> service.addBook(ADMIN,
-                new AddBookRequest(nextIsbn(), "书名", "作者", "C".repeat(21), "出版社", 2026, "中文")));
+                new AddBookRequest(nextIsbn(), "书名", "作者", "C".repeat(21), "出版社",
+                        2026, "中文", PRICE_FEN)));
     }
 
     @Test
@@ -186,15 +190,32 @@ class LibraryValidationTest {
     }
 
     /** 自动分配 ISBN 的合法请求，用于长度与范围校验；这些测试不关心 ISBN 本身。 */
+    @Test
+    void bookPriceMustBeWithinRange() {
+        assertEquals(1, service.addBook(ADMIN, bookWithPrice(1)).getPriceFen());
+        assertEquals(999_999, service.addBook(ADMIN, bookWithPrice(999_999)).getPriceFen());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.addBook(ADMIN, bookWithPrice(0)));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.addBook(ADMIN, bookWithPrice(1_000_000)));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.addBook(ADMIN, bookWithPrice(-1)));
+    }
+
+    private AddBookRequest bookWithPrice(int priceFen) {
+        return new AddBookRequest(nextIsbn(), "书名", "作者", "C001", "出版社", 2026, "中文", priceFen);
+    }
+
     private AddBookRequest book(String title, String author, String publisher,
             Integer publicationYear, String language) {
         return new AddBookRequest(nextIsbn(), title, author, "C001", publisher,
-                publicationYear, language);
+                publicationYear, language, PRICE_FEN);
     }
 
     /** 显式指定 ISBN 的请求，用于 ISBN 格式测试。 */
     private AddBookRequest bookWithIsbn(String isbn) {
-        return new AddBookRequest(isbn, "书名", "作者", "C001", "出版社", 2026, "中文");
+        return new AddBookRequest(isbn, "书名", "作者", "C001", "出版社", 2026, "中文", PRICE_FEN);
     }
 
     /** 自动 ISBN 使用独立的号段，避免与 ISBN 测试中显式写出的值相撞。 */

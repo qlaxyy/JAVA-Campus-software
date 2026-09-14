@@ -128,6 +128,8 @@ public final class ErrorCodes {
             "LIBRARY_FEE_NOT_PAYABLE";
     public static final String LIBRARY_OUTSTANDING_FEE =
             "LIBRARY_OUTSTANDING_FEE";
+    public static final String LIBRARY_LOST_NOT_REPORTABLE =
+            "LIBRARY_LOST_NOT_REPORTABLE";
 
     private ErrorCodes() {
     }

@@ -185,7 +185,7 @@ class LibraryBoundaryTest {
                 new SetBookStatusRequest("B-MISSING", "INACTIVE")));
         failure(ErrorCodes.LIBRARY_BOOK_NOT_FOUND, () -> service.updateBook(ADMIN,
                 new UpdateBookRequest("B-MISSING", "9787111000000", "书名", "作者",
-                        "C001", "出版社", 2026, "中文")));
+                        "C001", "出版社", 2026, "中文", 5_000)));
         failure(ErrorCodes.LIBRARY_BOOK_NOT_FOUND, () -> service.addBookCopy(ADMIN,
                 new AddBookCopyRequest("B-MISSING", "BC-NEW", "九龙湖", "索书号")));
         failure(ErrorCodes.LIBRARY_BOOK_NOT_FOUND, () -> service.listBookCopies(ADMIN,

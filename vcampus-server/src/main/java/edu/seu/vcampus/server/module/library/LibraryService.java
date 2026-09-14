@@ -56,6 +56,9 @@ final class LibraryService {
     private static final int RESERVATION_COOLDOWN_DAYS = 7;
     private static final int FINE_PER_DAY_FEN = 50;
     private static final int MAX_FINE_FEN = 5_000;
+    private static final int MIN_BOOK_PRICE_FEN = 1;
+    private static final int MAX_BOOK_PRICE_FEN = 999_999;
+    private static final int LOST_HANDLING_FEE_FEN = 500;
 
     private final BookRepository bookRepository;
     private final BorrowRecordRepository borrowRecordRepository;
@@ -219,7 +222,8 @@ final class LibraryService {
             while (bookRepository.findIncludingInactive(id).isPresent());
             BookDTO book = new BookDTO(id, isbn, title, author,
                     category.getCategoryId(), category.getCategoryName(),
-                    publisher, publicationYear, language, "ACTIVE", List.of());
+                    publisher, publicationYear, language, "ACTIVE", List.of(),
+                    validatedPrice(request.getPriceFen()));
             bookRepository.insert(book);
             return withInventorySummary(book);
         }
@@ -240,7 +244,8 @@ final class LibraryService {
                     optionalText(request.getPublisher(), "出版社", 100),
                     publicationYear(request.getPublicationYear()),
                     optionalText(request.getLanguage(), "语种", 30),
-                    original.getStatus(), original.getLocations());
+                    original.getStatus(), original.getLocations(),
+                    validatedPrice(request.getPriceFen()));
             bookRepository.update(updated);
             return withInventorySummary(updated);
         }
@@ -429,6 +434,18 @@ final class LibraryService {
         return value.strip();
     }
 
+    /**
+     * Validates a list price in fen. Every catalog record must be priced because lost-book
+     * compensation is derived from it, so an unpriced book would be unclaimable.
+     */
+    private int validatedPrice(int priceFen) {
+        if (priceFen < MIN_BOOK_PRICE_FEN || priceFen > MAX_BOOK_PRICE_FEN) {
+            throw new IllegalArgumentException(
+                    "定价须为 0.01 元至 9999.99 元");
+        }
+        return priceFen;
+    }
+
     private Integer publicationYear(Integer value) {
         if (value != null && (value < 1000 || value > 9999)) {
             throw new IllegalArgumentException("出版年须为 1000 至 9999，或留空");
@@ -439,7 +456,8 @@ final class LibraryService {
     private BookDTO copyBook(BookDTO book, String status) {
         return new BookDTO(book.getBookId(), book.getIsbn(), book.getTitle(), book.getAuthor(),
                 book.getCategoryId(), book.getCategoryName(), book.getPublisher(),
-                book.getPublicationYear(), book.getLanguage(), status, book.getLocations());
+                book.getPublicationYear(), book.getLanguage(), status, book.getLocations(),
+                book.getPriceFen());
     }
 
     private void requireUniqueIsbn(String isbn, String currentId) {
@@ -829,15 +847,68 @@ final class LibraryService {
     }
 
     /**
-     * Fee owed by one record: the overdue fine of a late return, or lost-book compensation
-     * once that is reported. The two are mutually exclusive — a lost loan produces no fine.
+     * Reports one active borrow as lost: the loan is closed and the physical copy is withdrawn in
+     * the same transaction, so the collection and the record never disagree. Compensation becomes
+     * payable immediately and is derived from the book price.
      *
-     * <p>The amount is never stored: it is derived from {@code returnTime} and {@code dueTime},
-     * which do not change once written, matching the module's "overdue is computed, not stored"
-     * design.
+     * @param session authenticated reader; the record must belong to this user
+     * @param request identifies the borrow record
+     * @return the closed record, now carrying lost-book compensation
+     */
+    BorrowRecordDTO reportLost(SessionInfo session, BorrowRecordIdRequest request) {
+        Objects.requireNonNull(session, "session must not be null");
+        Objects.requireNonNull(request, "request must not be null");
+        String recordId = requireText(request.getRecordId(), "recordId");
+        synchronized (circulationLock) {
+            return inTransaction(() -> {
+                LocalDateTime now = now();
+                expireReservations(now);
+                BorrowRecord record = borrowRecordRepository.findById(recordId)
+                        .filter(value -> value.userId().equals(session.getUserId()))
+                        .orElseThrow(() -> failure(
+                                ErrorCodes.LIBRARY_BORROW_RECORD_NOT_FOUND,
+                                "借阅记录不存在，请刷新后重试"));
+                if (record.status() != BorrowStatus.BORROWED || record.isLost()) {
+                    throw failure(ErrorCodes.LIBRARY_LOST_NOT_REPORTABLE,
+                            "只有当前在借的记录可以申报丢失");
+                }
+                BookCopy copy = requireCopyForRecord(record);
+                if (copy.status() != BookCopyStatus.LOANED) {
+                    throw failure(ErrorCodes.LIBRARY_LOST_NOT_REPORTABLE,
+                            "该单册当前不可申报丢失，请联系图书馆管理员");
+                }
+                bookCopyRepository.update(copy.withStatus(BookCopyStatus.WITHDRAWN));
+                BorrowRecord lost = record.lostAt(now);
+                borrowRecordRepository.update(lost);
+                return toBorrowRecordDTO(lost, now);
+            });
+        }
+    }
+
+    /**
+     * Fee owed by one record: lost-book compensation when the loan was reported lost, otherwise
+     * the overdue fine of a late return. The two are mutually exclusive — a lost loan produces no
+     * fine, which {@link BorrowRecord#overdueFineFen} already guarantees.
+     *
+     * <p>The amount is never stored: the inputs it derives from ({@code dueTime},
+     * {@code returnTime}, {@code lostReportedAt} and the book price) do not change once written,
+     * matching the module's "overdue is computed, not stored" design.
+     *
+     * <p>Missing lookup targets degrade to zero rather than throwing: this runs on query paths
+     * such as the borrow decision, which must not fail because of an orphaned record.
      */
     private int feeFenOf(BorrowRecord record) {
+        if (record.isLost()) {
+            return lostBookPriceFen(record) + LOST_HANDLING_FEE_FEN;
+        }
         return record.overdueFineFen(FINE_PER_DAY_FEN, MAX_FINE_FEN);
+    }
+
+    private int lostBookPriceFen(BorrowRecord record) {
+        return bookCopyRepository.findById(record.copyId())
+                .flatMap(copy -> bookRepository.findIncludingInactive(copy.bookId()))
+                .map(BookDTO::getPriceFen)
+                .orElse(0);
     }
 
     /** Closed records that still owe money; settled fees and fee-free records are excluded. */
@@ -1100,7 +1171,8 @@ final class LibraryService {
                 .toList();
         return new BookDTO(book.getBookId(), book.getIsbn(), book.getTitle(), book.getAuthor(),
                 book.getCategoryId(), book.getCategoryName(), book.getPublisher(),
-                book.getPublicationYear(), book.getLanguage(), book.getStatus(), locations);
+                book.getPublicationYear(), book.getLanguage(), book.getStatus(), locations,
+                book.getPriceFen());
     }
 
     private BorrowRecordDTO toBorrowRecordDTO(BorrowRecord record, LocalDateTime now) {

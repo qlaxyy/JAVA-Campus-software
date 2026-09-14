@@ -55,8 +55,8 @@ final class AccessBookRepository implements BookRepository {
         validate(book);
         store.write("Cannot insert library book.", connection -> {
             String sql = "INSERT INTO tblBook (bookId, isbn, title, author, categoryId, "
-                    + "publisher, publicationYear, language, [status]) "
-                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    + "publisher, publicationYear, language, priceFen, [status]) "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 bindBook(statement, book, false);
                 requireOne(statement.executeUpdate(), "Book was not inserted.");
@@ -70,7 +70,7 @@ final class AccessBookRepository implements BookRepository {
         store.write("Cannot update library book.", connection -> {
             String sql = "UPDATE tblBook SET isbn = ?, title = ?, author = ?, "
                     + "categoryId = ?, publisher = ?, publicationYear = ?, language = ?, "
-                    + "[status] = ? WHERE bookId = ?";
+                    + "priceFen = ?, [status] = ? WHERE bookId = ?";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 bindBook(statement, book, true);
                 requireOne(statement.executeUpdate(), "Book does not exist.");
@@ -130,7 +130,8 @@ final class AccessBookRepository implements BookRepository {
                 year,
                 emptyIfNull(result.getString("language")),
                 result.getString("status"),
-                List.of());
+                List.of(),
+                result.getInt("priceFen"));
     }
 
     private void bindBook(PreparedStatement statement, BookDTO book, boolean update)
@@ -150,6 +151,7 @@ final class AccessBookRepository implements BookRepository {
             statement.setInt(index++, book.getPublicationYear());
         }
         setOptionalText(statement, index++, book.getLanguage());
+        statement.setInt(index++, book.getPriceFen());
         statement.setString(index++, book.getStatus());
         if (update) {
             statement.setString(index, book.getBookId());

@@ -35,6 +35,7 @@
 | `LIBRARY.GET_BORROW_RECORDS` | `null` | `List<BorrowRecordDTO>` | 已登录 |
 | `LIBRARY.RENEW_BORROW` | `BorrowRecordIdRequest(recordId)` | `BorrowRecordDTO` | 已登录且为借阅本人 |
 | `LIBRARY.PAY_FEE` | `BorrowRecordIdRequest(recordId)` | `BorrowRecordDTO` | 已登录且为借阅本人；经校园卡扣款 |
+| `LIBRARY.REPORT_LOST` | `BorrowRecordIdRequest(recordId)` | `BorrowRecordDTO` | 已登录且为借阅本人；注销单册并产生赔偿 |
 | `LIBRARY.BORROW_COPY` | `CopyBorrowRequest(barcode)` | `null` | 已登录 |
 | `LIBRARY.RETURN_COPY` | `CopyReturnRequest(barcode)` | `null` | 已登录 |
 | `LIBRARY.INSPECT_COPY` | `CopyInspectionRequest(barcode)` | `CopyInspectionDTO` | 已登录 |
@@ -74,11 +75,17 @@ V1 的 `BORROW_BOOK`、`RETURN_BOOK`、`UPDATE_STOCK`、`DELETE_BOOK` 以及对�
 
 费用规则：
 
-- **只有已归还的记录产生滞纳金**，金额为 `min(逾期天数 × 0.5 元, 50 元)`；
+两类费用互斥，一条记录最多产生一笔：
+
+- **逾期滞纳金**（已归还且未申报丢失）：`min(逾期天数 × 0.5 元, 50 元)`；
   恰好到期时刻归还不算逾期、不计费。未归还的逾期记录不产生金额，
   此时仍由"存在逾期未还"拦截借阅与预约；
-- 金额**不落库**：只保存结清时间 `feeSettledAt`，其余由 `dueTime` 与 `returnTime` 推导。
-  已归还记录的 `returnTime` 不再变化，因此金额稳定且不会漂移；
+- **丢书赔偿**（读者申报丢失）：`书价 + 5 元手续费`。申报成功后单册立即转为 `WITHDRAWN`，
+  记录同时关闭并写入 `lostReportedAt`，三件事在同一事务内完成。既逾期又丢失时**只算赔偿**，
+  不叠加滞纳金。书若找回，管理员用既有的「恢复单册」把它变回可借；
+- 书价来自 `tblBook.priceFen`（管理员在书目维护中填写，0.01–9999.99 元，必填）；
+- 金额**不落库**：只保存结清时间 `feeSettledAt`，其余由 `dueTime`、`returnTime`、
+  `lostReportedAt` 与书价推导。这些输入一旦写入就不再变化，因此金额稳定且不会漂移；
 - 存在未结清费用时，借书与预约分别返回 `LIBRARY_OUTSTANDING_FEE`；结清后立即恢复；
 - 缴费经校园卡 `debit` 完成，商户号为 `LIBRARY`、reference 为 `fee:<recordId>`。
   按 `recordId` 在 `circulationLock` 内串行，重复提交因记录已结清而被拒绝
@@ -112,6 +119,8 @@ InMemory 版本仍通过第二步失败时补偿第一步维持测试状态一�
 - 借还：条码定位、30 天借期、一次续借、预约阻止续借、五本上限、同书目重复、逾期停借、他人归还拒绝；
 - 费用：逾期 0/1/15/封顶天数的费率、未归还不计费、缴费幂等、余额不足、
   扣款后本地写入失败补偿退款、未缴费用阻止借书与预约且结清后恢复；
+- 丢书：赔偿为书价加手续费、单册转已注销、记录关闭并标记、既逾期又丢失时只算赔偿、
+  重复申报与申报已归还记录被拒、他人不能代为申报；
 - 状态机：`AVAILABLE -> LOANED -> WAITING_SHELVING -> AVAILABLE`，最后一步由管理员确认归架；
 - 一致性：同一条码并发只有一次借阅成功，任一写入失败不留下半完成状态；
 - 预约：立即保留、无库存排队、稳定 FIFO、三条上限、逾期停约、同书防重复、24 小时过期、

@@ -11,6 +11,7 @@ import edu.seu.vcampus.common.protocol.Response;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
@@ -51,6 +52,7 @@ public final class MyLibraryPanel extends JPanel {
     private final JButton refreshButton = new JButton("刷新全部记录");
     private final JButton renewBorrow = new JButton("续借选中图书");
     private final JButton cancelReservation = new JButton("取消选中预约");
+    private final JButton reportLost = new JButton("申报丢失");
     private final JButton payFee = new JButton("缴纳选中费用");
     private final JLabel feeHint = new JLabel("选择有“待缴”费用的历史借阅后结清");
     private final JLabel reservationHint = new JLabel("只有“排队中”和“待取书”预约可以取消");
@@ -104,6 +106,7 @@ public final class MyLibraryPanel extends JPanel {
         renewBorrow.addActionListener(event -> renewSelectedBorrow());
         cancelReservation.addActionListener(event -> cancelSelectedReservation());
         payFee.addActionListener(event -> paySelectedFee());
+        reportLost.addActionListener(event -> reportSelectedLost());
         reservationTable.getSelectionModel().addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
                 updateCancelButton();
@@ -112,6 +115,7 @@ public final class MyLibraryPanel extends JPanel {
         currentTable.getSelectionModel().addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
                 updateRenewButton();
+                updateReportLostButton();
             }
         });
         historyTable.getSelectionModel().addListSelectionListener(event -> {
@@ -136,7 +140,11 @@ public final class MyLibraryPanel extends JPanel {
         actions.setBorder(LibraryUiTheme.cardBorder(7, 10));
         renewHint.setForeground(LibraryUiTheme.MUTED);
         actions.add(renewHint, BorderLayout.CENTER);
-        actions.add(renewBorrow, BorderLayout.EAST);
+        JPanel buttons = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 8, 0));
+        buttons.setOpaque(false);
+        buttons.add(reportLost);
+        buttons.add(renewBorrow);
+        actions.add(buttons, BorderLayout.EAST);
         panel.add(actions, BorderLayout.SOUTH);
         return panel;
     }
@@ -289,6 +297,57 @@ public final class MyLibraryPanel extends JPanel {
         return modelRow >= historyBorrows.size() ? null : historyBorrows.get(modelRow);
     }
 
+    private void updateReportLostButton() {
+        reportLost.setEnabled(!working && selectedCurrentBorrow() != null);
+    }
+
+    private void reportSelectedLost() {
+        BorrowRecordDTO record = selectedCurrentBorrow();
+        if (working || record == null) {
+            return;
+        }
+        int choice = JOptionPane.showConfirmDialog(this,
+                "确定申报《" + record.getBookTitle() + "》（条码 " + record.getBarcode()
+                        + "）已丢失吗？\n该单册将被注销，并按书价加 5 元手续费产生赔偿，"
+                        + "需结清后才能继续借书。",
+                "申报丢失", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (choice != JOptionPane.OK_OPTION) {
+            return;
+        }
+        setWorking(true);
+        statusLabel.setText("正在登记《" + record.getBookTitle() + "》的丢失……");
+        new SwingWorker<Response, Void>() {
+            @Override
+            protected Response doInBackground() throws Exception {
+                return context.send(LibraryActions.REPORT_LOST,
+                        new BorrowRecordIdRequest(record.getRecordId()));
+            }
+
+            @Override
+            protected void done() {
+                boolean reload = false;
+                try {
+                    Response response = get();
+                    if (response == null || !response.isSuccess()) {
+                        statusLabel.setText("申报失败：" + (response == null
+                                ? "服务器未返回结果" : LibraryMessages.failure(response)));
+                        return;
+                    }
+                    statusLabel.setText(response.getMessage());
+                    reload = true;
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    statusLabel.setText("申报结果未确认，请刷新后核对，勿重复提交");
+                } catch (ExecutionException exception) {
+                    statusLabel.setText("申报结果未确认，请刷新后核对，勿重复提交");
+                } finally {
+                    setWorking(false);
+                    if (reload) SwingUtilities.invokeLater(MyLibraryPanel.this::refresh);
+                }
+            }
+        }.execute();
+    }
+
     private void updatePayButton() {
         BorrowRecordDTO selected = selectedHistoryBorrow();
         boolean payable = !working && selected != null
@@ -419,6 +478,7 @@ public final class MyLibraryPanel extends JPanel {
         updateCancelButton();
         updateRenewButton();
         updatePayButton();
+        updateReportLostButton();
     }
 
     private void updateRenewButton() {

@@ -58,6 +58,7 @@ public final class LibraryAdminPanel extends JPanel {
     private final JComboBox<BookCategoryDTO> category = new JComboBox<>();
     private final JTextField publisher = new JTextField(18);
     private final JTextField year = new JTextField(8);
+    private final JTextField price = new JTextField(8);
     private final JTextField language = new JTextField(12);
     private final JLabel selectedBook = new JLabel("请选择书目，或点击“新建书目”");
     private final DefaultTableModel bookModel = readOnlyModel(new String[]{
@@ -174,14 +175,15 @@ public final class LibraryAdminPanel extends JPanel {
         row(editor, c, 4, "分类", categoryEditor);
         row(editor, c, 5, "出版社", publisher);
         row(editor, c, 6, "出版年", year);
-        row(editor, c, 7, "语种", language);
+        row(editor, c, 7, "定价（元）", price);
+        row(editor, c, 8, "语种", language);
         JPanel metadataActions = new JPanel(new GridLayout(0, 1, 0, 6));
         metadataActions.setOpaque(false);
         metadataActions.add(saveBook);
         metadataActions.add(activateBook);
         metadataActions.add(deactivateBook);
         c.gridx = 0;
-        c.gridy = 8;
+        c.gridy = 9;
         c.gridwidth = 2;
         editor.add(metadataActions, c);
 
@@ -418,6 +420,7 @@ public final class LibraryAdminPanel extends JPanel {
         author.setText(book.getAuthor());
         publisher.setText(book.getPublisher());
         year.setText(book.getPublicationYear() == null ? "" : book.getPublicationYear().toString());
+        price.setText(yuan(book.getPriceFen()));
         language.setText(book.getLanguage());
         selectCategory(book.getCategoryId());
         copyBook.setText("当前书目：《" + book.getTitle() + "》（" + book.getBookId() + "）· "
@@ -432,15 +435,18 @@ public final class LibraryAdminPanel extends JPanel {
         BookCategoryDTO choice = (BookCategoryDTO) category.getSelectedItem();
         Integer publicationYear = readYear();
         if (publicationYear == Integer.MIN_VALUE) { return; }
+        int priceFen = readPriceFen();
+        if (priceFen == Integer.MIN_VALUE) { return; }
         if (choice == null || isbn.getText().isBlank() || title.getText().isBlank() || author.getText().isBlank()) {
             outcome.setText("请填写 ISBN、书名、作者并选择分类");
             return;
         }
         Serializable request = addingBook
                 ? new AddBookRequest(isbn.getText(), title.getText(), author.getText(), choice.getCategoryId(),
-                        publisher.getText(), publicationYear, language.getText())
+                        publisher.getText(), publicationYear, language.getText(), priceFen)
                 : new UpdateBookRequest(selectedBookId, isbn.getText(), title.getText(), author.getText(),
-                        choice.getCategoryId(), publisher.getText(), publicationYear, language.getText());
+                        choice.getCategoryId(), publisher.getText(), publicationYear, language.getText(),
+                        priceFen);
         submitBook(addingBook ? LibraryActions.ADD_BOOK : LibraryActions.UPDATE_BOOK,
                 request, addingBook ? "新增书目" : "修改书目");
     }
@@ -676,12 +682,31 @@ public final class LibraryAdminPanel extends JPanel {
         }
     }
 
+    /** 读取定价（元，最多两位小数）并转换为分；非法输入返回 {@code Integer.MIN_VALUE}。 */
+    private int readPriceFen() {
+        String value = price.getText().strip();
+        try {
+            int fen = new java.math.BigDecimal(value).movePointRight(2).intValueExact();
+            if (fen < 1 || fen > 999_999) {
+                throw new ArithmeticException("out of range");
+            }
+            return fen;
+        } catch (NumberFormatException | ArithmeticException exception) {
+            outcome.setText("定价须为 0.01 至 9999.99 元，最多两位小数");
+            return Integer.MIN_VALUE;
+        }
+    }
+
+    private static String yuan(int fen) {
+        return java.math.BigDecimal.valueOf(fen, 2).toPlainString();
+    }
+
     private void clearBookForm() {
         selectedBookId = null;
         addingBook = false;
         selectedBook.setText("请选择书目，或点击“新建书目”");
         isbn.setText(""); title.setText(""); author.setText(""); publisher.setText("");
-        year.setText(""); language.setText(""); category.setSelectedIndex(-1);
+        year.setText(""); price.setText(""); language.setText(""); category.setSelectedIndex(-1);
         copyBook.setText("请先在书目维护中选择一本书");
         copies = List.of();
         copyModel.setRowCount(0);

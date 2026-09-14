@@ -35,6 +35,7 @@ class LibraryServerModuleTest {
                 LibraryActions.BORROW_COPY, LibraryActions.RETURN_COPY,
                 LibraryActions.INSPECT_COPY, LibraryActions.LIST_CATEGORIES,
                 LibraryActions.RENEW_BORROW, LibraryActions.PAY_FEE,
+                LibraryActions.REPORT_LOST,
                 LibraryActions.ADD_BOOK_CATEGORY,
                 LibraryActions.ADMIN_SEARCH_BOOKS, LibraryActions.ADD_BOOK, LibraryActions.UPDATE_BOOK,
                 LibraryActions.SET_BOOK_STATUS, LibraryActions.ADD_BOOK_COPY, LibraryActions.LIST_BOOK_COPIES,
@@ -77,7 +78,8 @@ class LibraryServerModuleTest {
         assertTrue(dispatch(router, LibraryActions.ADD_BOOK_CATEGORY, ADMIN.getToken(),
                 new AddBookCategoryRequest("艺术")).isSuccess());
 
-        AddBookRequest add = new AddBookRequest("9787111000000", "测试", "作者", "C001", "", null, "");
+        AddBookRequest add = new AddBookRequest("9787111000000", "测试", "作者", "C001", "", null, "",
+                5_000);
         assertEquals(ErrorCodes.AUTH_FORBIDDEN,
                 dispatch(router, LibraryActions.ADD_BOOK, READER.getToken(), add).getCode());
         assertEquals(ErrorCodes.AUTH_REQUIRED,

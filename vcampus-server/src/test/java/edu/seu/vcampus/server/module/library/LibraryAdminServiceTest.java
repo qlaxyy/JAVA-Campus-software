@@ -51,7 +51,7 @@ class LibraryAdminServiceTest {
     @Test
     void catalogMetadataAndCopyLifecycleStaySeparate() {
         AddBookRequest request = new AddBookRequest("978-7-111-00000-0", "新书", "作者", "C001",
-                "出版社", 2026, "中文");
+                "出版社", 2026, "中文", 5_000);
         failure(ErrorCodes.AUTH_FORBIDDEN, () -> service.addBook(READER, request));
         BookDTO created = service.addBook(ADMIN, request);
         assertEquals("9787111000000", created.getIsbn());
@@ -65,6 +65,7 @@ class LibraryAdminServiceTest {
         failure(ErrorCodes.LIBRARY_DUPLICATE_BARCODE,
                 () -> service.addBookCopy(ADMIN,
                         new AddBookCopyRequest("B001", "BC-001", "四牌楼", "TP312/2")));
+        assertEquals(5_000, created.getPriceFen());
         assertEquals(1, service.searchBooksForAdmin(ADMIN,
                 new BookSearchRequest(created.getIsbn(), null)).getBooks().getFirst().getTotalCount());
 
@@ -103,7 +104,8 @@ class LibraryAdminServiceTest {
         assertEquals(0, inactive.getAvailableCount());
         assertTrue(service.searchBooks(new BookSearchRequest("B001", null)).getBooks().isEmpty());
         BookDTO edited = service.updateBook(ADMIN, new UpdateBookRequest("B001", inactive.getIsbn(),
-                "新书名", inactive.getAuthor(), "C002", "新出版社", 2025, "中文"));
+                "新书名", inactive.getAuthor(), "C002", "新出版社", 2025, "中文", 7_200));
+        assertEquals(7_200, edited.getPriceFen());
         assertEquals("INACTIVE", edited.getStatus());
         assertEquals("文学", edited.getCategoryName());
         assertEquals(5, edited.getTotalCount());

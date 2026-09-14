@@ -188,6 +188,95 @@ class LibraryFeeServiceTest {
         assertEquals(15 * FINE_PER_DAY_FEN, feeOf("BR-STABLE"), "结清后金额不再变化");
     }
 
+    @Test
+    void lostBookCompensationIsThePricePlusAHandlingFee() {
+        savedActiveLoan("BR-LOST");
+
+        BorrowRecordDTO lost = service.reportLost(READER, new BorrowRecordIdRequest("BR-LOST"));
+
+        // 演示书目《Java编程思想》定价 108.00 元，加 5 元手续费
+        assertEquals(10_800 + 500, lost.getFeeFen());
+        assertFalse(lost.isFeeSettled());
+    }
+
+    @Test
+    void reportingLostClosesTheLoanAndWithdrawsTheCopy() {
+        savedActiveLoan("BR-LOST");
+
+        BorrowRecordDTO lost = service.reportLost(READER, new BorrowRecordIdRequest("BR-LOST"));
+
+        assertEquals("RETURNED", lost.getStatus());
+        assertEquals("WITHDRAWN",
+                copies.findById("CP-B001-001").orElseThrow().status().name(),
+                "丢失的单册应转为已注销，不再计入馆藏");
+        assertTrue(service.getBorrowRecords(USER_ID).stream()
+                .noneMatch(record -> "BORROWED".equals(record.getStatus())));
+    }
+
+    @Test
+    void lostLoanIsChargedCompensationInsteadOfAnOverdueFine() {
+        // 既逾期又丢失：两类费用互斥，只按赔偿计
+        records.save(new BorrowRecord("BR-LOST", USER_ID, "CP-B001-001",
+                NOW.minusDays(45), NOW.minusDays(15), BorrowStatus.BORROWED));
+        copies.update(copies.findById("CP-B001-001").orElseThrow()
+                .withStatus(BookCopyStatus.LOANED));
+
+        BorrowRecordDTO lost = service.reportLost(READER, new BorrowRecordIdRequest("BR-LOST"));
+
+        assertEquals(10_800 + 500, lost.getFeeFen(),
+                "赔偿只按书价加手续费，不再叠加滞纳金");
+    }
+
+    @Test
+    void reportingTheSameLoanTwiceIsRejected() {
+        savedActiveLoan("BR-LOST");
+        service.reportLost(READER, new BorrowRecordIdRequest("BR-LOST"));
+
+        failure(ErrorCodes.LIBRARY_LOST_NOT_REPORTABLE,
+                () -> service.reportLost(READER, new BorrowRecordIdRequest("BR-LOST")));
+    }
+
+    @Test
+    void reportingAReturnedLoanIsRejected() {
+        savedReturned("BR-DONE", 0);
+        failure(ErrorCodes.LIBRARY_LOST_NOT_REPORTABLE,
+                () -> service.reportLost(READER, new BorrowRecordIdRequest("BR-DONE")));
+    }
+
+    @Test
+    void anotherReaderCannotReportSomeoneElsesLoanAsLost() {
+        savedActiveLoan("BR-LOST");
+        SessionInfo stranger = new SessionInfo("token-2", "U-STUDENT-002", "20260007", "旁人", Role.USER);
+        failure(ErrorCodes.LIBRARY_BORROW_RECORD_NOT_FOUND,
+                () -> service.reportLost(stranger, new BorrowRecordIdRequest("BR-LOST")));
+    }
+
+    @Test
+    void outstandingCompensationBlocksBorrowingUntilSettled() {
+        savedActiveLoan("BR-LOST");
+        service.reportLost(READER, new BorrowRecordIdRequest("BR-LOST"));
+        String barcode = availableBarcode("B002");
+
+        failure(ErrorCodes.LIBRARY_OUTSTANDING_FEE,
+                () -> service.borrowCopy(USER_ID, new CopyBorrowRequest(barcode)));
+
+        // 赔偿 113 元超过演示卡的 100 元余额，先充值再结清
+        wallet.recharge(READER, 5_000);
+        int funded = balance();
+        service.payFee(READER, new BorrowRecordIdRequest("BR-LOST"));
+
+        assertEquals(funded - (10_800 + 500), balance());
+        service.borrowCopy(USER_ID, new CopyBorrowRequest(barcode));
+    }
+
+    /** 存入一条在借记录，并把对应单册改为已借出。 */
+    private void savedActiveLoan(String recordId) {
+        records.save(new BorrowRecord(recordId, USER_ID, "CP-B001-001",
+                NOW.minusDays(5), NOW.plusDays(25), BorrowStatus.BORROWED));
+        copies.update(copies.findById("CP-B001-001").orElseThrow()
+                .withStatus(BookCopyStatus.LOANED));
+    }
+
     /** 存入一条“到期后第 overdueDays 天归还”的记录；0 表示恰好在到期时刻归还。 */
     private void savedReturned(String recordId, long overdueDays) {
         records.save(new BorrowRecord(recordId, USER_ID, "CP-B001-001",

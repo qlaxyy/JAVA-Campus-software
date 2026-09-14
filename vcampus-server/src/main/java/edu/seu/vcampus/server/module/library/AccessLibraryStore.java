@@ -114,6 +114,7 @@ final class AccessLibraryStore implements LibraryTransactionManager {
                         + "publisher TEXT(100), "
                         + "publicationYear LONG, "
                         + "language TEXT(30), "
+                        + "priceFen LONG DEFAULT 0 NOT NULL, "
                         + "[status] TEXT(20) NOT NULL, "
                         + "CONSTRAINT fk_tblBook_category FOREIGN KEY (categoryId) "
                         + "REFERENCES tblBookCategory (categoryId))");
@@ -125,6 +126,9 @@ final class AccessLibraryStore implements LibraryTransactionManager {
                         "CREATE INDEX ix_tblBook_author ON tblBook (author)");
                 executeSql(connection,
                         "CREATE INDEX ix_tblBook_category ON tblBook (categoryId)");
+            } else if (!columnExists(connection, BOOK_TABLE, "priceFen")) {
+                executeSql(connection,
+                        "ALTER TABLE tblBook ADD COLUMN priceFen LONG DEFAULT 0 NOT NULL");
             }
             if (!copyExists) {
                 executeSql(connection, "CREATE TABLE tblBookCopy ("
@@ -211,15 +215,15 @@ final class AccessLibraryStore implements LibraryTransactionManager {
             }
             List<SeedBook> books = List.of(
                     new SeedBook("B001", "9787111213826", "Java编程思想", "Bruce Eckel",
-                            "C001", "机械工业出版社", 2007, 5),
+                            "C001", "机械工业出版社", 2007, 5, 10_800),
                     new SeedBook("B002", "9787115428028", "深入理解Java虚拟机", "周志明",
-                            "C001", "人民邮电出版社", 2019, 4),
+                            "C001", "人民邮电出版社", 2019, 4, 8_900),
                     new SeedBook("B003", "9787302511854", "数据结构（Java语言描述）", "徐孝凯",
-                            "C001", "清华大学出版社", 2018, 3),
+                            "C001", "清华大学出版社", 2018, 3, 4_500),
                     new SeedBook("B004", "9787020002207", "红楼梦", "曹雪芹",
-                            "C002", "人民文学出版社", 2008, 6),
+                            "C002", "人民文学出版社", 2008, 6, 5_970),
                     new SeedBook("B005", "9787101003048", "史记", "司马迁",
-                            "C003", "中华书局", 2014, 2));
+                            "C003", "中华书局", 2014, 2, 4_500));
             for (SeedBook book : books) {
                 insertSeedBook(book);
                 insertSeedCopies(book);
@@ -268,8 +272,8 @@ final class AccessLibraryStore implements LibraryTransactionManager {
     private void insertSeedBook(SeedBook book) {
         write("Cannot seed library book.", connection -> {
             String sql = "INSERT INTO tblBook (bookId, isbn, title, author, categoryId, "
-                    + "publisher, publicationYear, language, [status]) "
-                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    + "publisher, publicationYear, language, priceFen, [status]) "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, book.id());
                 statement.setString(2, book.isbn());
@@ -279,7 +283,8 @@ final class AccessLibraryStore implements LibraryTransactionManager {
                 statement.setString(6, book.publisher());
                 statement.setInt(7, book.publicationYear());
                 statement.setString(8, "中文");
-                statement.setString(9, "ACTIVE");
+                statement.setInt(9, book.priceFen());
+                statement.setString(10, "ACTIVE");
                 statement.executeUpdate();
             }
         });
@@ -367,6 +372,6 @@ final class AccessLibraryStore implements LibraryTransactionManager {
 
     private record SeedBook(String id, String isbn, String title, String author,
                             String categoryId, String publisher, int publicationYear,
-                            int totalCount) {
+                            int totalCount, int priceFen) {
     }
 }

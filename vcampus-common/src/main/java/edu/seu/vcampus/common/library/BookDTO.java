@@ -21,6 +21,7 @@ public final class BookDTO implements Serializable {
     private final String language;
     private final String status;
     private final List<BookLocationDTO> locations;
+    private final int priceFen;
 
     /** Creates a V2 catalog summary whose inventory is grouped by location. */
     public BookDTO(
@@ -34,7 +35,8 @@ public final class BookDTO implements Serializable {
             Integer publicationYear,
             String language,
             String status,
-            List<BookLocationDTO> locations) {
+            List<BookLocationDTO> locations,
+            int priceFen) {
         this.bookId = bookId;
         this.isbn = isbn;
         this.title = title;
@@ -46,6 +48,7 @@ public final class BookDTO implements Serializable {
         this.language = language;
         this.status = status;
         this.locations = List.copyOf(locations);
+        this.priceFen = priceFen;
     }
 
     /** @return stable library book identifier */
@@ -94,4 +97,7 @@ public final class BookDTO implements Serializable {
     public int getAvailableCount() {
         return locations.stream().mapToInt(BookLocationDTO::getAvailableCount).sum();
     }
+
+    /** @return list price in fen; the base amount for lost-book compensation */
+    public int getPriceFen() { return priceFen; }
 }

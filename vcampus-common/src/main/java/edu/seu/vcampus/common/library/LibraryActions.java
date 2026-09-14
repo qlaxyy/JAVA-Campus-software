@@ -40,6 +40,13 @@ public final class LibraryActions {
     public static final String PAY_FEE =
             ActionNames.of(ModuleNames.LIBRARY, "PAY_FEE");
 
+    /**
+     * Reports one active borrow as lost. The physical copy is withdrawn and lost-book
+     * compensation becomes payable in the same transaction.
+     */
+    public static final String REPORT_LOST =
+            ActionNames.of(ModuleNames.LIBRARY, "REPORT_LOST");
+
     /** Creates a reservation for the authenticated user. */
     public static final String CREATE_RESERVATION =
             ActionNames.of(ModuleNames.LIBRARY, "CREATE_RESERVATION");

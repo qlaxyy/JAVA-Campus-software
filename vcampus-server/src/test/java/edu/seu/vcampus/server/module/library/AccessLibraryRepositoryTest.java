@@ -46,7 +46,8 @@ class AccessLibraryRepositoryTest {
         first.books().update(new BookDTO(
                 book.getBookId(), book.getIsbn(), "持久化后的书名", book.getAuthor(),
                 book.getCategoryId(), book.getCategoryName(), book.getPublisher(),
-                book.getPublicationYear(), book.getLanguage(), book.getStatus(), List.of()));
+                book.getPublicationYear(), book.getLanguage(), book.getStatus(), List.of(),
+                book.getPriceFen()));
         first.copies().update(copy.withLocation("九龙湖校区—测试馆藏地", "TP312/TEST"));
         first.categories().save(new BookCategoryDTO("C-ART", "艺术设计"));
 
@@ -155,7 +156,7 @@ class AccessLibraryRepositoryTest {
 
         BookDTO duplicateIsbn = new BookDTO(
                 "B-UNIQUE", existing.getIsbn(), "另一本书", "作者",
-                "C001", "计算机", "出版社", 2026, "中文", "ACTIVE", List.of());
+                "C001", "计算机", "出版社", 2026, "中文", "ACTIVE", List.of(), 5_000);
         assertThrows(LibraryPersistenceException.class,
                 () -> repositories.books().insert(duplicateIsbn));
 

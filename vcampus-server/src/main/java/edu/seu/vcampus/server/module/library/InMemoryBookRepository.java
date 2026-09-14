@@ -13,15 +13,15 @@ final class InMemoryBookRepository implements BookRepository {
 
     InMemoryBookRepository() {
         insert(book("B001", "9787111213826", "Java编程思想", "Bruce Eckel",
-                "C001", "计算机", "机械工业出版社", 2007, 5));
+                "C001", "计算机", "机械工业出版社", 2007, 5, 10_800));
         insert(book("B002", "9787115428028", "深入理解Java虚拟机", "周志明",
-                "C001", "计算机", "人民邮电出版社", 2019, 4));
+                "C001", "计算机", "人民邮电出版社", 2019, 4, 8_900));
         insert(book("B003", "9787302511854", "数据结构（Java语言描述）", "徐孝凯",
-                "C001", "计算机", "清华大学出版社", 2018, 3));
+                "C001", "计算机", "清华大学出版社", 2018, 3, 4_500));
         insert(book("B004", "9787020002207", "红楼梦", "曹雪芹",
-                "C002", "文学", "人民文学出版社", 2008, 6));
+                "C002", "文学", "人民文学出版社", 2008, 6, 5_970));
         insert(book("B005", "9787101003048", "史记", "司马迁",
-                "C003", "历史", "中华书局", 2014, 2));
+                "C003", "历史", "中华书局", 2014, 2, 4_500));
     }
 
     public synchronized List<BookDTO> search(String rawKeyword) {
@@ -98,10 +98,11 @@ final class InMemoryBookRepository implements BookRepository {
 
     private static BookDTO book(String id, String isbn, String title, String author,
             String categoryId, String categoryName, String publisher, int year,
-            int total) {
+            int total, int priceFen) {
         return new BookDTO(id, isbn, title, author, categoryId, categoryName,
                 publisher, year, "中文", "ACTIVE",
                 List.of(new edu.seu.vcampus.common.library.BookLocationDTO(
-                        "未指定馆藏地", total, total)));
+                        "未指定馆藏地", total, total)),
+                priceFen);
     }
 }

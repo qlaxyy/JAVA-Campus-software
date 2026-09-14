@@ -36,6 +36,7 @@ final class LibraryMessages {
             case ErrorCodes.LIBRARY_DUPLICATE_CATEGORY -> "该图书分类已存在，请勿重复添加";
             case ErrorCodes.LIBRARY_FEE_NOT_PAYABLE -> "该记录当前没有待缴费用";
             case ErrorCodes.LIBRARY_OUTSTANDING_FEE -> "存在未缴清的图书费用，请先结清后再操作";
+            case ErrorCodes.LIBRARY_LOST_NOT_REPORTABLE -> "该借阅当前不能申报丢失，请刷新后重试";
             case ErrorCodes.CARD_INSUFFICIENT_BALANCE -> "校园卡余额不足，请先充值";
 
             // 系统异常或需原样呈现服务端说明的响应。

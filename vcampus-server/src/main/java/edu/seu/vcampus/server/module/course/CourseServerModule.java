@@ -845,6 +845,17 @@ public final class CourseServerModule
                     context));
         /*
          * =========================
+         * 学生查询自己的成绩
+         * =========================
+         */
+        router.register(
+            CourseActions.STUDENT_LIST_GRADES,
+            request ->
+                studentListGrades(
+                    request,
+                    context));
+        /*
+         * =========================
          * 教务查询全部教学班
          * =========================
          */
@@ -1684,6 +1695,46 @@ public final class CourseServerModule
             request,
             result.message(),
             result.grade());
+    }
+    /**
+     * 查询当前登录学生的全部课程成绩。
+     *
+     * 客户端不提交学号，服务器从 token
+     * 对应的 SessionInfo 中取得当前账号。
+     */
+    private Response studentListGrades(
+        Request request,
+        ServerContext context) {
+
+        SessionInfo session =
+            context.sessions()
+                .findSession(
+                    request.getToken())
+                .orElse(null);
+
+        if (session == null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.AUTH_REQUIRED,
+                "请先登录后再查看成绩。");
+        }
+
+        if (request.getData() != null) {
+
+            return Response.failure(
+                request.getRequestId(),
+                ErrorCodes.COMMON_INVALID_REQUEST,
+                "学生成绩查询不需要提交请求数据。");
+        }
+
+        return Response.success(
+            request,
+            "成绩加载成功。",
+            new ArrayList<>(
+                gradeService.listGrades(
+                    studentId(
+                        session))));
     }
     /**
      * 判断成绩是否在合法范围内。

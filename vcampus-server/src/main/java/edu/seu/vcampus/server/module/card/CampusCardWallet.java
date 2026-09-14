@@ -23,7 +23,7 @@ public interface CampusCardWallet {
      * Adds money to the caller's card.
      *
      * @param session authenticated payer
-     * @param amountFen 10–100 yuan in fen
+     * @param amountFen 0.01–10000 yuan in fen
      * @return updated snapshot
      */
     CampusCardView recharge(SessionInfo session, int amountFen);

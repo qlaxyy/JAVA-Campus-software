@@ -22,6 +22,8 @@ import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.event.HierarchyEvent;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 
 /**
@@ -67,6 +69,14 @@ final class CardWalletPanel extends JPanel {
             button.addActionListener(event -> recharge(fen));
             actions.add(button);
         }
+        JButton custom = new JButton("自定义金额");
+        custom.addActionListener(event -> {
+            Integer fen = promptCustomAmount();
+            if (fen != null) {
+                recharge(fen);
+            }
+        });
+        actions.add(custom);
         add(actions, BorderLayout.SOUTH);
 
         addHierarchyListener(event -> {
@@ -74,6 +84,30 @@ final class CardWalletPanel extends JPanel {
                 reload();
             }
         });
+    }
+
+    private Integer promptCustomAmount() {
+        String input = (String) JOptionPane.showInputDialog(
+                this,
+                "请输入充值金额（元），范围 0.01–10000。",
+                "自定义金额",
+                JOptionPane.PLAIN_MESSAGE,
+                null,
+                null,
+                "");
+        if (input == null) {
+            return null;
+        }
+        Integer fen = yuanToFen(input);
+        if (fen == null) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    "请输入 0.01 到 10000 之间的金额，最多两位小数。",
+                    "自定义金额",
+                    JOptionPane.WARNING_MESSAGE);
+            return null;
+        }
+        return fen;
     }
 
     private void recharge(int amountFen) {
@@ -153,5 +187,22 @@ final class CardWalletPanel extends JPanel {
 
     private static String yuan(int fen) {
         return "¥" + String.format("%.2f", fen / 100.0);
+    }
+
+    private static Integer yuanToFen(String text) {
+        String trimmed = text.trim().replace("¥", "").replace("元", "").replace(",", "");
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        try {
+            BigDecimal fen = new BigDecimal(trimmed).movePointRight(2).setScale(0, RoundingMode.HALF_UP);
+            int amountFen = fen.intValueExact();
+            if (amountFen < CardRechargeRequest.MIN_FEN || amountFen > CardRechargeRequest.MAX_FEN) {
+                return null;
+            }
+            return amountFen;
+        } catch (ArithmeticException | NumberFormatException exception) {
+            return null;
+        }
     }
 }

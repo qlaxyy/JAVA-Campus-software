@@ -50,6 +50,26 @@ public final class StudentService {
     }
 
     /**
+     * 新增学生学籍档案（管理员专属）
+     */
+    public boolean addStudent(StudentProfileDto profile) {
+        if (profile == null || profile.getStudentId() == null || profile.getStudentId().isBlank()) {
+            return false;
+        }
+        return repository.addStudent(profile);
+    }
+
+    /**
+     * 删除学生学籍档案（管理员专属）
+     */
+    public boolean deleteStudent(String studentId) {
+        if (studentId == null || studentId.isBlank()) {
+            return false;
+        }
+        return repository.deleteStudent(studentId);
+    }
+
+    /**
      * 发起学籍异动申请（含严格的状态机校验与防重复提交机制）
      */
     public StatusChangeDto applyStatusChange(ApplyStatusChangeRequest req) {

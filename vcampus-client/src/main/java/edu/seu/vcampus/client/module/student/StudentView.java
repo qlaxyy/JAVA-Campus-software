@@ -88,6 +88,9 @@ public class StudentView extends JPanel {
     private final JButton btnDownloadCert = new JButton("开具证明");
     private final JButton btnOpenAudit = new JButton("查看毕业审核");
 
+    // 管理员删除按钮引用
+    private JButton btnDeleteStudentRef;
+
     private StudentProfileDto currentProfile;
     private long initialSearchGeneration;
 
@@ -121,9 +124,6 @@ public class StudentView extends JPanel {
                 .orElse(false);
     }
 
-    /**
-     * 权限动态收敛：管理员全开放，学生本人在查阅自己档案时开放，老师及无权角色彻底隐藏
-     */
     private void updateButtonVisibility(StudentProfileDto profile) {
         boolean admin = isStudentAdmin();
 
@@ -133,7 +133,10 @@ public class StudentView extends JPanel {
             btnApplyModify.setVisible(true);
             btnOpenChange.setVisible(true);
             btnDownloadCert.setVisible(profile != null);
-            btnOpenAudit.setVisible(profile != null); // 管理员可查任意学生毕业审核
+            btnOpenAudit.setVisible(profile != null);
+            if (btnDeleteStudentRef != null) {
+                btnDeleteStudentRef.setEnabled(profile != null);
+            }
             return;
         }
 
@@ -144,7 +147,7 @@ public class StudentView extends JPanel {
         btnApplyModify.setVisible(isSelf);
         btnOpenChange.setVisible(isSelf);
         btnDownloadCert.setVisible(isSelf);
-        btnOpenAudit.setVisible(isSelf); // 学生仅可查阅自己的毕业审核
+        btnOpenAudit.setVisible(isSelf);
     }
 
     private void initUI() {
@@ -168,7 +171,7 @@ public class StudentView extends JPanel {
         lblTitle.setForeground(TEXT_MAIN);
 
         JLabel lblSubtitle = new JLabel(admin
-            ? "校园学籍管理服务  ·  学籍管理员审批工作台，支持全校档案查阅与学业学籍修改"
+            ? "校园学籍管理服务  ·  学籍管理员审批工作台，支持全校档案查阅、录入、修改与删除"
             : "校园学籍管理服务  ·  支持档案全景查阅，关键信息申请更正，联络信息自主维护");
         lblSubtitle.setFont(FONT_SUB);
         lblSubtitle.setForeground(TEXT_MUTED);
@@ -199,7 +202,7 @@ public class StudentView extends JPanel {
         lblBannerTitle.setForeground(Color.WHITE);
 
         JLabel lblBannerDesc = new JLabel(admin
-            ? "当前以【学籍管理员】身份运行：点击编辑后可直接修改学生的院系、专业、班级及学籍状态。"
+            ? "当前以【学籍管理员】身份运行：支持点击【新增学生】录入档案，在线修改学业与学籍状态，或删除档案。"
             : "关键法定身份变更须提交申请与材料；教师可查阅学生学籍；学籍管理员拥有审批与管理权限。");
         lblBannerDesc.setFont(new Font("微软雅黑", Font.PLAIN, 12));
         lblBannerDesc.setForeground(new Color(220, 240, 235));
@@ -227,8 +230,64 @@ public class StudentView extends JPanel {
         bannerRightPanel.add(new JLabel("<html><font color='#ffffff'>学号:</font></html>"));
         bannerRightPanel.add(txtSearchId);
         bannerRightPanel.add(btnSearch);
-        bannerPanel.add(bannerRightPanel, BorderLayout.EAST);
 
+        // 如果是学籍管理员，在 Banner 右侧增设【新增学生】与【删除学生】按钮
+        if (admin) {
+            JButton btnAddStudent = new JButton("新增学生");
+            btnAddStudent.setPreferredSize(new Dimension(85, 32));
+            btnAddStudent.setBackground(new Color(187, 247, 208));
+            btnAddStudent.setForeground(Color.BLACK);
+            btnAddStudent.setFont(FONT_BOLD_BODY);
+            btnAddStudent.setFocusPainted(false);
+            btnAddStudent.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(134, 239, 172), 1),
+                BorderFactory.createEmptyBorder(4, 4, 4, 4)
+            ));
+            btnAddStudent.addActionListener(e -> {
+                AddStudentDialog addDialog = new AddStudentDialog(
+                    SwingUtilities.getWindowAncestor(this),
+                    context,
+                    () -> {
+                        txtSearchId.setText(txtSearchId.getText().trim());
+                        executeQuery();
+                    }
+                );
+                addDialog.setVisible(true);
+            });
+            bannerRightPanel.add(btnAddStudent);
+
+            JButton btnDeleteStudent = new JButton("删除学生");
+            btnDeleteStudent.setPreferredSize(new Dimension(85, 32));
+            btnDeleteStudent.setBackground(new Color(254, 202, 202)); // 浅红色警示背景
+            btnDeleteStudent.setForeground(new Color(153, 27, 27));
+            btnDeleteStudent.setFont(FONT_BOLD_BODY);
+            btnDeleteStudent.setFocusPainted(false);
+            btnDeleteStudent.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(248, 113, 113), 1),
+                BorderFactory.createEmptyBorder(4, 4, 4, 4)
+            ));
+            btnDeleteStudent.setEnabled(false); // 初始未查到档案时不可点
+            btnDeleteStudent.addActionListener(e -> {
+                if (currentProfile == null) {
+                    JOptionPane.showMessageDialog(this, "请先查询并调取需要删除的学生档案！", "提示", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                int confirm = JOptionPane.showConfirmDialog(
+                    this,
+                    "确定要永久删除学号为 " + currentProfile.getStudentId() + " (" + currentProfile.getName() + ") 的学生档案吗？此操作不可逆！",
+                    "高危操作确认",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE
+                );
+                if (confirm == JOptionPane.YES_OPTION) {
+                    executeDeleteStudent(currentProfile.getStudentId());
+                }
+            });
+            bannerRightPanel.add(btnDeleteStudent);
+            this.btnDeleteStudentRef = btnDeleteStudent;
+        }
+
+        bannerPanel.add(bannerRightPanel, BorderLayout.EAST);
         mainContainer.add(bannerPanel);
         mainContainer.add(Box.createVerticalStrut(15));
 
@@ -347,7 +406,7 @@ public class StudentView extends JPanel {
         cardCert.add(btnDownloadCert, BorderLayout.SOUTH);
         cardsGrid.add(cardCert);
 
-        // 卡片 6：学业毕业审核（带权限控制）
+        // 卡片 6：学业毕业审核
         JPanel cardAudit = createCardPanel("学业毕业审核", "培养方案完成度与学分绩点核算");
         btnOpenAudit.setFont(FONT_SUB);
         btnOpenAudit.setBackground(new Color(224, 231, 255));
@@ -647,6 +706,36 @@ public class StudentView extends JPanel {
                 } catch (Exception ex) {
                     lblStatus.setText("处理异常: " + ex.getMessage());
                     lblStatus.setForeground(Color.RED);
+                }
+            }
+        }.execute();
+    }
+
+    private void executeDeleteStudent(String studentId) {
+        new SwingWorker<Response, Void>() {
+            @Override
+            protected Response doInBackground() {
+                try {
+                    return context.send("student:delete", studentId);
+                } catch (IOException e) {
+                    return null;
+                }
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    Response res = get();
+                    if (res != null && res.isSuccess()) {
+                        JOptionPane.showMessageDialog(StudentView.this, "学生学籍档案已成功删除！", "提示", JOptionPane.INFORMATION_MESSAGE);
+                        clearFormValues();
+                        lblStatus.setText("● 档案已成功删除");
+                        lblStatus.setForeground(Color.RED);
+                    } else {
+                        JOptionPane.showMessageDialog(StudentView.this, "删除失败: " + (res != null ? res.getMessage() : "服务器异常"), "错误", JOptionPane.ERROR_MESSAGE);
+                    }
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(StudentView.this, "异常: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
                 }
             }
         }.execute();

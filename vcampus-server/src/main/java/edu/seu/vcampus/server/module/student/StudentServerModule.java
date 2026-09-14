@@ -34,9 +34,9 @@ public final class StudentServerModule implements ServerModule {
 
     /** Creates a student module backed by the shared server Access database. */
     public static StudentServerModule createAccessBacked(
-            Path databasePath, UserDirectory users) {
+        Path databasePath, UserDirectory users) {
         return new StudentServerModule(new StudentService(
-                new AccessStudentRepository(new AccessDatabase(databasePath), users)));
+            new AccessStudentRepository(new AccessDatabase(databasePath), users)));
     }
 
     @Override
@@ -48,6 +48,8 @@ public final class StudentServerModule implements ServerModule {
     public void registerHandlers(ActionRouter router, ServerContext context) {
         router.register(StudentActions.GET_PROFILE, req -> handleGetProfile(req, context));
         router.register(StudentActions.UPDATE_PROFILE, req -> handleUpdateProfile(req, context));
+        router.register("student:add", req -> handleAddStudent(req, context));
+        router.register("student:delete", req -> handleDeleteStudent(req, context));
         router.register(StudentActions.APPLY_STATUS_CHANGE, req -> handleApplyStatusChange(req, context));
         router.register(StudentActions.LIST_STATUS_CHANGES, req -> handleListStatusChanges(req, context));
         router.register(StudentActions.AUDIT_STATUS_CHANGE, req -> handleAuditStatusChange(req, context));
@@ -67,11 +69,6 @@ public final class StudentServerModule implements ServerModule {
 
     /**
      * 查询学籍档案
-     * 权限规范：
-     * 1. 学籍管理员（canAdminister(ModuleNames.STUDENT)）可通览全校学生档案
-     * 2. 学生本人仅可查询自身档案
-     * 3. 教师需通过 context.teachers() 验证有效资格
-     * 4. 非教务人员（纯医生、商店管理员等）直接拦截
      */
     private Response handleGetProfile(Request request, ServerContext context) {
         Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
@@ -102,7 +99,7 @@ public final class StudentServerModule implements ServerModule {
             .isPresent();
         boolean isAssignedTeacher = isTeacher
             && context.teacherStudentAccess()
-                .canViewStudent(session.getUserId(), targetId);
+            .canViewStudent(session.getUserId(), targetId);
 
         if (!isStudentAdmin && !isSelf && !isAssignedTeacher) {
             return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：非教务管理或教学人员无权查阅该学生学籍档案");
@@ -114,7 +111,6 @@ public final class StudentServerModule implements ServerModule {
 
     /**
      * 更新学生联络补充档案
-     * 权限规范：仅允许学生本人或具备学籍管理权限的管理员修改（教师与外部模块无权修改）
      */
     private Response handleUpdateProfile(Request request, ServerContext context) {
         Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
@@ -148,10 +144,70 @@ public final class StudentServerModule implements ServerModule {
     }
 
     /**
+     * 新增学生学籍档案（管理员专属）
+     */
+    private Response handleAddStudent(Request request, ServerContext context) {
+        Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
+        if (sessionOpt.isEmpty()) {
+            return Response.failure(request.getRequestId(), "UNAUTHORIZED", "未登录或会话已失效");
+        }
+        SessionInfo session = sessionOpt.get();
+
+        if (!session.canAdminister(ModuleNames.STUDENT)) {
+            return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：当前账号不具备录入学生学籍的管理员权限");
+        }
+
+        if (!(request.getData() instanceof StudentProfileDto profileDto)) {
+            return Response.failure(request.getRequestId(), "BAD_REQUEST", "请求参数错误");
+        }
+
+        try {
+            boolean added = studentService.addStudent(profileDto);
+            if (added) {
+                return Response.success(request, "新生学籍档案录入成功", null);
+            } else {
+                return Response.failure(request.getRequestId(), "BAD_REQUEST", "录入失败：该学号可能已存在");
+            }
+        } catch (Exception e) {
+            return Response.failure(request.getRequestId(), "INTERNAL_ERROR", "录入异常：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 删除学生学籍档案（管理员专属）
+     */
+    private Response handleDeleteStudent(Request request, ServerContext context) {
+        Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
+        if (sessionOpt.isEmpty()) {
+            return Response.failure(request.getRequestId(), "UNAUTHORIZED", "未登录或会话已失效");
+        }
+        SessionInfo session = sessionOpt.get();
+
+        if (!session.canAdminister(ModuleNames.STUDENT)) {
+            return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：当前账号不具备删除学生学籍的管理员权限");
+        }
+
+        String studentId = null;
+        if (request.getData() instanceof String s) {
+            studentId = s;
+        } else if (request.getData() instanceof StudentProfileRequest req) {
+            studentId = req.getStudentId();
+        }
+
+        if (studentId == null || studentId.isBlank()) {
+            return Response.failure(request.getRequestId(), "BAD_REQUEST", "学号不能为空");
+        }
+
+        boolean deleted = studentService.deleteStudent(studentId);
+        if (deleted) {
+            return Response.success(request, "学生学籍档案已成功删除", null);
+        } else {
+            return Response.failure(request.getRequestId(), "NOT_FOUND", "删除失败：未找到该学号的档案记录");
+        }
+    }
+
+    /**
      * 发起学籍异动申请
-     * 权限与业务规范：
-     * 1. 仅学生本人可发起自身异动
-     * 2. 状态机校验（如未休学不可复学、待审核不可并发提交等）由 StudentService 校验并抛出具体异常提示
      */
     private Response handleApplyStatusChange(Request request, ServerContext context) {
         Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
@@ -180,7 +236,6 @@ public final class StudentServerModule implements ServerModule {
             StatusChangeDto dto = studentService.applyStatusChange(req);
             return Response.success(request, "异动申请提交成功", dto);
         } catch (IllegalArgumentException | IllegalStateException e) {
-            // 返回具体的状态机拦截提示（如：未休学不能复学、已有待审核申请等）
             return Response.failure(request.getRequestId(), "BAD_REQUEST", e.getMessage());
         } catch (Exception e) {
             return Response.failure(request.getRequestId(), "INTERNAL_ERROR", "申请提交异常：" + e.getMessage());
@@ -189,7 +244,6 @@ public final class StudentServerModule implements ServerModule {
 
     /**
      * 查询学籍异动申请履历
-     * 权限规范：学籍管理员可查询全校；学生仅限查本人；教师及外部管理员无权调阅他人异动
      */
     private Response handleListStatusChanges(Request request, ServerContext context) {
         Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());
@@ -206,31 +260,27 @@ public final class StudentServerModule implements ServerModule {
             queryStudentId = cleanId(s);
         }
 
-        // 学籍管理员可通览全校
         if (isStudentAdmin) {
             List<StatusChangeDto> list = studentService.listStatusChanges(queryStudentId);
             return Response.success(request, "获取异动列表成功", (Serializable) list);
         }
 
-        // 教师资格查公共教师表，教师与非学籍管理账号禁止查阅他人异动记录
         boolean isTeacher = context.teachers()
             .findByUserId(session.getUserId())
             .isPresent();
         if (isTeacher || !session.canAdminister(ModuleNames.STUDENT)) {
             if (queryStudentId != null
-                    && !queryStudentId.equalsIgnoreCase(cleanId(currentStudentNumber))) {
+                && !queryStudentId.equalsIgnoreCase(cleanId(currentStudentNumber))) {
                 return Response.failure(request.getRequestId(), "FORBIDDEN", "权限不足：无权调阅他人学籍异动");
             }
         }
 
-        // 普通学生强制仅查本人
         List<StatusChangeDto> list = studentService.listStatusChanges(currentStudentNumber);
         return Response.success(request, "获取个人异动成功", (Serializable) list);
     }
 
     /**
      * 审核学籍异动申请
-     * 权限规范：严禁教师及非学籍管理员审核，仅限 canAdminister(ModuleNames.STUDENT)
      */
     private Response handleAuditStatusChange(Request request, ServerContext context) {
         Optional<SessionInfo> sessionOpt = context.sessions().findSession(request.getToken());

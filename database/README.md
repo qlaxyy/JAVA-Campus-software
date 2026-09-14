@@ -65,7 +65,7 @@ java -jar vcampus-server\target\vcampus-server-0.1.0-SNAPSHOT.jar
 | 学籍 | `tblStudentProfile`、`tblStudentStatusChange` | 15 份学生档案，以 `userId` 关联账号，姓名实时查用户目录 |
 | 选课 | `tblCourse*`、`tblOfferingTeacher`、`tblEnrollment`、`tblGrade` | 保留 8 门课程和 8 个有教师的演示教学班；任课、选课与成绩持久化 |
 | 医院 | `tblHospital*` | 科室保留；10 名医生、排班和医疗业务以 `userId` 关联 |
-| 图书馆 | `tblBook*`、`tblBorrowRecord`、`tblReservation` | 5 种书、20 册馆藏以及借还预约演示数据 |
+| 图书馆 | `tblBook*`、`tblBorrowRecord`、`tblReservation` | 8 个分类、30 种书、100 册馆藏以及借还预约演示数据（书目数超过一页，便于演示检索分页） |
 | 商店 | `tblShop*` | 商品、照片、库存、购物车和订单全部在服务器 Access 中；支付引用校园卡余额 |
 | 校园卡 | `tblCampusCard`、`tblCampusCardLedger` | 一卡通余额和充值、扣款、退款流水 |
 

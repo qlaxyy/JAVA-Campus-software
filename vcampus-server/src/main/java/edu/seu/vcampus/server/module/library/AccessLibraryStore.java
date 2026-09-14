@@ -26,6 +26,81 @@ final class AccessLibraryStore implements LibraryTransactionManager {
     private static final String FIRST_LOCATION = "九龙湖校区—中文图书阅览室3";
     private static final String SECOND_LOCATION = "四牌楼校区—中文书库二楼";
 
+    /**
+     * The demonstration catalog: 30 titles across 8 categories, 100 physical copies in total.
+     *
+     * <p>Thirty titles is deliberate. The reader's catalog pages at 20 per page, so a smaller
+     * catalog could never show the paging controls doing anything — a demo would look identical
+     * to a build where paging was broken. At thirty, page one is full and page two carries the
+     * remaining ten.
+     *
+     * <p>B001–B005 keep their identifiers, barcodes and copy counts because the seeded
+     * circulation records (`SEU-B001-001` on loan, `SEU-B005-002` overdue) reference them.
+     * Every title carries a price: it is the base of lost-book compensation, so a catalog
+     * without prices cannot demonstrate the compensation path at all.
+     */
+    private static final List<SeedBook> DEMO_BOOKS = List.of(
+            new SeedBook("B001", "9787111213826", "Java编程思想", "Bruce Eckel",
+                    "C001", "机械工业出版社", 2007, 5, 10_800),
+            new SeedBook("B002", "9787115428028", "深入理解Java虚拟机", "周志明",
+                    "C001", "人民邮电出版社", 2019, 4, 8_900),
+            new SeedBook("B003", "9787302511854", "数据结构（Java语言描述）", "徐孝凯",
+                    "C001", "清华大学出版社", 2018, 3, 4_500),
+            new SeedBook("B004", "9787020002207", "红楼梦", "曹雪芹",
+                    "C002", "人民文学出版社", 2008, 6, 5_970),
+            new SeedBook("B005", "9787101003048", "史记", "司马迁",
+                    "C003", "中华书局", 2014, 2, 4_500),
+            new SeedBook("B006", "9787115525137", "代码整洁之道", "Robert C. Martin",
+                    "C001", "人民邮电出版社", 2020, 3, 7_900),
+            new SeedBook("B007", "9787115293800", "算法（第4版）", "Robert Sedgewick",
+                    "C001", "人民邮电出版社", 2012, 4, 9_900),
+            new SeedBook("B008", "9787111599747", "计算机网络：自顶向下方法", "James F. Kurose",
+                    "C001", "机械工业出版社", 2018, 3, 8_900),
+            new SeedBook("B009", "9787111588244", "操作系统概念", "Abraham Silberschatz",
+                    "C001", "机械工业出版社", 2018, 2, 9_900),
+            new SeedBook("B010", "9787506365437", "活着", "余华",
+                    "C002", "作家出版社", 2012, 5, 2_800),
+            new SeedBook("B011", "9787530216774", "平凡的世界", "路遥",
+                    "C002", "北京十月文艺出版社", 2017, 4, 9_800),
+            new SeedBook("B012", "9787544253994", "百年孤独", "加西亚·马尔克斯",
+                    "C002", "南海出版公司", 2011, 3, 3_950),
+            new SeedBook("B013", "9787020024759", "围城", "钱锺书",
+                    "C002", "人民文学出版社", 1991, 3, 2_500),
+            new SeedBook("B014", "9787101052039", "万历十五年", "黄仁宇",
+                    "C003", "中华书局", 2007, 3, 3_500),
+            new SeedBook("B015", "9787301109489", "全球通史", "斯塔夫里阿诺斯",
+                    "C003", "北京大学出版社", 2006, 2, 12_800),
+            new SeedBook("B016", "9787213046346", "明朝那些事儿", "当年明月",
+                    "C003", "浙江人民出版社", 2011, 4, 3_580),
+            new SeedBook("B017", "9787040396638", "高等数学（上册）", "同济大学数学系",
+                    "C004", "高等教育出版社", 2014, 5, 4_200),
+            new SeedBook("B018", "9787040396614", "线性代数", "同济大学数学系",
+                    "C004", "高等教育出版社", 2014, 5, 3_100),
+            new SeedBook("B019", "9787040238969", "概率论与数理统计", "盛骤",
+                    "C004", "高等教育出版社", 2008, 4, 3_800),
+            new SeedBook("B020", "9787040295665", "数学分析", "华东师范大学数学系",
+                    "C004", "高等教育出版社", 2010, 2, 5_600),
+            new SeedBook("B021", "9787560013480", "新概念英语（第二册）", "亚历山大",
+                    "C005", "外语教学与研究出版社", 1997, 5, 3_800),
+            new SeedBook("B022", "9787100160698", "牛津高阶英汉双解词典", "霍恩比",
+                    "C005", "商务印书馆", 2018, 2, 16_900),
+            new SeedBook("B023", "9787519306175", "大学英语四级词汇", "俞敏洪",
+                    "C005", "群言出版社", 2019, 3, 3_500),
+            new SeedBook("B024", "9787301256903", "经济学原理", "曼昆",
+                    "C006", "北京大学出版社", 2015, 3, 11_800),
+            new SeedBook("B025", "9787100110259", "国富论", "亚当·斯密",
+                    "C006", "商务印书馆", 2015, 2, 6_800),
+            new SeedBook("B026", "9787300242969", "管理学", "罗宾斯",
+                    "C006", "中国人民大学出版社", 2017, 3, 7_900),
+            new SeedBook("B027", "9787101069136", "论语译注", "杨伯峻",
+                    "C007", "中华书局", 2009, 3, 3_600),
+            new SeedBook("B028", "9787100020497", "西方哲学史", "罗素",
+                    "C007", "商务印书馆", 1976, 2, 8_800),
+            new SeedBook("B029", "9787807463726", "艺术的故事", "贡布里希",
+                    "C008", "广西美术出版社", 2008, 2, 28_000),
+            new SeedBook("B030", "9787550304482", "中国美术史", "洪再新",
+                    "C008", "中国美术学院出版社", 2013, 3, 9_500));
+
     private final AccessDatabase database;
     private final ThreadLocal<Connection> transactionConnection = new ThreadLocal<>();
     private final boolean newlyCreatedLibrarySchema;
@@ -224,18 +299,7 @@ final class AccessLibraryStore implements LibraryTransactionManager {
             if (rowCount(BOOK_TABLE) != 0) {
                 return;
             }
-            List<SeedBook> books = List.of(
-                    new SeedBook("B001", "9787111213826", "Java编程思想", "Bruce Eckel",
-                            "C001", "机械工业出版社", 2007, 5, 10_800),
-                    new SeedBook("B002", "9787115428028", "深入理解Java虚拟机", "周志明",
-                            "C001", "人民邮电出版社", 2019, 4, 8_900),
-                    new SeedBook("B003", "9787302511854", "数据结构（Java语言描述）", "徐孝凯",
-                            "C001", "清华大学出版社", 2018, 3, 4_500),
-                    new SeedBook("B004", "9787020002207", "红楼梦", "曹雪芹",
-                            "C002", "人民文学出版社", 2008, 6, 5_970),
-                    new SeedBook("B005", "9787101003048", "史记", "司马迁",
-                            "C003", "中华书局", 2014, 2, 4_500));
-            for (SeedBook book : books) {
+            for (SeedBook book : DEMO_BOOKS) {
                 insertSeedBook(book);
                 insertSeedCopies(book);
             }
@@ -246,6 +310,11 @@ final class AccessLibraryStore implements LibraryTransactionManager {
         insertCategoryIfMissing("C001", "计算机");
         insertCategoryIfMissing("C002", "文学");
         insertCategoryIfMissing("C003", "历史");
+        insertCategoryIfMissing("C004", "数学");
+        insertCategoryIfMissing("C005", "外语");
+        insertCategoryIfMissing("C006", "经济管理");
+        insertCategoryIfMissing("C007", "哲学");
+        insertCategoryIfMissing("C008", "艺术");
     }
 
     /**

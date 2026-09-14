@@ -17,6 +17,8 @@ record DoctorApplication(
         String requestedByUserId,
         DoctorApplicationStatus status,
         String targetUserId,
+        String targetDoctorId,
+        String requestReason,
         String reviewedByUserId,
         LocalDateTime createdAt) {
 
@@ -29,6 +31,14 @@ record DoctorApplication(
         Objects.requireNonNull(requestedByUserId);
         Objects.requireNonNull(status);
         Objects.requireNonNull(createdAt);
+        if (applicationType == DoctorApplicationType.DEACTIVATE_DOCTOR) {
+            Objects.requireNonNull(targetDoctorId);
+            Objects.requireNonNull(requestReason);
+            if (targetDoctorId.isBlank() || requestReason.isBlank()) {
+                throw new IllegalArgumentException(
+                        "doctor deactivation target and reason must not be blank");
+            }
+        }
     }
 
     DoctorApplication reviewed(
@@ -39,6 +49,7 @@ record DoctorApplication(
         return new DoctorApplication(
                 requestId, applicationType, resolvedUsername,
                 displayName, departmentId, doctorTitle,
-                requestedByUserId, newStatus, userId, reviewerUserId, createdAt);
+                requestedByUserId, newStatus, userId, targetDoctorId, requestReason,
+                reviewerUserId, createdAt);
     }
 }

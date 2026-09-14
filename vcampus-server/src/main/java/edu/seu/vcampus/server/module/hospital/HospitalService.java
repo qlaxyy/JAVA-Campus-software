@@ -145,6 +145,12 @@ final class HospitalService {
                 .toList());
     }
 
+    edu.seu.vcampus.common.hospital.TriageChatResult chatTriage(
+            SessionInfo session, edu.seu.vcampus.common.hospital.TriageChatRequest request) {
+        Objects.requireNonNull(session, "session must not be null");
+        return triageEngine.chat(request, repository.findActiveDepartments());
+    }
+
     TriageResultView getTriageRecommendation(
             SessionInfo session,
             TriageRequest request) {
@@ -280,7 +286,7 @@ final class HospitalService {
         requireHospitalAdmin(session);
         Objects.requireNonNull(request, "request must not be null");
         HospitalBooking cancelled = cancelAppointmentInternal(
-                request.getAppointmentId(), null);
+                session, request.getAppointmentId(), null);
         HospitalSlot slot = repository.findSlotById(cancelled.appointment().scheduleId())
                 .orElseThrow(() -> new IllegalStateException(
                         "appointment schedule does not exist"));
@@ -333,9 +339,48 @@ final class HospitalService {
                 DoctorApplicationStatus.PENDING,
                 targetUserId,
                 null,
+                null,
+                null,
                 LocalDateTime.now(clock));
         repository.saveDoctorApplication(application);
         return toView(application, department.departmentName());
+    }
+
+    synchronized DoctorApplicationView submitDoctorDeactivation(
+            edu.seu.vcampus.common.hospital.SubmitDoctorDeactivationRequest request,
+            String requestedByUserId) {
+        Objects.requireNonNull(request, "request must not be null");
+        HospitalDoctor doctor = repository.findAllDoctors().stream()
+                .filter(candidate -> candidate.doctorId().equals(request.getDoctorId()))
+                .findFirst()
+                .orElseThrow(() -> conflict("要停用的医生不存在。"));
+        if (!doctor.active()) {
+            throw conflict("该医生已经停用。无需重复申请。");
+        }
+        boolean pending = repository.findDoctorApplications().stream()
+                .anyMatch(application -> application.status() == DoctorApplicationStatus.PENDING
+                        && application.applicationType()
+                                == DoctorApplicationType.DEACTIVATE_DOCTOR
+                        && doctor.doctorId().equals(application.targetDoctorId()));
+        if (pending) {
+            throw conflict("该医生已有待审核的停用申请。");
+        }
+        DoctorApplication application = new DoctorApplication(
+                "DAR-" + UUID.randomUUID(),
+                DoctorApplicationType.DEACTIVATE_DOCTOR,
+                null,
+                doctor.doctorName(),
+                doctor.departmentId(),
+                doctor.doctorTitle(),
+                requestedByUserId,
+                DoctorApplicationStatus.PENDING,
+                doctor.userId(),
+                doctor.doctorId(),
+                request.getReason(),
+                null,
+                LocalDateTime.now(clock));
+        repository.saveDoctorApplication(application);
+        return toView(application);
     }
 
     DoctorApplicationListResponse listDoctorApplications() {
@@ -367,6 +412,42 @@ final class HospitalService {
                     application.username(), application.targetUserId(), reviewerUserId);
             repository.saveDoctorApplication(rejected);
             return toView(rejected);
+        }
+
+        if (application.applicationType() == DoctorApplicationType.DEACTIVATE_DOCTOR) {
+            String doctorId = application.targetDoctorId();
+            Object doctorLock = doctorScheduleLocks.computeIfAbsent(
+                    doctorId, ignored -> new Object());
+            synchronized (doctorLock) {
+                HospitalDoctor doctor = repository.findAllDoctors().stream()
+                        .filter(candidate -> candidate.doctorId().equals(doctorId))
+                        .findFirst()
+                        .orElseThrow(() -> conflict("要停用的医生已经不存在。"));
+                if (!doctor.active()) {
+                    throw conflict("该医生已经停用，不能重复批准。");
+                }
+                LocalDateTime now = LocalDateTime.now(clock);
+                List<HospitalSlot> doctorSlots = repository.findSlotsByDoctorId(doctorId);
+                long futurePublished = doctorSlots.stream()
+                        .filter(HospitalSlot::published)
+                        .filter(slot -> slot.startTime().isAfter(now))
+                        .count();
+                long unfinishedAppointments = doctorSlots.stream()
+                        .flatMap(slot -> repository
+                                .findAppointmentsByScheduleId(slot.scheduleId()).stream())
+                        .filter(appointment -> appointment.status() == AppointmentStatus.BOOKED)
+                        .count();
+                if (futurePublished > 0 || unfinishedAppointments > 0) {
+                    throw conflict("暂不能停用：该医生还有 " + futurePublished
+                            + " 个未来已发布排班、" + unfinishedAppointments
+                            + " 个未完成预约。请先关闭或处理后再审核。");
+                }
+                DoctorApplication approved = application.reviewed(
+                        DoctorApplicationStatus.APPROVED,
+                        application.username(), application.targetUserId(), reviewerUserId);
+                repository.approveDoctorDeactivation(approved);
+                return toView(approved);
+            }
         }
 
         String accountUserId;
@@ -401,8 +482,8 @@ final class HospitalService {
 
     AdminScheduleWorkspaceView getAdminScheduleWorkspace(SessionInfo session) {
         requireHospitalAdmin(session);
-        List<HospitalDepartment> departments = repository.findActiveDepartments();
-        List<AdminDoctorView> doctors = repository.findActiveDoctors().stream()
+        List<HospitalDepartment> departments = repository.findAllDepartments();
+        List<AdminDoctorView> doctors = repository.findAllDoctors().stream()
                 .sorted(Comparator.comparing(HospitalDoctor::doctorName)
                         .thenComparing(HospitalDoctor::doctorId))
                 .map(doctor -> new AdminDoctorView(
@@ -415,7 +496,8 @@ final class HospitalService {
                                         .equals(doctor.departmentId()))
                                 .map(HospitalDepartment::departmentName)
                                 .findFirst()
-                                .orElse(doctor.departmentId())))
+                                .orElse(doctor.departmentId()),
+                        doctor.active()))
                 .toList();
         LocalDateTime now = LocalDateTime.now(clock);
         List<SlotView> schedules = repository.findAllSlots().stream()
@@ -451,8 +533,14 @@ final class HospitalService {
         Object doctorLock = doctorScheduleLocks.computeIfAbsent(
                 doctor.doctorId(), ignored -> new Object());
         synchronized (doctorLock) {
+            HospitalDoctor currentDoctor = repository.findActiveDoctors().stream()
+                    .filter(candidate -> candidate.doctorId().equals(doctor.doctorId()))
+                    .findFirst()
+                    .orElseThrow(() -> businessFailure(
+                            ErrorCodes.HOSPITAL_SCHEDULE_CONFLICT,
+                            "该医生已停用，不能建立新排班。"));
             if (hasPublishedDoctorConflict(
-                    doctor.doctorId(), null,
+                    currentDoctor.doctorId(), null,
                     request.getStartTime(), request.getEndTime())) {
                 throw scheduleConflict();
             }
@@ -500,6 +588,13 @@ final class HospitalService {
                 }
                 if (slot.published() == request.isPublished()) {
                     return toView(slot, null);
+                }
+                if (request.isPublished()
+                        && repository.findActiveDoctors().stream()
+                                .noneMatch(doctor -> doctor.doctorId().equals(slot.doctorId()))) {
+                    throw businessFailure(
+                            ErrorCodes.HOSPITAL_SCHEDULE_CONFLICT,
+                            "该医生已停用，不能发布排班。");
                 }
                 if (request.isPublished()
                         && hasPublishedDoctorConflict(
@@ -675,8 +770,17 @@ final class HospitalService {
                     "挂号费",
                     1,
                     slot.priceCents());
-            repository.saveBookingAndEpisode(
-                    new HospitalBooking(appointment, bill, billItem), episode);
+            boolean charged = chargeRegistration(session, billId, billItem.amountCents());
+            try {
+                repository.saveBookingAndEpisode(
+                        new HospitalBooking(appointment, bill, billItem), episode);
+            } catch (RuntimeException exception) {
+                if (charged) {
+                    compensateRegistrationCharge(session, billId,
+                            billItem.amountCents(), exception);
+                }
+                throw exception;
+            }
 
             return new AppointmentBookingView(
                     appointmentId,
@@ -701,11 +805,11 @@ final class HospitalService {
         Objects.requireNonNull(request, "request must not be null");
 
         return toAppointmentView(cancelAppointmentInternal(
-                request.getAppointmentId(), session.getUserId()));
+                session, request.getAppointmentId(), session.getUserId()));
     }
 
     private HospitalBooking cancelAppointmentInternal(
-            String appointmentId, String expectedPatientUserId) {
+            SessionInfo actor, String appointmentId, String expectedPatientUserId) {
         if (appointmentId == null || appointmentId.isBlank()) {
             throw appointmentNotFound();
         }
@@ -724,6 +828,16 @@ final class HospitalService {
             if (expectedPatientUserId != null
                     && !appointment.patientUserId().equals(expectedPatientUserId)) {
                 throw appointmentNotFound();
+            }
+            HospitalEpisode currentEpisode = repository
+                    .findEpisodeById(appointment.episodeId())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "appointment episode does not exist: "
+                                    + appointment.episodeId()));
+            if (appointment.status() == AppointmentStatus.CANCELLED
+                    && current.bill().paymentStatus() == PaymentStatus.PAID
+                    && campusCards != null) {
+                return completeRegistrationRefund(actor, current, currentEpisode);
             }
             if (appointment.status() != AppointmentStatus.BOOKED) {
                 throw businessFailure(
@@ -752,22 +866,10 @@ final class HospitalService {
                     appointment.visitType(),
                     appointment.episodeId(),
                     appointment.sourceFirstVisitAppointmentId());
-            HospitalBill refundedBill = new HospitalBill(
-                    current.bill().billId(),
-                    current.bill().appointmentId(),
-                    current.bill().createdAt(),
-                    current.bill().paidAt(),
-                    now,
-                    PaymentStatus.REFUNDED);
-            HospitalBooking cancelled = new HospitalBooking(
+            HospitalBooking cancelledPendingRefund = new HospitalBooking(
                     cancelledAppointment,
-                    refundedBill,
+                    current.bill(),
                     current.billItem());
-            HospitalEpisode currentEpisode = repository
-                    .findEpisodeById(appointment.episodeId())
-                    .orElseThrow(() -> new IllegalStateException(
-                            "appointment episode does not exist: "
-                                    + appointment.episodeId()));
             HospitalEpisode episodeAfterCancellation = appointment.visitType()
                     == VisitType.RESULT_REVIEW
                     ? currentEpisode
@@ -778,8 +880,10 @@ final class HospitalService {
                             EpisodeStatus.CANCELLED,
                             currentEpisode.openedAt(),
                             null);
-            repository.updateBookingAndEpisode(cancelled, episodeAfterCancellation);
-            return cancelled;
+            repository.updateBookingAndEpisode(
+                    cancelledPendingRefund, episodeAfterCancellation);
+            return completeRegistrationRefund(
+                    actor, cancelledPendingRefund, episodeAfterCancellation);
         }
     }
 
@@ -823,13 +927,14 @@ final class HospitalService {
             }
             int amountFen = toCampusCardFen(current.amountCents());
             boolean charged = false;
+            String debitReference = patientBillDebitReference(current.billId());
             if (campusCards != null && amountFen > 0) {
                 try {
                     campusCards.debit(
                             session,
                             amountFen,
                             ModuleNames.HOSPITAL,
-                            "bill:" + current.billId());
+                            debitReference);
                     charged = true;
                 } catch (CardBusinessException exception) {
                     throw mapCardFailure(exception);
@@ -843,11 +948,13 @@ final class HospitalService {
                 repository.updatePatientBill(paid);
             } catch (RuntimeException exception) {
                 if (charged) {
-                    campusCards.credit(
+                    campusCards.refundDebit(
                             session,
+                            session.getUserId(),
                             amountFen,
                             ModuleNames.HOSPITAL,
-                            "bill-refund:" + current.billId());
+                            debitReference,
+                            debitReference + ":refund");
                 }
                 throw exception;
             }
@@ -856,6 +963,12 @@ final class HospitalService {
     }
 
     DoctorWorkspaceView getDoctorWorkspace(SessionInfo session) {
+        return getDoctorWorkspace(session, null);
+    }
+
+    DoctorWorkspaceView getDoctorWorkspace(
+            SessionInfo session,
+            UserDirectory users) {
         Objects.requireNonNull(session, "session must not be null");
         HospitalDoctor doctor = requireDoctor(session);
         HospitalDepartment department = repository.findActiveDepartments().stream()
@@ -869,7 +982,7 @@ final class HospitalService {
                 .filter(HospitalSlot::published)
                 .sorted(Comparator.comparing(HospitalSlot::startTime)
                         .thenComparing(HospitalSlot::scheduleId))
-                .map(this::toDoctorScheduleView)
+                .map(slot -> toDoctorScheduleView(slot, users))
                 .filter(schedule -> schedule.getEndTime().isAfter(now)
                         || !schedule.getPendingAppointments().isEmpty())
                 .toList();
@@ -879,14 +992,14 @@ final class HospitalService {
                         || order.status() == ExaminationStatus.RESULT_READY)
                 .sorted(Comparator.comparing(
                         HospitalExaminationOrder::orderedAt).reversed())
-                .map(this::toDoctorFollowUpView)
+                .map(order -> toDoctorFollowUpView(order, users))
                 .toList();
         List<DoctorClinicalRecordView> signedRecords = repository
                 .findConsultationsByDoctorId(doctor.doctorId()).stream()
                 .sorted(Comparator.comparing(
                         HospitalConsultation::createdAt).reversed())
                 .limit(50)
-                .map(this::toDoctorClinicalRecordView)
+                .map(consultation -> toDoctorClinicalRecordView(consultation, users))
                 .toList();
         return new DoctorWorkspaceView(
                 doctor.doctorId(),
@@ -902,6 +1015,13 @@ final class HospitalService {
     DoctorConsultationContextView getDoctorConsultationContext(
             SessionInfo session,
             DoctorConsultationContextRequest request) {
+        return getDoctorConsultationContext(session, request, null);
+    }
+
+    DoctorConsultationContextView getDoctorConsultationContext(
+            SessionInfo session,
+            DoctorConsultationContextRequest request,
+            UserDirectory users) {
         Objects.requireNonNull(session, "session must not be null");
         Objects.requireNonNull(request, "request must not be null");
         HospitalDoctor doctor = requireDoctor(session);
@@ -925,10 +1045,10 @@ final class HospitalService {
                 .sorted(Comparator.comparing(HospitalConsultation::createdAt).reversed())
                 .toList();
         List<ConsultationRecordView> previous = previousConsultations.stream()
-                .map(this::toConsultationView)
+                .map(consultation -> toConsultationView(consultation, users))
                 .toList();
         return new DoctorConsultationContextView(
-                toDoctorAppointmentView(appointment),
+                toDoctorAppointmentView(appointment, users),
                 slot.departmentName(),
                 slot.doctorName(),
                 slot.doctorTitle(),
@@ -943,7 +1063,8 @@ final class HospitalService {
                         .map(this::toExaminationView)
                         .toList(),
                 previousConsultations.stream()
-                        .map(this::toDoctorClinicalRecordView)
+                        .map(consultation -> toDoctorClinicalRecordView(
+                                consultation, users))
                         .toList());
     }
 
@@ -1279,6 +1400,12 @@ final class HospitalService {
                         ErrorCodes.HOSPITAL_EXAMINATION_STATE_INVALID,
                         "The clinical episode is not waiting for results.");
             }
+            HospitalPatientBill examinationBill = requireExaminationBill(order);
+            if (examinationBill.paymentStatus() != PaymentStatus.PAID) {
+                throw businessFailure(
+                        ErrorCodes.HOSPITAL_EXAMINATION_PAYMENT_REQUIRED,
+                        "请先在费用清单中完成检查费缴纳，再模拟完成检查。");
+            }
             LocalDateTime now = LocalDateTime.now(clock);
             HospitalExaminationOrder reportedOrder = new HospitalExaminationOrder(
                     order.orderId(), order.episodeId(), order.orderedAppointmentId(),
@@ -1445,7 +1572,9 @@ final class HospitalService {
         return toProfileView(profile);
     }
 
-    private DoctorScheduleView toDoctorScheduleView(HospitalSlot slot) {
+    private DoctorScheduleView toDoctorScheduleView(
+            HospitalSlot slot,
+            UserDirectory users) {
         List<HospitalAppointment> appointments = repository
                 .findAppointmentsByScheduleId(slot.scheduleId());
         List<DoctorAppointmentView> pendingAppointments = appointments.stream()
@@ -1455,6 +1584,7 @@ final class HospitalService {
                 .map(appointment -> new DoctorAppointmentView(
                         appointment.appointmentId(),
                         appointment.patientUserId(),
+                        patientDisplayName(users, appointment.patientUserId()),
                         appointment.queueNumber(),
                         appointment.status(),
                         appointment.visitType(),
@@ -1480,9 +1610,16 @@ final class HospitalService {
 
     private static DoctorAppointmentView toDoctorAppointmentView(
             HospitalAppointment appointment) {
+        return toDoctorAppointmentView(appointment, null);
+    }
+
+    private static DoctorAppointmentView toDoctorAppointmentView(
+            HospitalAppointment appointment,
+            UserDirectory users) {
         return new DoctorAppointmentView(
                 appointment.appointmentId(),
                 appointment.patientUserId(),
+                patientDisplayName(users, appointment.patientUserId()),
                 appointment.queueNumber(),
                 appointment.status(),
                 appointment.visitType(),
@@ -1492,6 +1629,12 @@ final class HospitalService {
 
     private ConsultationRecordView toConsultationView(
             HospitalConsultation consultation) {
+        return toConsultationView(consultation, null);
+    }
+
+    private ConsultationRecordView toConsultationView(
+            HospitalConsultation consultation,
+            UserDirectory users) {
         HospitalAppointment appointment = repository.findAppointmentById(
                         consultation.appointmentId())
                 .orElseThrow(() -> new IllegalStateException(
@@ -1508,6 +1651,7 @@ final class HospitalService {
                 slot.doctorName(),
                 slot.doctorTitle(),
                 consultation.patientUserId(),
+                patientDisplayName(users, consultation.patientUserId()),
                 slot.departmentName(),
                 appointment.visitType(),
                 consultation.outcome(),
@@ -1540,6 +1684,7 @@ final class HospitalService {
                 report == null ? null : report.resultSummary(),
                 order.orderedAt(),
                 report == null ? null : report.reportedAt(),
+                requireExaminationBill(order).paymentStatus(),
                 repository.findBookingsByPatientUserId(order.patientUserId()).stream()
                         .map(HospitalBooking::appointment)
                         .filter(appointment -> appointment.status()
@@ -1549,7 +1694,18 @@ final class HospitalService {
                                 && appointment.episodeId().equals(order.episodeId())));
     }
 
-    private DoctorFollowUpView toDoctorFollowUpView(HospitalExaminationOrder order) {
+    private HospitalPatientBill requireExaminationBill(HospitalExaminationOrder order) {
+        return repository.findBillsByPatientUserId(order.patientUserId()).stream()
+                .filter(bill -> bill.billType() == HospitalBillType.EXAMINATION)
+                .filter(bill -> bill.appointmentId().equals(order.orderedAppointmentId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "examination bill does not exist: " + order.orderId()));
+    }
+
+    private DoctorFollowUpView toDoctorFollowUpView(
+            HospitalExaminationOrder order,
+            UserDirectory users) {
         HospitalSlot sourceSlot = repository.findAppointmentById(order.orderedAppointmentId())
                 .flatMap(appointment -> repository.findSlotById(appointment.scheduleId()))
                 .orElseThrow(() -> new IllegalStateException(
@@ -1569,6 +1725,7 @@ final class HospitalService {
                 order.orderId(),
                 order.episodeId(),
                 order.patientUserId(),
+                patientDisplayName(users, order.patientUserId()),
                 sourceSlot.departmentName(),
                 order.itemName(),
                 order.status(),
@@ -1580,7 +1737,8 @@ final class HospitalService {
                         .filter(consultation -> consultationBelongsToEpisode(
                                 consultation, order.episodeId()))
                         .sorted(Comparator.comparing(HospitalConsultation::createdAt))
-                        .map(this::toDoctorClinicalRecordView)
+                        .map(consultation -> toDoctorClinicalRecordView(
+                                consultation, users))
                         .toList(),
                 repository.findExaminationOrdersByEpisodeId(order.episodeId()).stream()
                         .sorted(Comparator.comparing(HospitalExaminationOrder::orderedAt))
@@ -1590,6 +1748,12 @@ final class HospitalService {
 
     private DoctorClinicalRecordView toDoctorClinicalRecordView(
             HospitalConsultation consultation) {
+        return toDoctorClinicalRecordView(consultation, null);
+    }
+
+    private DoctorClinicalRecordView toDoctorClinicalRecordView(
+            HospitalConsultation consultation,
+            UserDirectory users) {
         HospitalAppointment appointment = repository
                 .findAppointmentById(consultation.appointmentId())
                 .orElseThrow(() -> new IllegalStateException(
@@ -1601,7 +1765,19 @@ final class HospitalService {
                 .map(this::toExaminationView)
                 .toList();
         return new DoctorClinicalRecordView(
-                toConsultationView(consultation), examinations);
+                toConsultationView(consultation, users), examinations);
+    }
+
+    private static String patientDisplayName(
+            UserDirectory users,
+            String patientUserId) {
+        if (users == null) {
+            return patientUserId;
+        }
+        return users.findByUserId(patientUserId)
+                .map(UserIdentity::displayName)
+                .filter(name -> !name.isBlank())
+                .orElse(patientUserId);
     }
 
     private boolean consultationBelongsToEpisode(
@@ -2147,6 +2323,90 @@ final class HospitalService {
         return new HospitalBusinessException(code, exception.getMessage());
     }
 
+    private boolean chargeRegistration(
+            SessionInfo session, String billId, long amountCents) {
+        int amountFen = toCampusCardFen(amountCents);
+        if (campusCards == null || amountFen == 0) {
+            return false;
+        }
+        try {
+            campusCards.debit(
+                    session,
+                    amountFen,
+                    ModuleNames.HOSPITAL,
+                    registrationDebitReference(billId));
+            return true;
+        } catch (CardBusinessException exception) {
+            throw mapCardFailure(exception);
+        }
+    }
+
+    private void compensateRegistrationCharge(
+            SessionInfo session,
+            String billId,
+            long amountCents,
+            RuntimeException originalFailure) {
+        try {
+            campusCards.refundDebit(
+                    session,
+                    session.getUserId(),
+                    toCampusCardFen(amountCents),
+                    ModuleNames.HOSPITAL,
+                    registrationDebitReference(billId),
+                    registrationRefundReference(billId));
+        } catch (RuntimeException refundFailure) {
+            originalFailure.addSuppressed(refundFailure);
+        }
+    }
+
+    private HospitalBooking completeRegistrationRefund(
+            SessionInfo actor,
+            HospitalBooking cancelled,
+            HospitalEpisode episodeAfterCancellation) {
+        int amountFen = toCampusCardFen(cancelled.billItem().amountCents());
+        if (campusCards != null && amountFen > 0) {
+            try {
+                campusCards.refundDebit(
+                        actor,
+                        cancelled.appointment().patientUserId(),
+                        amountFen,
+                        ModuleNames.HOSPITAL,
+                        registrationDebitReference(cancelled.bill().billId()),
+                        registrationRefundReference(cancelled.bill().billId()));
+            } catch (CardBusinessException exception) {
+                // Appointment remains cancelled with a paid bill. Repeating the
+                // cancellation resumes this idempotent refund instead of charging twice.
+                throw mapCardFailure(exception);
+            }
+        }
+        LocalDateTime refundedAt = LocalDateTime.now(clock);
+        HospitalBill refundedBill = new HospitalBill(
+                cancelled.bill().billId(),
+                cancelled.bill().appointmentId(),
+                cancelled.bill().createdAt(),
+                cancelled.bill().paidAt(),
+                refundedAt,
+                PaymentStatus.REFUNDED);
+        HospitalBooking refunded = new HospitalBooking(
+                cancelled.appointment(), refundedBill, cancelled.billItem());
+        repository.updateBookingAndEpisode(refunded, episodeAfterCancellation);
+        return refunded;
+    }
+
+    private static String registrationDebitReference(String billId) {
+        return "registration:" + billId;
+    }
+
+    private static String registrationRefundReference(String billId) {
+        return registrationDebitReference(billId) + ":refund";
+    }
+
+    /** Keeps both the debit reference and its ':refund' derivative within Access TEXT(80). */
+    private static String patientBillDebitReference(String billId) {
+        String attempt = UUID.randomUUID().toString().replace("-", "").substring(0, 24);
+        return "bill:" + billId + ":" + attempt;
+    }
+
     private static int toCampusCardFen(long amountCents) {
         if (amountCents > Integer.MAX_VALUE) {
             throw new IllegalStateException("hospital bill exceeds campus-card amount range");
@@ -2198,6 +2458,8 @@ final class HospitalService {
                 application.requestedByUserId(),
                 application.status(),
                 application.targetUserId(),
+                application.targetDoctorId(),
+                application.requestReason(),
                 application.reviewedByUserId(),
                 application.createdAt());
     }

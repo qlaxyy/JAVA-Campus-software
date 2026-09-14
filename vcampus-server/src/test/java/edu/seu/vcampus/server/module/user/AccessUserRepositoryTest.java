@@ -51,7 +51,7 @@ class AccessUserRepositoryTest {
     }
 
     @Test
-    void seedsDemoAccountsOnlyWhenDatabaseIsEmpty() {
+    void seedsMissingDemoAccountsWithoutOverwritingPersistedChanges() {
         Path databasePath = temporaryDirectory.resolve("seeded.accdb");
         InMemoryAuthenticationService first =
                 UserAuthenticationBootstrap.createAccessBacked(databasePath);
@@ -68,6 +68,24 @@ class AccessUserRepositoryTest {
         assertEquals("王建国", teacher.displayName());
         assertEquals(Role.USER, teacher.role());
         assertTrue(teacher.adminScopes().isEmpty());
+    }
+
+    @Test
+    void preservesOccupiedDemoNumberAndAllocatesOnlyConflictingMissingIdentity() {
+        Path databasePath = temporaryDirectory.resolve("occupied-demo-number.accdb");
+        AccessUserRepository initial = repository(databasePath);
+        initial.save(account("U-LOCAL-001", "20260029"));
+
+        InMemoryAuthenticationService migrated =
+                UserAuthenticationBootstrap.createAccessBacked(databasePath);
+
+        assertEquals("U-LOCAL-001",
+                migrated.users().findByUsername("20260029").orElseThrow().userId());
+        assertEquals("U-DOCTOR-001",
+                migrated.users().findByUsername("20260039").orElseThrow().userId());
+        assertEquals("U-DOCTOR-002",
+                migrated.users().findByUsername("20260030").orElseThrow().userId());
+        assertEquals(40, migrated.users().findAll().size());
     }
 
     @Test

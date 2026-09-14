@@ -17,6 +17,7 @@ public final class ConsultationRecordView implements Serializable {
     private final String doctorName;
     private final String doctorTitle;
     private final String patientUserId;
+    private final String patientName;
     private final String departmentName;
     private final VisitType visitType;
     private final ConsultationOutcome outcome;
@@ -43,12 +44,36 @@ public final class ConsultationRecordView implements Serializable {
             String medicationAdvice,
             String followUpAdvice,
             LocalDateTime createdAt) {
+        this(consultationId, appointmentId, doctorId, doctorName, doctorTitle,
+                patientUserId, patientUserId, departmentName, visitType, outcome,
+                diagnosisOpinion, examinationAdvice, treatmentAdvice, medicationAdvice,
+                followUpAdvice, createdAt);
+    }
+
+    public ConsultationRecordView(
+            String consultationId,
+            String appointmentId,
+            String doctorId,
+            String doctorName,
+            String doctorTitle,
+            String patientUserId,
+            String patientName,
+            String departmentName,
+            VisitType visitType,
+            ConsultationOutcome outcome,
+            String diagnosisOpinion,
+            String examinationAdvice,
+            String treatmentAdvice,
+            String medicationAdvice,
+            String followUpAdvice,
+            LocalDateTime createdAt) {
         this.consultationId = requireText(consultationId, "consultationId");
         this.appointmentId = requireText(appointmentId, "appointmentId");
         this.doctorId = requireText(doctorId, "doctorId");
         this.doctorName = requireText(doctorName, "doctorName");
         this.doctorTitle = requireText(doctorTitle, "doctorTitle");
         this.patientUserId = requireText(patientUserId, "patientUserId");
+        this.patientName = requireText(patientName, "patientName");
         this.departmentName = requireText(departmentName, "departmentName");
         this.visitType = Objects.requireNonNull(visitType, "visitType must not be null");
         this.outcome = Objects.requireNonNull(outcome, "outcome must not be null");
@@ -71,6 +96,10 @@ public final class ConsultationRecordView implements Serializable {
     public String getDoctorTitle() { return doctorTitle; }
 
     public String getPatientUserId() { return patientUserId; }
+
+    public String getPatientName() {
+        return patientName == null ? patientUserId : patientName;
+    }
 
     public String getDepartmentName() { return departmentName; }
 

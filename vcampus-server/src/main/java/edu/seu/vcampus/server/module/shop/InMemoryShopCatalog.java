@@ -27,7 +27,7 @@ public final class InMemoryShopCatalog implements ShopCatalogRepository {
     private final List<ProductSummaryDto> products = new ArrayList<>(seedProducts());
     private final List<ShopListingRecordDto> listings = new ArrayList<>();
     private final List<ShopCategoryDto> categories = new ArrayList<>(ShopCategories.seed());
-    private long nextId = 11L;
+    private long nextId = 16L;
     private long nextListingId = 1L;
     private long nextCategoryId = 4L;
 
@@ -271,27 +271,96 @@ public final class InMemoryShopCatalog implements ShopCatalogRepository {
 
     static List<ProductSummaryDto> seedProducts() {
         List<ProductSummaryDto> rows = new ArrayList<>();
-        rows.add(onSale(1, ShopCategories.STATIONERY, "中性笔 0.5mm", 350, 120,
-                "顺滑好写，适合课堂笔记。笔帽不易丢，整盒分装后单支出售。"));
-        rows.add(onSale(2, ShopCategories.STATIONERY, "A4 草稿纸 100 张", 600, 80,
-                "作业演算够用。纸面平整，双面都能写，适合带去自习室。"));
-        rows.add(onSale(3, ShopCategories.STATIONERY, "荧光笔套装", 1290, 40,
-                "四个常用色，划重点不洇纸。开学整理笔记够用一学期。"));
-        rows.add(offSale(4, ShopCategories.STATIONERY, "停售纪念本", 1990, 0,
-                "已停售样品，仅保留库存记录，不在首页展示。"));
-        rows.add(onSale(5, ShopCategories.DAILY, "抽纸 3 包", 990, 60,
-                "宿舍常备抽纸，三包一组。纸张偏厚，抽取得出。"));
-        rows.add(onSale(6, ShopCategories.DAILY, "牙刷两支装", 850, 45,
-                "软毛两支装，换新更方便。包装未拆，校内自提。"));
-        rows.add(onSale(7, ShopCategories.DAILY, "洗衣凝珠 20 粒", 1590, 30,
-                "一粒一次，味道清淡。适合宿舍洗衣机小件衣物。"));
-        rows.add(onSale(8, ShopCategories.FOOD, "矿泉水 550ml", 200, 200,
-                "冰柜常温都有。上课带走方便，瓶身轻。"));
-        rows.add(onSale(9, ShopCategories.FOOD, "面包 1 个", 450, 25,
-                "当天现货，早餐或加餐。建议当日食用。"));
-        rows.add(offSale(10, ShopCategories.FOOD, "过期试吃饼干", 100, 3,
-                "过期试吃品，不得上架售卖。"));
+        rows.add(onSale(1, ShopCategories.STATIONERY, "晨光中性笔 0.5mm 黑色按动", 350, 120,
+                spec("品牌：晨光",
+                        "型号：K-35 按动中性笔",
+                        "笔尖：0.5mm 子弹头",
+                        "墨色：黑色",
+                        "包装：单支出售",
+                        "适用：课堂笔记 / 考试填涂",
+                        "发货：校内自提，拆盒分装")));
+        rows.add(offSale(4, ShopCategories.STATIONERY, "停售纪念本（已下架）", 1990, 0,
+                spec("状态：已停售",
+                        "说明：样品仅保留库存记录，不在首页展示。")));
+        rows.add(onSale(5, ShopCategories.DAILY, "清风抽纸 3包 130抽", 990, 60,
+                spec("品牌：清风",
+                        "规格：3 层 130 抽 × 3 包",
+                        "材质：原生木浆",
+                        "适用：宿舍/教室常备",
+                        "发货：校内自提")));
+        rows.add(onSale(6, ShopCategories.DAILY, "舒客软毛牙刷 两支装", 850, 45,
+                spec("品牌：舒客",
+                        "毛型：软毛",
+                        "数量：2 支/组",
+                        "适用：成人日常清洁",
+                        "发货：校内自提，包装未拆")));
+        rows.add(onSale(7, ShopCategories.DAILY, "蓝月亮洗衣凝珠 20粒", 1590, 30,
+                spec("品牌：蓝月亮",
+                        "净含量：20 粒",
+                        "用法：一粒一次，勿拆开食用",
+                        "香型：留香",
+                        "适用：宿舍洗衣机小件",
+                        "发货：校内自提")));
+        rows.add(onSale(8, ShopCategories.FOOD, "农夫山泉饮用天然水 550ml", 200, 200,
+                spec("品牌：农夫山泉",
+                        "品名：饮用天然水",
+                        "净含量：550ml",
+                        "包装：PET 瓶装",
+                        "保质期：24 个月",
+                        "储存：阴凉处，开瓶请尽快饮用",
+                        "发货：冰柜/常温都有，校内自提")));
+        rows.add(onSale(9, ShopCategories.FOOD, "桃李吐司面包 切片早餐", 450, 25,
+                spec("品牌：桃李",
+                        "品名：全麦/白吐司（按到货）",
+                        "规格：切片装 1 袋",
+                        "保质期：请见包装",
+                        "食用：建议当日早餐",
+                        "发货：当天现货，校内自提")));
+        rows.add(offSale(10, ShopCategories.FOOD, "过期试吃饼干（不得上架）", 100, 3,
+                spec("状态：过期试吃品",
+                        "说明：不得上架售卖。")));
+        rows.add(onSale(11, ShopCategories.FOOD, "卫龙大面筋辣条 106g", 590, 80,
+                spec("品牌：卫龙",
+                        "品名：大面筋",
+                        "净含量：106g",
+                        "口味：麻辣",
+                        "保质期：180 天",
+                        "储存：阴凉干燥",
+                        "发货：校内自提")));
+        rows.add(onSale(12, ShopCategories.FOOD, "可口可乐汽水 330ml罐装", 300, 90,
+                spec("品牌：可口可乐",
+                        "品名：碳酸饮料",
+                        "净含量：330ml",
+                        "包装：铝罐",
+                        "保质期：12 个月",
+                        "储存：阴凉，冰镇口感更佳",
+                        "发货：校内自提")));
+        rows.add(onSale(13, ShopCategories.STATIONERY, "得力订书机 12号办公装订", 1680, 35,
+                spec("品牌：得力",
+                        "型号：12 号钉",
+                        "装订：约 20 张 70g 纸",
+                        "材质：金属机身",
+                        "适用：作业装订、社团材料、自习室",
+                        "发货：校内自提")));
+        rows.add(onSale(14, ShopCategories.DAILY, "维达湿巾 80抽 杀菌清洁", 1280, 50,
+                spec("品牌：维达",
+                        "规格：80 抽/包",
+                        "用途：日常清洁、外出擦手",
+                        "特点：加盖保湿",
+                        "发货：校内自提")));
+        rows.add(onSale(15, ShopCategories.FOOD, "乐事原味薯片 70g", 650, 70,
+                spec("品牌：乐事",
+                        "口味：原味",
+                        "净含量：70g",
+                        "类型：膨化食品",
+                        "保质期：9 个月",
+                        "储存：避免阳光直射",
+                        "发货：校内自提")));
         return rows;
+    }
+
+    private static String spec(String... lines) {
+        return String.join("\n", lines);
     }
 
     private static ProductSummaryDto onSale(
@@ -307,7 +376,7 @@ public final class InMemoryShopCatalog implements ShopCatalogRepository {
                 priceFen,
                 stock,
                 ProductSaleStatus.ON_SALE,
-                ShopDemoPhotos.forProduct(category, name));
+                ShopDemoPhotos.forProduct(id, category, name));
     }
 
     private static ProductSummaryDto offSale(
@@ -323,7 +392,7 @@ public final class InMemoryShopCatalog implements ShopCatalogRepository {
                 priceFen,
                 stock,
                 ProductSaleStatus.OFF_SALE,
-                ShopDemoPhotos.forProduct(category, name));
+                ShopDemoPhotos.forProduct(id, category, name));
     }
 
     private void appendListing(

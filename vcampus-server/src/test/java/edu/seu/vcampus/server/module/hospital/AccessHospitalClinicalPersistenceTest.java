@@ -13,6 +13,7 @@ import edu.seu.vcampus.common.hospital.ExaminationStatus;
 import edu.seu.vcampus.common.hospital.HospitalBillType;
 import edu.seu.vcampus.common.hospital.MarkAppointmentNoShowRequest;
 import edu.seu.vcampus.common.hospital.PaymentStatus;
+import edu.seu.vcampus.common.hospital.PayHospitalBillRequest;
 import edu.seu.vcampus.common.hospital.PublishDemoExaminationReportRequest;
 import edu.seu.vcampus.common.hospital.SubmitConsultationRequest;
 import edu.seu.vcampus.common.hospital.SubmitExaminationPlanRequest;
@@ -195,6 +196,7 @@ class AccessHospitalClinicalPersistenceTest {
         assertEquals("尚未出具", waitingView.getResultSummary());
         assertNull(waitingView.getReportedAt());
 
+        payExaminationBill(service(path), patient, firstVisit.getAppointmentId());
         service(path).publishDemoExaminationReport(
                 patient, new PublishDemoExaminationReportRequest(ordered.getOrderId()));
 
@@ -290,6 +292,7 @@ class AccessHospitalClinicalPersistenceTest {
                 DOCTOR,
                 new SubmitExaminationPlanRequest(
                         firstVisit.getAppointmentId(), "发热待查", "血常规", "", ""));
+        payExaminationBill(service(path), patient, firstVisit.getAppointmentId());
         service(path).publishDemoExaminationReport(
                 patient, new PublishDemoExaminationReportRequest(firstOrder.getOrderId()));
         AppointmentBookingView firstReview = service(path).bookResultReview(
@@ -315,6 +318,7 @@ class AccessHospitalClinicalPersistenceTest {
                 afterSecondOrder.findEpisodeById(secondOrder.getEpisodeId())
                         .orElseThrow().status());
 
+        payExaminationBill(service(path), patient, firstReview.getAppointmentId());
         service(path).publishDemoExaminationReport(
                 patient, new PublishDemoExaminationReportRequest(secondOrder.getOrderId()));
         AppointmentBookingView secondReview = service(path).bookResultReview(
@@ -408,6 +412,7 @@ class AccessHospitalClinicalPersistenceTest {
         String care = "检查期间适量饮水，留意体温变化（虚构演示）。";
         ExaminationOrderView order = service.submitExaminationPlan(DOCTOR,
                 new SubmitExaminationPlanRequest(appointmentId, "病因待查", "血常规", "", care));
+        payExaminationBill(service, patient, appointmentId);
         service.publishDemoExaminationReport(patient,
                 new PublishDemoExaminationReportRequest(order.getOrderId()));
 
@@ -551,6 +556,7 @@ class AccessHospitalClinicalPersistenceTest {
         ExaminationFixture fixture = openExamination(
                 path, "U-ROLLBACK-REVIEW-001");
         HospitalService service = service(path);
+        payExaminationBill(service, fixture.patient(), fixture.appointmentId());
         service.publishDemoExaminationReport(
                 fixture.patient(), new PublishDemoExaminationReportRequest(fixture.orderId()));
         AppointmentBookingView reviewView = service(path).bookResultReview(
@@ -604,6 +610,17 @@ class AccessHospitalClinicalPersistenceTest {
                 new SubmitExaminationPlanRequest(
                         appointment.getAppointmentId(), "原阶段诊断", "原检查项目", "", ""));
         return new ExaminationFixture(patient, appointment.getAppointmentId(), order.getOrderId());
+    }
+
+    private static void payExaminationBill(
+            HospitalService service,
+            SessionInfo patient,
+            String appointmentId) {
+        String billId = service.listMyBills(patient).getBills().stream()
+                .filter(bill -> bill.getBillType() == HospitalBillType.EXAMINATION)
+                .filter(bill -> bill.getAppointmentId().equals(appointmentId))
+                .findFirst().orElseThrow().getBillId();
+        service.payBill(patient, new PayHospitalBillRequest(billId));
     }
 
     private HospitalConsultation completedConsultation(

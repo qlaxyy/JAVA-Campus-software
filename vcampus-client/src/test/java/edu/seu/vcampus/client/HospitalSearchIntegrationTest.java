@@ -162,6 +162,15 @@ class HospitalSearchIntegrationTest {
             assertTrue(adminAccess.canAccess(HospitalMode.PATIENT));
             assertFalse(adminAccess.canAccess(HospitalMode.DOCTOR));
             assertTrue(adminAccess.canAccess(HospitalMode.ADMIN));
+
+            assertTrue(context.logout().isSuccess());
+            assertTrue(context.login("20260038", "123456".toCharArray()).isSuccess());
+            HospitalModeAccessView anotherDoctorAccess = assertInstanceOf(
+                    HospitalModeAccessView.class,
+                    context.send(HospitalActions.GET_MODE_ACCESS, null).getData());
+            assertTrue(anotherDoctorAccess.canAccess(HospitalMode.PATIENT));
+            assertTrue(anotherDoctorAccess.canAccess(HospitalMode.DOCTOR));
+            assertFalse(anotherDoctorAccess.canAccess(HospitalMode.ADMIN));
         }
     }
 
@@ -194,6 +203,14 @@ class HospitalSearchIntegrationTest {
                             && department.isBookable()
                             && "dept-orthopedics".equals(
                             department.getParentDepartmentId())));
+
+            Response expandedSlotsResponse = context.send(
+                    HospitalActions.SEARCH_SLOTS,
+                    SearchSlotsRequest.firstVisit("dept-eye", null));
+            assertTrue(expandedSlotsResponse.isSuccess());
+            assertFalse(assertInstanceOf(
+                    SlotListResponse.class, expandedSlotsResponse.getData())
+                    .getSlots().isEmpty());
 
             Response slotsResponse = context.send(
                     HospitalActions.SEARCH_SLOTS,

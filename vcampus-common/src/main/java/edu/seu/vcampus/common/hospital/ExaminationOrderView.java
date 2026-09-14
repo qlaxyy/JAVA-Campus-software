@@ -22,6 +22,7 @@ public final class ExaminationOrderView implements Serializable {
     private final String resultSummary;
     private final LocalDateTime orderedAt;
     private final LocalDateTime reportedAt;
+    private final PaymentStatus paymentStatus;
     private final boolean resultReviewBooked;
 
     public ExaminationOrderView(
@@ -37,6 +38,25 @@ public final class ExaminationOrderView implements Serializable {
             LocalDateTime orderedAt,
             LocalDateTime reportedAt,
             boolean resultReviewBooked) {
+        this(orderId, episodeId, orderedAppointmentId, doctorName, departmentName,
+                itemName, instructions, status, resultSummary, orderedAt, reportedAt,
+                PaymentStatus.PAID, resultReviewBooked);
+    }
+
+    public ExaminationOrderView(
+            String orderId,
+            String episodeId,
+            String orderedAppointmentId,
+            String doctorName,
+            String departmentName,
+            String itemName,
+            String instructions,
+            ExaminationStatus status,
+            String resultSummary,
+            LocalDateTime orderedAt,
+            LocalDateTime reportedAt,
+            PaymentStatus paymentStatus,
+            boolean resultReviewBooked) {
         this.orderId = requireText(orderId, "orderId");
         this.episodeId = requireText(episodeId, "episodeId");
         this.orderedAppointmentId = requireText(
@@ -49,6 +69,8 @@ public final class ExaminationOrderView implements Serializable {
         this.resultSummary = displayText(resultSummary, "尚未出具");
         this.orderedAt = Objects.requireNonNull(orderedAt, "orderedAt must not be null");
         this.reportedAt = reportedAt;
+        this.paymentStatus = Objects.requireNonNull(
+                paymentStatus, "paymentStatus must not be null");
         this.resultReviewBooked = resultReviewBooked;
         if (status == ExaminationStatus.ORDERED && reportedAt != null) {
             throw new IllegalArgumentException("an ordered examination cannot have a report time");
@@ -80,6 +102,10 @@ public final class ExaminationOrderView implements Serializable {
     public LocalDateTime getOrderedAt() { return orderedAt; }
 
     public LocalDateTime getReportedAt() { return reportedAt; }
+
+    public PaymentStatus getPaymentStatus() {
+        return paymentStatus == null ? PaymentStatus.UNPAID : paymentStatus;
+    }
 
     public boolean isResultReviewBooked() { return resultReviewBooked; }
 

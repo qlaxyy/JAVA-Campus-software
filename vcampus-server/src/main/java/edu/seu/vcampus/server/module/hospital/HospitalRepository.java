@@ -23,6 +23,9 @@ interface HospitalRepository {
 
     void saveDoctorApplication(DoctorApplication application);
 
+    /** Deactivates the target doctor and stores the approved request atomically. */
+    void approveDoctorDeactivation(DoctorApplication approvedApplication);
+
     void saveDoctorProfile(DoctorProfile profile);
 
     List<HospitalDepartment> findActiveDepartments();

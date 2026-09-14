@@ -5,6 +5,7 @@ import javax.swing.JButton;
 import javax.swing.JPanel;
 import javax.swing.plaf.basic.BasicButtonUI;
 import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -44,6 +45,14 @@ final class HospitalTheme {
         return new Font(DATA_FONT, style, Math.round(size));
     }
 
+    /** Uses the utility face only when it can display the complete value. */
+    static Font valueFont(String text, int style, float size) {
+        Font utility = dataFont(style, size);
+        return text != null && utility.canDisplayUpTo(text) < 0
+                ? utility
+                : uiFont(style, size);
+    }
+
     static JButton primaryButton(String text) {
         JButton button = new JButton(text);
         applyPrimaryStyle(button);
@@ -53,6 +62,19 @@ final class HospitalTheme {
     static JButton quietButton(String text) {
         JButton button = new JButton(text);
         applyQuietStyle(button);
+        return button;
+    }
+
+    static JButton backButton(String destination) {
+        JButton button = quietButton("←  " + destination);
+        button.setForeground(PRIMARY);
+        button.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(157, 202, 196)),
+                BorderFactory.createEmptyBorder(8, 13, 8, 14)));
+        button.setHorizontalAlignment(JButton.LEFT);
+        button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        button.setToolTipText("返回" + destination);
+        button.setName("hospitalPageBackButton");
         return button;
     }
 

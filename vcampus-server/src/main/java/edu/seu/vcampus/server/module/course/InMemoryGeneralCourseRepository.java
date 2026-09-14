@@ -116,6 +116,7 @@ final class InMemoryGeneralCourseRepository
                 "中国传统文化",
                 2.0,
                 "任选",
+                "人文学院",
                 false,
                 List.of(
                     offering

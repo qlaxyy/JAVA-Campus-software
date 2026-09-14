@@ -27,7 +27,6 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
@@ -363,7 +362,7 @@ final class DoctorWorkspacePanel extends JPanel {
             JLabel subtitle) {
         JPanel header = new JPanel(new BorderLayout(18, 0));
         header.setOpaque(false);
-        JButton back = HospitalTheme.quietButton("‹ " + backText);
+        JButton back = HospitalTheme.backButton(backText.replaceFirst("^返回", ""));
         back.setName("doctorBackButton");
         back.addActionListener(event -> backAction.run());
         JPanel copy = verticalList();
@@ -486,7 +485,7 @@ final class DoctorWorkspacePanel extends JPanel {
         card.setBorder(BorderFactory.createEmptyBorder(16, 18, 16, 18));
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 210));
         JPanel copy = verticalList();
-        JLabel title = new JLabel(record.getPatientUserId() + "  ·  "
+        JLabel title = new JLabel(record.getPatientName() + "  ·  "
                 + record.getDepartmentName() + "  ·  "
                 + DATE_TIME_FORMAT.format(record.getCreatedAt()));
         title.setFont(HospitalTheme.uiFont(Font.BOLD, 16F));
@@ -505,7 +504,7 @@ final class DoctorWorkspacePanel extends JPanel {
 
     private void showSignedRecordDetail(DoctorClinicalRecordView clinicalRecord) {
         ConsultationRecordView record = clinicalRecord.getConsultation();
-        clinicalDetailTitle.setText(record.getPatientUserId() + " · 诊疗记录");
+        clinicalDetailTitle.setText(record.getPatientName() + " · 诊疗记录");
         clinicalDetailSubtitle.setText(record.getDepartmentName() + "  ·  签署于 "
                 + DATE_TIME_FORMAT.format(record.getCreatedAt()));
         clinicalDetailContent.removeAll();
@@ -515,7 +514,7 @@ final class DoctorWorkspacePanel extends JPanel {
     }
 
     private void showFollowUpDetail(DoctorFollowUpView followUp) {
-        followUpDetailTitle.setText(followUp.getPatientUserId() + " · 诊疗跟进");
+        followUpDetailTitle.setText(followUp.getPatientName() + " · 诊疗跟进");
         followUpDetailSubtitle.setText(followUp.getDepartmentName() + "  ·  "
                 + doctorFollowUpStatus(followUp));
         followUpDetailContent.removeAll();
@@ -563,7 +562,7 @@ final class DoctorWorkspacePanel extends JPanel {
         HospitalTheme.SurfacePanel card = informationCard(
                 DATE_TIME_FORMAT.format(record.getCreatedAt()) + "  ·  "
                         + visitTypeText(record.getVisitType()));
-        card.add(detailRow("患者账号", record.getPatientUserId(), true));
+        card.add(detailRow("患者姓名", record.getPatientName(), false));
         card.add(Box.createVerticalStrut(12));
         card.add(detailRow("诊断 / 判断", record.getDiagnosisOpinion(), false));
         card.add(Box.createVerticalStrut(12));
@@ -599,9 +598,9 @@ final class DoctorWorkspacePanel extends JPanel {
         card.setBorder(BorderFactory.createEmptyBorder(16, 18, 16, 18));
         card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 220));
         JPanel copy = verticalList();
-        JLabel title = new JLabel(followUp.getPatientUserId() + "  ·  "
+        JLabel title = new JLabel(followUp.getPatientName() + "  ·  "
                 + followUp.getExaminationItem());
-        title.setFont(HospitalTheme.dataFont(Font.BOLD, 17F));
+        title.setFont(HospitalTheme.uiFont(Font.BOLD, 17F));
         title.setForeground(HospitalTheme.TEXT);
         JLabel meta = new JLabel(followUp.getDepartmentName() + "  ·  开单于 "
                 + DATE_TIME_FORMAT.format(followUp.getOrderedAt()));
@@ -765,8 +764,8 @@ final class DoctorWorkspacePanel extends JPanel {
         queue.add(queueNumber);
 
         JPanel copy = verticalList();
-        JLabel patient = new JLabel(appointment.getPatientUserId());
-        patient.setFont(HospitalTheme.dataFont(Font.BOLD, 16F));
+        JLabel patient = new JLabel(appointment.getPatientName());
+        patient.setFont(HospitalTheme.uiFont(Font.BOLD, 16F));
         patient.setForeground(HospitalTheme.TEXT);
         JLabel meta = new JLabel(visitTypeText(appointment.getVisitType()) + "  ·  "
                 + statusText(appointment.getAppointmentStatus()) + "  ·  预约于 "
@@ -805,19 +804,17 @@ final class DoctorWorkspacePanel extends JPanel {
             DoctorAppointmentView appointment,
             JButton openButton,
             JButton noShowButton) {
-        int choice = JOptionPane.showConfirmDialog(
-                this,
-                "确认将该患者标记为未到诊？\n\n患者账号："
-                        + appointment.getPatientUserId()
+        boolean confirmed = HospitalDialogs.confirm(
+                this, "标记未到诊",
+                "确认将该患者标记为未到诊？\n\n患者姓名："
+                        + appointment.getPatientName()
                         + "\n预约编号：" + appointment.getAppointmentId()
                         + "\n排班：" + DATE_FORMAT.format(schedule.getStartTime()) + " "
                         + TIME_FORMAT.format(schedule.getStartTime()) + "–"
                         + TIME_FORMAT.format(schedule.getEndTime())
                         + "\n\n确认后不能继续接诊该预约，挂号费不退，也不会生成诊疗费。",
-                "标记未到诊",
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.WARNING_MESSAGE);
-        if (choice != JOptionPane.OK_OPTION) {
+                "确认标记", true);
+        if (!confirmed) {
             return;
         }
         openButton.setEnabled(false);
@@ -848,22 +845,18 @@ final class DoctorWorkspacePanel extends JPanel {
                         openButton.setEnabled(true);
                         noShowButton.setEnabled(true);
                         noShowButton.setText("标记未到诊");
-                        JOptionPane.showMessageDialog(
-                                DoctorWorkspacePanel.this,
-                                noShowFailureMessage(response),
-                                "处理失败",
-                                JOptionPane.WARNING_MESSAGE);
+                        HospitalDialogs.warning(
+                                DoctorWorkspacePanel.this, "处理失败",
+                                noShowFailureMessage(response));
                     }
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
                     restoreNoShowButtons(openButton, noShowButton);
                 } catch (ExecutionException exception) {
                     restoreNoShowButtons(openButton, noShowButton);
-                    JOptionPane.showMessageDialog(
-                            DoctorWorkspacePanel.this,
-                            "无法连接服务器，请确认服务器已经启动。",
-                            "处理失败",
-                            JOptionPane.WARNING_MESSAGE);
+                    HospitalDialogs.warning(
+                            DoctorWorkspacePanel.this, "处理失败",
+                            "无法连接服务器，请确认服务器已经启动。");
                 }
             }
         }.execute();
@@ -893,7 +886,7 @@ final class DoctorWorkspacePanel extends JPanel {
         currentSchedule = schedule;
         currentConsultationContext = null;
         currentAppointmentId = appointment.getAppointmentId();
-        appointmentTitle.setText("患者 " + appointment.getPatientUserId());
+        appointmentTitle.setText("患者 " + appointment.getPatientName());
         appointmentSubtitle.setText("候诊 " + appointment.getQueueNumber()
                 + " 号  ·  " + visitTypeText(appointment.getVisitType())
                 + "  ·  " + schedule.getDepartmentName() + "  ·  "
@@ -1101,7 +1094,7 @@ final class DoctorWorkspacePanel extends JPanel {
     private void renderCurrentVisit(DoctorConsultationContextView contextView) {
         DoctorAppointmentView appointment = contextView.getAppointment();
         currentVisitTitle.setText("本次接诊");
-        currentVisitSubtitle.setText(appointment.getPatientUserId() + "  ·  "
+        currentVisitSubtitle.setText(appointment.getPatientName() + "  ·  "
                 + contextView.getDepartmentName() + "  ·  候诊 "
                 + appointment.getQueueNumber() + " 号");
         currentVisitContent.removeAll();
@@ -1109,7 +1102,7 @@ final class DoctorWorkspacePanel extends JPanel {
         HospitalTheme.SurfacePanel booking = informationCard("本次预约");
         booking.add(detailRow("预约编号", appointment.getAppointmentId(), true));
         booking.add(Box.createVerticalStrut(14));
-        booking.add(detailRow("患者账号", appointment.getPatientUserId(), true));
+        booking.add(detailRow("患者姓名", appointment.getPatientName(), false));
         booking.add(Box.createVerticalStrut(14));
         booking.add(detailRow("科室", contextView.getDepartmentName(), false));
         booking.add(Box.createVerticalStrut(14));
@@ -1150,7 +1143,7 @@ final class DoctorWorkspacePanel extends JPanel {
     private void renderHealthProfile(DoctorConsultationContextView contextView) {
         PatientHealthProfileView profile = contextView.getHealthProfile();
         healthProfileTitle.setText("患者健康档案");
-        healthProfileSubtitle.setText(contextView.getAppointment().getPatientUserId()
+        healthProfileSubtitle.setText(contextView.getAppointment().getPatientName()
                 + "  ·  患者自述信息");
         healthProfileContent.removeAll();
         HospitalTheme.SurfacePanel card = informationCard("患者自述健康摘要");
@@ -1182,7 +1175,7 @@ final class DoctorWorkspacePanel extends JPanel {
 
     private void renderHistory(DoctorConsultationContextView contextView) {
         historyTitle.setText("历史就诊");
-        historySubtitle.setText(contextView.getAppointment().getPatientUserId()
+        historySubtitle.setText(contextView.getAppointment().getPatientName()
                 + "  ·  按签署时间从近到远排列");
         historyList.removeAll();
         if (contextView.getPreviousConsultations().isEmpty()) {
@@ -1201,7 +1194,7 @@ final class DoctorWorkspacePanel extends JPanel {
 
     private void renderExaminations(DoctorConsultationContextView contextView) {
         examinationsTitle.setText("本轮检查报告");
-        examinationsSubtitle.setText(contextView.getAppointment().getPatientUserId()
+        examinationsSubtitle.setText(contextView.getAppointment().getPatientName()
                 + "  ·  仅显示当前诊疗过程关联的检查");
         examinationsList.removeAll();
         if (contextView.getEpisodeExaminations().isEmpty()) {
@@ -1736,21 +1729,19 @@ final class DoctorWorkspacePanel extends JPanel {
                 == VisitType.RESULT_REVIEW;
         String actionText = repeatedExamination
                 ? "再次开检查并等待下次回诊" : "开检查并等待回诊";
-        int choice = JOptionPane.showConfirmDialog(
-                this,
+        boolean confirmed = HospitalDialogs.confirm(
+                this, actionText,
                 (repeatedExamination
                         ? "确认解读上一份报告并开具下一张检查单？\n\n"
                         : "确认开具检查单并结束当前排班接诊？\n\n")
-                        + "患者账号：" + consultationContext.getAppointment().getPatientUserId()
+                        + "患者姓名：" + consultationContext.getAppointment().getPatientName()
                         + "\n预约编号：" + consultationContext.getAppointment().getAppointmentId()
                         + "\n\n"
                         + "本次只保存初步判断、检查单和可选注意事项，不形成正式处置。"
                         + "\n患者完成检查后将申请检查结果回诊。"
-                        + "\n\n系统会同时生成 ¥30.00 的课程演示检查费，供患者在费用清单中模拟缴费。",
-                actionText,
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.WARNING_MESSAGE);
-        if (choice != JOptionPane.OK_OPTION) {
+                        + "\n\n系统会同时生成 ¥30.00 检查费，患者可在费用清单中使用校园卡缴纳。",
+                "确认开具", true);
+        if (!confirmed) {
             return;
         }
         SubmitExaminationPlanRequest request = new SubmitExaminationPlanRequest(
@@ -1826,7 +1817,7 @@ final class DoctorWorkspacePanel extends JPanel {
         result.add(Box.createVerticalStrut(14));
         result.add(detailRow("检查状态", "待完成检查", false));
         result.add(Box.createVerticalStrut(14));
-        result.add(detailRow("费用状态", "已生成 ¥30.00 课程演示检查费，等待患者模拟缴费", false));
+        result.add(detailRow("费用状态", "已生成 ¥30.00 检查费，等待患者使用校园卡缴纳", false));
         result.add(Box.createVerticalStrut(20));
         result.add(message(
                 "报告出具后，患者可申请检查结果回诊；原预约不会继续留在候诊队列。",
@@ -1866,19 +1857,17 @@ final class DoctorWorkspacePanel extends JPanel {
                 == VisitType.RESULT_REVIEW;
         String billingNotice = resultReview
                 ? "\n\n本次为检查结果回诊，不重复生成诊疗费。"
-                : "\n\n系统会同时生成 ¥18.00 的课程演示诊疗费，供患者在费用清单中模拟缴费。";
-        int choice = JOptionPane.showConfirmDialog(
-                this,
-                "确认完成本次接诊？\n\n患者账号："
-                        + consultationContext.getAppointment().getPatientUserId()
+                : "\n\n系统会同时生成 ¥18.00 诊疗费，患者可在费用清单中使用校园卡缴纳。";
+        boolean confirmed = HospitalDialogs.confirm(
+                this, "完成接诊",
+                "确认完成本次接诊？\n\n患者姓名："
+                        + consultationContext.getAppointment().getPatientName()
                         + "\n预约编号："
                         + consultationContext.getAppointment().getAppointmentId()
                         + "\n\n保存后诊疗记录不可直接修改，预约将变为已完成。"
                         + billingNotice,
-                "完成接诊",
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.WARNING_MESSAGE);
-        if (choice != JOptionPane.OK_OPTION) {
+                "确认完成", true);
+        if (!confirmed) {
             return;
         }
         submit.setEnabled(false);
@@ -1934,7 +1923,7 @@ final class DoctorWorkspacePanel extends JPanel {
 
     private void renderCompletedConsultation(ConsultationRecordView record) {
         currentVisitTitle.setText("接诊已完成");
-        currentVisitSubtitle.setText(record.getPatientUserId() + "  ·  "
+        currentVisitSubtitle.setText(record.getPatientName() + "  ·  "
                 + record.getDepartmentName() + "  ·  "
                 + DATE_TIME_FORMAT.format(record.getCreatedAt()));
         currentVisitContent.removeAll();
@@ -1958,7 +1947,7 @@ final class DoctorWorkspacePanel extends JPanel {
                 "费用状态",
                 record.getVisitType() == VisitType.RESULT_REVIEW
                         ? "检查结果回诊不重复生成诊疗费"
-                        : "已生成 ¥18.00 课程演示诊疗费，等待患者模拟缴费",
+                        : "已生成 ¥18.00 诊疗费，等待患者使用校园卡缴纳",
                 false));
         result.add(Box.createVerticalStrut(20));
         result.add(message(
@@ -2020,13 +2009,16 @@ final class DoctorWorkspacePanel extends JPanel {
                 order.getOrderId(),
                 order.getEpisodeId(),
                 consultationContext.getAppointment().getPatientUserId(),
+                consultationContext.getAppointment().getPatientName(),
                 order.getDepartmentName(),
                 order.getItemName(),
                 order.getStatus(),
                 order.getOrderedAt(),
                 false,
                 null,
-                null));
+                null,
+                List.of(),
+                List.of()));
         workspace = new DoctorWorkspaceView(
                 workspace.getDoctorId(),
                 workspace.getDoctorName(),
@@ -2204,7 +2196,7 @@ final class DoctorWorkspacePanel extends JPanel {
         JLabel value = new JLabel(valueText);
         value.setName("doctorAppointmentDetail");
         value.setFont(dataFont
-                ? HospitalTheme.dataFont(Font.PLAIN, 14F)
+                ? HospitalTheme.valueFont(valueText, Font.PLAIN, 14F)
                 : HospitalTheme.uiFont(Font.BOLD, 15F));
         value.setForeground(HospitalTheme.TEXT);
         row.add(label);

@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FinalDemoRosterTest {
 
@@ -34,5 +35,9 @@ class FinalDemoRosterTest {
                 .map(FinalDemoRoster.TeachingAssignmentSeed::teacherUserId)
                 .distinct()
                 .count());
+        assertEquals(39, FinalDemoRoster.accounts().size());
+        assertEquals(10, FinalDemoRoster.doctors().size());
+        assertTrue(FinalDemoRoster.doctors().stream()
+                .allMatch(doctor -> doctor.userId().startsWith("U-DOCTOR-")));
     }
 }

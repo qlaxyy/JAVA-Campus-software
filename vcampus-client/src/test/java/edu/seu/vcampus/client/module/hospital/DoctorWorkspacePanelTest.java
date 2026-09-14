@@ -256,6 +256,46 @@ class DoctorWorkspacePanelTest {
     }
 
     @Test
+    void showsPatientNameInsteadOfInternalUserIdInDoctorQueue() throws Exception {
+        LocalDateTime now = LocalDateTime.now();
+        DoctorAppointmentView pending = new DoctorAppointmentView(
+                "appointment-named",
+                "U-PATIENT-INTERNAL-001",
+                "林同学",
+                2,
+                AppointmentStatus.BOOKED,
+                VisitType.FIRST_VISIT,
+                null,
+                now);
+        DoctorScheduleView schedule = new DoctorScheduleView(
+                "schedule-named", "dept-general", "全科门诊",
+                now.plusHours(1), now.plusHours(2), 8, 7, true,
+                List.of(pending));
+        DoctorWorkspaceView workspace = new DoctorWorkspaceView(
+                "doctor-chen", "陈医生", "主治医师", "dept-general",
+                "全科门诊", List.of(schedule), List.of());
+        DoctorWorkspacePanel[] panel = new DoctorWorkspacePanel[1];
+
+        SwingUtilities.invokeAndWait(() -> {
+            try {
+                panel[0] = new DoctorWorkspacePanel(
+                        new ClientContext(new CampusClient("127.0.0.1", 1)), () -> { });
+                Method showWorkspace = DoctorWorkspacePanel.class.getDeclaredMethod(
+                        "showWorkspace", DoctorWorkspaceView.class);
+                showWorkspace.setAccessible(true);
+                showWorkspace.invoke(panel[0], workspace);
+                namedButtons(panel[0], "doctorScheduleButton").getFirst().doClick();
+            } catch (ReflectiveOperationException exception) {
+                throw new AssertionError(exception);
+            }
+        });
+
+        assertTrue(labelTexts(panel[0]).stream().anyMatch("林同学"::equals));
+        assertTrue(labelTexts(panel[0]).stream()
+                .noneMatch(text -> text.contains("U-PATIENT-INTERNAL-001")));
+    }
+
+    @Test
     void opensSignedRecordAndItsHistoricalExaminationInSeparatePages() throws Exception {
         LocalDateTime now = LocalDateTime.of(2026, 9, 8, 9, 0);
         ConsultationRecordView record = new ConsultationRecordView(
@@ -335,7 +375,7 @@ class DoctorWorkspacePanelTest {
                     .filter(button -> {
                         Container card = namedAncestor(button, "doctorAppointmentCard");
                         return card != null
-                                && labelTexts(card).contains("U-STUDENT-001");
+                                && labelTexts(card).contains("吴尚扬");
                     })
                     .findFirst()
                     .orElseThrow();
@@ -344,7 +384,7 @@ class DoctorWorkspacePanelTest {
             assertTrue(awaitCondition(() -> namedLabels(panel[0],
                     "doctorAppointmentDetail").stream()
                     .map(JLabel::getText)
-                    .anyMatch("U-STUDENT-001"::equals)));
+                    .anyMatch("吴尚扬"::equals)));
             assertTrue(namedLabels(panel[0], "doctorAppointmentDetail").stream()
                     .map(JLabel::getText)
                     .anyMatch("5 号"::equals));

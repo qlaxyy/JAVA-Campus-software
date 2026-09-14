@@ -7,6 +7,12 @@ import java.util.List;
 /** Server-only seam for natural-language clarification and department extraction. */
 interface HospitalAiTriageClient {
 
+    default HospitalAiChatAnalysis chat(
+            edu.seu.vcampus.common.hospital.TriageChatRequest request,
+            List<HospitalDepartment> departments) throws HospitalAiTriageException {
+        throw new HospitalAiTriageException("conversation is unavailable");
+    }
+
     boolean isEnabled();
 
     HospitalAiTriageAnalysis analyze(

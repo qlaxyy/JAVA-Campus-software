@@ -16,6 +16,7 @@ import edu.seu.vcampus.common.hospital.UpdateDepartmentRequest;
 import edu.seu.vcampus.common.hospital.SearchSlotsRequest;
 import edu.seu.vcampus.common.hospital.SetSchedulePublicationRequest;
 import edu.seu.vcampus.common.hospital.SubmitDoctorApplicationRequest;
+import edu.seu.vcampus.common.hospital.SubmitDoctorDeactivationRequest;
 import edu.seu.vcampus.common.hospital.SubmitConsultationRequest;
 import edu.seu.vcampus.common.hospital.SubmitExaminationPlanRequest;
 import edu.seu.vcampus.common.hospital.TriageRequest;
@@ -127,6 +128,8 @@ public final class HospitalServerModule implements ServerModule {
                 request -> bookResultReview(request, context));
         router.register(HospitalActions.SUBMIT_DOCTOR_APPLICATION,
                 request -> submitDoctorApplication(request, context));
+        router.register(HospitalActions.SUBMIT_DOCTOR_DEACTIVATION,
+                request -> submitDoctorDeactivation(request, context));
         router.register(HospitalActions.LIST_DOCTOR_APPLICATIONS,
                 request -> listDoctorApplications(request, context));
         router.register(HospitalActions.REVIEW_DOCTOR_APPLICATION,
@@ -182,6 +185,10 @@ public final class HospitalServerModule implements ServerModule {
         Optional<SessionInfo> session = authenticatedSession(request, context);
         if (session.isEmpty()) {
             return authenticationRequired(request);
+        }
+        if (request.getData() instanceof edu.seu.vcampus.common.hospital.TriageChatRequest chat) {
+            return Response.success(request, "Conversation updated.",
+                    service.chatTriage(session.get(), chat));
         }
         if (!(request.getData() instanceof TriageRequest triageRequest)) {
             return invalidRequest(request, "Triage data is invalid.");
@@ -258,7 +265,7 @@ public final class HospitalServerModule implements ServerModule {
         try {
             return Response.success(
                     request,
-                    "Appointment cancelled and registration payment refunded.",
+                    "预约已取消；通过校园卡支付的挂号费已原路退回。",
                     service.cancelAppointment(session.get(), cancelRequest));
         } catch (HospitalBusinessException exception) {
             return Response.failure(
@@ -282,7 +289,7 @@ public final class HospitalServerModule implements ServerModule {
             return Response.success(
                     request,
                     "Doctor workspace loaded.",
-                    service.getDoctorWorkspace(session.get()));
+                    service.getDoctorWorkspace(session.get(), context.users()));
         } catch (HospitalBusinessException exception) {
             return Response.failure(
                     request.getRequestId(),
@@ -305,7 +312,8 @@ public final class HospitalServerModule implements ServerModule {
             return Response.success(
                     request,
                     "Consultation context loaded.",
-                    service.getDoctorConsultationContext(session.get(), contextRequest));
+                    service.getDoctorConsultationContext(
+                            session.get(), contextRequest, context.users()));
         } catch (HospitalBusinessException exception) {
             return Response.failure(
                     request.getRequestId(),
@@ -495,6 +503,29 @@ public final class HospitalServerModule implements ServerModule {
         }
     }
 
+    private Response submitDoctorDeactivation(Request request, ServerContext context) {
+        Optional<SessionInfo> session = authenticatedSession(request, context);
+        if (session.isEmpty()) {
+            return authenticationRequired(request);
+        }
+        if (!session.get().canAdminister(ModuleNames.HOSPITAL)) {
+            return forbidden(request, "只有医院管理员可以提交医生停用申请。");
+        }
+        if (!(request.getData() instanceof SubmitDoctorDeactivationRequest data)) {
+            return invalidRequest(request, "医生停用申请数据无效。");
+        }
+        try {
+            return Response.success(
+                    request,
+                    "医生停用申请已提交，等待超级管理员审核。",
+                    service.submitDoctorDeactivation(data, session.get().getUserId()));
+        } catch (HospitalWorkflowException exception) {
+            return workflowFailure(request, exception);
+        } catch (IllegalArgumentException exception) {
+            return invalidRequest(request, exception.getMessage());
+        }
+    }
+
     private Response listDoctorApplications(Request request, ServerContext context) {
         Optional<SessionInfo> session = authenticatedSession(request, context);
         if (session.isEmpty()) {
@@ -525,15 +556,18 @@ public final class HospitalServerModule implements ServerModule {
             return invalidRequest(request, "医生申请审核数据无效。");
         }
         try {
-            String message = data.isApproved()
-                    ? "医生申请已通过，账号和医生档案已完成绑定。"
-                    : "医生申请已拒绝。";
+            var reviewed = service.reviewDoctorApplication(
+                    data, session.get().getUserId(), context.users(), context.accounts());
+            String message = !data.isApproved()
+                    ? "医生申请已拒绝。"
+                    : reviewed.getApplicationType()
+                            == edu.seu.vcampus.common.hospital.DoctorApplicationType.DEACTIVATE_DOCTOR
+                            ? "医生停用申请已通过，历史排班和诊疗资料已保留。"
+                            : "医生申请已通过，账号和医生档案已完成绑定。";
             return Response.success(
                     request,
                     message,
-                    service.reviewDoctorApplication(
-                            data, session.get().getUserId(),
-                            context.users(), context.accounts()));
+                    reviewed);
         } catch (HospitalWorkflowException exception) {
             return workflowFailure(request, exception);
         } catch (IllegalArgumentException exception) {
@@ -699,7 +733,7 @@ public final class HospitalServerModule implements ServerModule {
         try {
             return Response.success(
                     request,
-                    "异常预约已取消，挂号费已模拟退款。",
+                    "异常预约已取消；通过校园卡支付的挂号费已原路退回。",
                     service.cancelAppointmentAsAdmin(session.get(), data));
         } catch (HospitalBusinessException exception) {
             return Response.failure(

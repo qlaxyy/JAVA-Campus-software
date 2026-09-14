@@ -4,7 +4,7 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
-/** Active doctor option available to a hospital schedule administrator. */
+/** Doctor directory entry available to a hospital administrator. */
 public final class AdminDoctorView implements Serializable {
 
     @Serial
@@ -15,6 +15,7 @@ public final class AdminDoctorView implements Serializable {
     private final String doctorTitle;
     private final String departmentId;
     private final String departmentName;
+    private final boolean active;
 
     public AdminDoctorView(
             String doctorId,
@@ -22,11 +23,22 @@ public final class AdminDoctorView implements Serializable {
             String doctorTitle,
             String departmentId,
             String departmentName) {
+        this(doctorId, doctorName, doctorTitle, departmentId, departmentName, true);
+    }
+
+    public AdminDoctorView(
+            String doctorId,
+            String doctorName,
+            String doctorTitle,
+            String departmentId,
+            String departmentName,
+            boolean active) {
         this.doctorId = requireText(doctorId, "doctorId");
         this.doctorName = requireText(doctorName, "doctorName");
         this.doctorTitle = requireText(doctorTitle, "doctorTitle");
         this.departmentId = requireText(departmentId, "departmentId");
         this.departmentName = requireText(departmentName, "departmentName");
+        this.active = active;
     }
 
     public String getDoctorId() { return doctorId; }
@@ -39,9 +51,12 @@ public final class AdminDoctorView implements Serializable {
 
     public String getDepartmentName() { return departmentName; }
 
+    public boolean isActive() { return active; }
+
     @Override
     public String toString() {
-        return doctorName + " " + doctorTitle + " · " + departmentName;
+        return doctorName + " " + doctorTitle + " · " + departmentName
+                + (active ? "" : "（已停用）");
     }
 
     private static String requireText(String value, String fieldName) {

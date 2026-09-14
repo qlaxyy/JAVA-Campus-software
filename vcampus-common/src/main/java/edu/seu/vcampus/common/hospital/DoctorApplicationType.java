@@ -1,7 +1,8 @@
 package edu.seu.vcampus.common.hospital;
 
-/** Distinguishes explicit account binding from external-doctor onboarding. */
+/** Doctor onboarding and deactivation operations reviewed by a super administrator. */
 public enum DoctorApplicationType {
     EXISTING_ACCOUNT,
-    EXTERNAL_DOCTOR
+    EXTERNAL_DOCTOR,
+    DEACTIVATE_DOCTOR
 }

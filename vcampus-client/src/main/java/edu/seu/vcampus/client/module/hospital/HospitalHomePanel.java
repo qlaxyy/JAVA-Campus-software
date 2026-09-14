@@ -12,7 +12,6 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 import java.awt.BorderLayout;
@@ -29,6 +28,7 @@ final class HospitalHomePanel extends JPanel {
     private final Runnable openSlotSearch;
     private final Runnable openMyAppointments;
     private final Runnable openFollowUp;
+    private final Runnable openCareGuide;
     private final JPanel careTaskPanel = new JPanel(new BorderLayout());
     private final JPanel billingTaskPanel = new JPanel(new BorderLayout());
 
@@ -46,6 +46,7 @@ final class HospitalHomePanel extends JPanel {
         this.openSlotSearch = openSlotSearch;
         this.openMyAppointments = openMyAppointments;
         this.openFollowUp = openFollowUp;
+        this.openCareGuide = openCareGuide;
         setLayout(new BorderLayout(0, 18));
         setBackground(HospitalTheme.BACKGROUND);
         setBorder(BorderFactory.createEmptyBorder(22, 26, 22, 26));
@@ -119,17 +120,13 @@ final class HospitalHomePanel extends JPanel {
     }
 
     void showGuide() {
-        Object[] options = {"开始预约", "稍后再看"};
-        int choice = JOptionPane.showOptionDialog(
+        boolean startBooking = HospitalDialogs.confirmContent(
                 this,
-                createGuideContent(),
                 "校医院使用指南",
-                JOptionPane.DEFAULT_OPTION,
-                JOptionPane.PLAIN_MESSAGE,
-                null,
-                options,
-                options[0]);
-        if (choice == 0) {
+                createGuideContent(),
+                "开始预约",
+                "稍后再看");
+        if (startBooking) {
             openSlotSearch.run();
         }
     }
@@ -201,9 +198,6 @@ final class HospitalHomePanel extends JPanel {
                 openBills));
         services.add(serviceCard("健康档案", "分别查看患者自述、历史就诊与检查资料", true,
                 openHealthRecord));
-        services.add(serviceCard("就医指南", "了解就诊路线、复诊区别和就诊准备", true,
-                openCareGuide));
-
         content.add(services, BorderLayout.CENTER);
         return content;
     }
@@ -226,7 +220,7 @@ final class HospitalHomePanel extends JPanel {
         copy.add(caption);
         copy.add(Box.createVerticalStrut(4));
         copy.add(title);
-        JButton action = HospitalTheme.primaryButton("查看并模拟缴费");
+        JButton action = HospitalTheme.primaryButton("查看并缴费");
         action.setName("patientHomeBillingButton");
         action.addActionListener(event -> openBills.run());
         card.add(copy, BorderLayout.CENTER);
@@ -301,11 +295,11 @@ final class HospitalHomePanel extends JPanel {
         copy.add(Box.createVerticalStrut(8));
         copy.add(detail);
 
-        JButton action = HospitalTheme.quietButton("使用帮助");
-        action.addActionListener(event -> showGuide());
-        action.setPreferredSize(new Dimension(150, 42));
-        hero.add(copy, BorderLayout.CENTER);
-        hero.add(action, BorderLayout.EAST);
+        JButton action = HospitalTheme.quietButton("就医指南与帮助");
+        action.addActionListener(event -> openCareGuide.run());
+        action.setPreferredSize(new Dimension(170, 42));
+        hero.add(HospitalResponsiveLayout.adaptiveRow(copy, action, 680, 12),
+                BorderLayout.CENTER);
         return hero;
     }
 
@@ -337,7 +331,7 @@ final class HospitalHomePanel extends JPanel {
                 "逐级选择或直接搜索具体科室，再选择日期；也可搜索医生后确认排班。"));
         guide.add(steps, BorderLayout.CENTER);
 
-        JLabel hint = new JLabel("关闭后可随时点击首页右上区域的“使用帮助”再次查看。");
+        JLabel hint = new JLabel("关闭后可在首页的“就医指南与帮助”中再次查看。");
         hint.setForeground(HospitalTheme.MUTED);
         guide.add(hint, BorderLayout.SOUTH);
         return guide;

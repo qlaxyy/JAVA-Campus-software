@@ -19,7 +19,6 @@ import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JOptionPane;
 import javax.swing.SwingConstants;
 import javax.swing.SwingWorker;
 import java.awt.BorderLayout;
@@ -93,24 +92,6 @@ final class MyAppointmentsPanel extends JPanel {
     }
 
     private JPanel createHeader(Runnable openPatientHome) {
-        JPanel header = new JPanel(new BorderLayout(18, 0));
-        header.setOpaque(false);
-
-        JButton back = HospitalTheme.quietButton("‹ 返回医院首页");
-        back.addActionListener(event -> openPatientHome.run());
-
-        JPanel copy = new JPanel();
-        copy.setOpaque(false);
-        copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
-        JLabel title = new JLabel("我的预约");
-        title.setFont(HospitalTheme.uiFont(Font.BOLD, 26F));
-        title.setForeground(HospitalTheme.TEXT);
-        JLabel subtitle = new JLabel("预约信息由当前登录账号加载，无需输入学号或用户编号");
-        subtitle.setForeground(HospitalTheme.MUTED);
-        copy.add(title);
-        copy.add(Box.createVerticalStrut(5));
-        copy.add(subtitle);
-
         JPanel sorting = new JPanel(new BorderLayout(0, 5));
         sorting.setOpaque(false);
         JLabel sortingLabel = new JLabel("按就诊时间排序");
@@ -124,10 +105,12 @@ final class MyAppointmentsPanel extends JPanel {
         sorting.add(sortingLabel, BorderLayout.NORTH);
         sorting.add(sortOrder, BorderLayout.CENTER);
 
-        header.add(back, BorderLayout.WEST);
-        header.add(copy, BorderLayout.CENTER);
-        header.add(sorting, BorderLayout.EAST);
-        return header;
+        return HospitalPageHeader.create(
+                "我的预约",
+                "预约信息由当前登录账号加载，无需输入学号或用户编号",
+                "医院首页",
+                openPatientHome,
+                sorting);
     }
 
     private void loadAppointments() {
@@ -323,13 +306,9 @@ final class MyAppointmentsPanel extends JPanel {
                 + TIME_FORMAT.format(appointment.getEndTime())
                 + (appointment.getAmountCents() == 0
                         ? "\n\n本次为零费用回诊，取消后不会产生退款。"
-                        : "\n\n已支付挂号费将进行模拟退款。");
-        return JOptionPane.showConfirmDialog(
-                this,
-                message,
-                "取消预约",
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.WARNING_MESSAGE) == JOptionPane.OK_OPTION;
+                        : "\n\n已通过校园卡支付的挂号费将原路退回。");
+        return HospitalDialogs.confirm(
+                this, "取消预约", message, "确认取消", true);
     }
 
     private static String visitTypeText(VisitType visitType) {
@@ -366,11 +345,9 @@ final class MyAppointmentsPanel extends JPanel {
                     } else {
                         button.setEnabled(true);
                         button.setText("取消预约");
-                        JOptionPane.showMessageDialog(
-                                MyAppointmentsPanel.this,
-                                cancellationFailureMessage(response),
-                                "取消未完成",
-                                JOptionPane.WARNING_MESSAGE);
+                        HospitalDialogs.warning(
+                                MyAppointmentsPanel.this, "取消未完成",
+                                cancellationFailureMessage(response));
                         loadAppointments();
                     }
                 } catch (InterruptedException exception) {
@@ -380,11 +357,9 @@ final class MyAppointmentsPanel extends JPanel {
                 } catch (ExecutionException exception) {
                     button.setEnabled(true);
                     button.setText("取消预约");
-                    JOptionPane.showMessageDialog(
-                            MyAppointmentsPanel.this,
-                            "无法连接服务器，请稍后重试。",
-                            "取消未完成",
-                            JOptionPane.WARNING_MESSAGE);
+                    HospitalDialogs.warning(
+                            MyAppointmentsPanel.this, "取消未完成",
+                            "无法连接服务器，请稍后重试。");
                 }
             }
         }.execute();

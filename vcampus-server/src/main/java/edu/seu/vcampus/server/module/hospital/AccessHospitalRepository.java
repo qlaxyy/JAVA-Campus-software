@@ -25,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -184,6 +185,29 @@ final class AccessHospitalRepository implements HospitalRepository {
             }
         } catch (SQLException exception) {
             throw failure("Cannot save doctor application.", exception);
+        }
+    }
+
+    @Override
+    public synchronized void approveDoctorDeactivation(DoctorApplication application) {
+        try (Connection connection = database.openConnection()) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE tblHospitalDoctor SET [active] = FALSE, updatedAt = ? "
+                            + "WHERE doctorId = ? AND [active] = TRUE")) {
+                statement.setTimestamp(1, Timestamp.valueOf(LocalDateTime.now(clock)));
+                statement.setString(2, application.targetDoctorId());
+                if (statement.executeUpdate() != 1) {
+                    throw new IllegalStateException("doctor is missing or inactive");
+                }
+                updateApplication(connection, application);
+                connection.commit();
+            } catch (SQLException | RuntimeException exception) {
+                connection.rollback();
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            throw failure("Cannot approve doctor deactivation.", exception);
         }
     }
 
@@ -1187,6 +1211,8 @@ final class AccessHospitalRepository implements HospitalRepository {
                         + "requestedByUserId TEXT(36) NOT NULL, "
                         + "applicationStatus TEXT(20) NOT NULL, "
                         + "targetUserId TEXT(36), "
+                        + "targetDoctorId TEXT(36), "
+                        + "requestReason TEXT(240), "
                         + "reviewedByUserId TEXT(36), "
                         + "createdAt DATETIME NOT NULL)");
                 execute(connection, "CREATE INDEX ix_tblHospitalDoctorApplication_status "
@@ -1356,9 +1382,10 @@ final class AccessHospitalRepository implements HospitalRepository {
         LocalDateTime now = LocalDateTime.now(clock);
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             for (HospitalDoctor doctor : seed.findAllDoctors()) {
-                if (exists(connection,
-                        "SELECT doctorId FROM tblHospitalDoctor WHERE doctorId = ?",
-                        doctor.doctorId())) {
+                if (reconcileSeedDoctorBinding(connection, doctor, now)
+                        || doctor.userId() != null && exists(connection,
+                                "SELECT doctorId FROM tblHospitalDoctor WHERE userId = ?",
+                                doctor.userId())) {
                     continue;
                 }
                 int index = 1;
@@ -1384,6 +1411,48 @@ final class AccessHospitalRepository implements HospitalRepository {
         }
     }
 
+    /**
+     * Binds old built-in doctor rows to the dedicated demo doctor accounts without
+     * reactivating a separately approved inactive profile or replacing custom bindings.
+     */
+    private boolean reconcileSeedDoctorBinding(
+            Connection connection,
+            HospitalDoctor seeded,
+            LocalDateTime now) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT userId FROM tblHospitalDoctor WHERE doctorId = ?")) {
+            statement.setString(1, seeded.doctorId());
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return false;
+                }
+                String currentUserId = nullableText(result.getString("userId"));
+                if (Objects.equals(currentUserId, seeded.userId())
+                        || seeded.userId() == null
+                        || exists(connection,
+                                "SELECT doctorId FROM tblHospitalDoctor WHERE userId = ?",
+                                seeded.userId())) {
+                    return true;
+                }
+                boolean legacyDemoBinding = currentUserId == null
+                        || currentUserId.startsWith("U-TEACHER-");
+                if (!legacyDemoBinding) {
+                    return true;
+                }
+                try (PreparedStatement update = connection.prepareStatement(
+                        "UPDATE tblHospitalDoctor SET userId = ?, doctorName = ?, updatedAt = ? "
+                                + "WHERE doctorId = ?")) {
+                    update.setString(1, seeded.userId());
+                    update.setString(2, seeded.doctorName());
+                    update.setTimestamp(3, Timestamp.valueOf(now));
+                    update.setString(4, seeded.doctorId());
+                    requireSingleUpdate(update.executeUpdate(), "doctor account binding migration");
+                }
+                return true;
+            }
+        }
+    }
+
     private void seedSchedules(Connection connection, InMemoryHospitalRepository seed)
             throws SQLException {
         String sql = "INSERT INTO tblHospitalSchedule "
@@ -1395,7 +1464,10 @@ final class AccessHospitalRepository implements HospitalRepository {
             for (HospitalSlot slot : seed.findAllSlots()) {
                 if (exists(connection,
                         "SELECT scheduleId FROM tblHospitalSchedule WHERE scheduleId = ?",
-                        slot.scheduleId())) {
+                        slot.scheduleId())
+                        || !exists(connection,
+                                "SELECT doctorId FROM tblHospitalDoctor WHERE doctorId = ?",
+                                slot.doctorId())) {
                     continue;
                 }
                 statement.setString(1, slot.scheduleId());
@@ -1487,6 +1559,14 @@ final class AccessHospitalRepository implements HospitalRepository {
             execute(connection,
                     "ALTER TABLE tblHospitalDoctorApplication ADD COLUMN applicationType TEXT(20)");
         }
+        if (!columnExists(connection, APPLICATION_TABLE, "targetDoctorId")) {
+            execute(connection,
+                    "ALTER TABLE tblHospitalDoctorApplication ADD COLUMN targetDoctorId TEXT(36)");
+        }
+        if (!columnExists(connection, APPLICATION_TABLE, "requestReason")) {
+            execute(connection,
+                    "ALTER TABLE tblHospitalDoctorApplication ADD COLUMN requestReason TEXT(240)");
+        }
         try (Statement statement = connection.createStatement();
              ResultSet result = statement.executeQuery(
                      "SELECT requestId, applicationType "
@@ -1543,8 +1623,7 @@ final class AccessHospitalRepository implements HospitalRepository {
         DoctorApplicationType applicationType = DoctorApplicationType.valueOf(
                 result.getString("applicationType").toUpperCase(Locale.ROOT));
         String storedUsername = result.getString("username");
-        String username = applicationType == DoctorApplicationType.EXTERNAL_DOCTOR
-                        && storedUsername != null && storedUsername.startsWith("__AUTO__")
+        String username = storedUsername != null && storedUsername.startsWith("__AUTO__")
                 ? null : storedUsername;
         return new DoctorApplication(
                 result.getString("requestId"),
@@ -1557,6 +1636,8 @@ final class AccessHospitalRepository implements HospitalRepository {
                 DoctorApplicationStatus.valueOf(
                         result.getString("applicationStatus").toUpperCase(Locale.ROOT)),
                 result.getString("targetUserId"),
+                result.getString("targetDoctorId"),
+                result.getString("requestReason"),
                 result.getString("reviewedByUserId"),
                 result.getTimestamp("createdAt").toLocalDateTime());
     }
@@ -1570,10 +1651,11 @@ final class AccessHospitalRepository implements HospitalRepository {
                 ? "(requestId, applicationType, doctorNumber, username, "
                 : "(requestId, applicationType, username, ")
                 + "displayName, departmentId, doctorTitle, "
-                + "requestedByUserId, applicationStatus, targetUserId, reviewedByUserId, createdAt) "
+                + "requestedByUserId, applicationStatus, targetUserId, targetDoctorId, "
+                + "requestReason, reviewedByUserId, createdAt) "
                 + (legacyNumberColumn
-                ? "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-                : "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                ? "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                : "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             int index = 1;
             statement.setString(index++, application.requestId());
@@ -1591,12 +1673,13 @@ final class AccessHospitalRepository implements HospitalRepository {
         String sql = "UPDATE tblHospitalDoctorApplication SET applicationType = ?, "
                 + "username = ?, displayName = ?, departmentId = ?, "
                 + "doctorTitle = ?, requestedByUserId = ?, applicationStatus = ?, "
-                + "targetUserId = ?, reviewedByUserId = ?, createdAt = ? "
+                + "targetUserId = ?, targetDoctorId = ?, requestReason = ?, "
+                + "reviewedByUserId = ?, createdAt = ? "
                 + "WHERE requestId = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, application.applicationType().name());
             bindApplication(statement, application, 2);
-            statement.setString(11, application.requestId());
+            statement.setString(13, application.requestId());
             statement.executeUpdate();
         }
     }
@@ -1613,6 +1696,8 @@ final class AccessHospitalRepository implements HospitalRepository {
         statement.setString(index++, application.requestedByUserId());
         statement.setString(index++, application.status().name());
         statement.setString(index++, application.targetUserId());
+        statement.setString(index++, application.targetDoctorId());
+        statement.setString(index++, application.requestReason());
         statement.setString(index++, application.reviewedByUserId());
         statement.setTimestamp(index, Timestamp.valueOf(application.createdAt()));
     }

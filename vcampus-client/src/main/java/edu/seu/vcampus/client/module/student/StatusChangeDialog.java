@@ -2,262 +2,239 @@ package edu.seu.vcampus.client.module.student;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.common.protocol.Response;
-import edu.seu.vcampus.common.student.*;
+import edu.seu.vcampus.common.student.ApplyStatusChangeRequest;
+import edu.seu.vcampus.common.student.AuditStatusChangeRequest;
+import edu.seu.vcampus.common.student.StatusChangeDto;
+import edu.seu.vcampus.common.student.StudentActions;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.border.TitledBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
-public final class StatusChangeDialog extends JDialog {
-
+public class StatusChangeDialog extends JDialog {
     private final ClientContext context;
-    private final String studentId;
-    private final boolean isAdminMode;
-    private final Runnable onSuccessCallback;
+    private final String currentStudentId;
+    private final boolean isAdmin;
+    private final Runnable onUpdated;
 
-    // 学生端组件
-    private final JComboBox<String> cmbChangeType = new JComboBox<>(new String[]{"休学", "复学", "转专业", "退学"});
-    private final JTextArea txtReason = new JTextArea(3, 20);
-    private final JButton btnSubmit = new JButton("提交申请");
-
-    // 历史/审批记录表格
     private final DefaultTableModel tableModel = new DefaultTableModel(
-        new String[]{"申请号", "学号", "姓名", "异动类型", "申请原因", "申请时间", "审核状态", "审核人"}, 0
+        new String[]{"ID", "学号", "姓名", "申请类型", "申请原由及变更说明", "申请时间", "审核状态", "审核人"}, 0
     ) {
         @Override
-        public boolean isCellEditable(int row, int column) { return false; }
+        public boolean isCellEditable(int row, int column) {
+            return false;
+        }
     };
     private final JTable table = new JTable(tableModel);
+    private List<StatusChangeDto> changeList = new ArrayList<>();
 
-    public StatusChangeDialog(Window owner, ClientContext context, String studentId, boolean isAdminMode, Runnable onSuccessCallback) {
-        super(owner, isAdminMode ? "学籍异动全校审批工作台 (系统管理员)" : "学籍异动申请与个人进度 (学生端)", ModalityType.APPLICATION_MODAL);
+    // 学生端申请组件
+    private final JComboBox<String> cmbType = new JComboBox<>(new String[]{"基本信息变更", "休学", "复学", "退学"});
+    private final JComboBox<String> cmbField = new JComboBox<>(new String[]{"籍贯", "姓名", "性别", "民族", "身份证号", "出生日期"});
+    private final JTextField txtNewValue = new JTextField(12);
+    private final JTextField txtReason = new JTextField(18);
+
+    public StatusChangeDialog(Window parent, ClientContext context, String currentStudentId, boolean isAdmin, Runnable onUpdated) {
+        super(parent, isAdmin ? "学籍异动与基本信息维护审核工作台 (管理员)" : "我的学籍申请与基本信息更正", ModalityType.APPLICATION_MODAL);
         this.context = context;
-        this.studentId = studentId;
-        this.isAdminMode = isAdminMode;
-        this.onSuccessCallback = onSuccessCallback;
+        this.currentStudentId = currentStudentId;
+        this.isAdmin = isAdmin;
+        this.onUpdated = onUpdated;
 
+        setSize(920, 560);
+        setLocationRelativeTo(parent);
         initUI();
-        loadHistory();
+        loadData();
     }
 
     private void initUI() {
-        setSize(920, 560);
-        setLocationRelativeTo(getOwner());
-        setLayout(new BorderLayout());
+        JPanel root = new JPanel(new BorderLayout(0, 10));
+        root.setBorder(new EmptyBorder(12, 12, 12, 12));
 
-        // ================= 1. 管理员工作台界面 =================
-        if (isAdminMode) {
-            JPanel historyPanel = new JPanel(new BorderLayout());
-            historyPanel.setBorder(BorderFactory.createTitledBorder("全校学籍异动待审与审批履历"));
-            table.setRowHeight(26);
-            table.getTableHeader().setReorderingAllowed(false);
-            historyPanel.add(new JScrollPane(table), BorderLayout.CENTER);
+        if (!isAdmin) {
+            JPanel applyPanel = new JPanel(new GridBagLayout());
+            applyPanel.setBorder(new TitledBorder("提交基本信息更正 / 学籍异动申请"));
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.insets = new Insets(5, 5, 5, 5);
+            gbc.fill = GridBagConstraints.HORIZONTAL;
 
-            // 底部审批操作工具条
-            JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 10));
-            JButton btnRefresh = createStyledButton("刷新列表", new Color(241, 245, 249), new Color(203, 213, 225));
-            JButton btnApprove = createStyledButton("审核通过", new Color(187, 247, 208), new Color(134, 239, 172));
-            JButton btnReject = createStyledButton("驳回申请", new Color(254, 202, 202), new Color(248, 113, 113));
+            gbc.gridx = 0; gbc.gridy = 0;
+            applyPanel.add(new JLabel("申请类型:"), gbc);
+            gbc.gridx = 1;
+            applyPanel.add(cmbType, gbc);
 
-            btnRefresh.addActionListener(e -> loadHistory());
-            btnApprove.addActionListener(e -> auditSelected(true));
-            btnReject.addActionListener(e -> auditSelected(false));
+            JLabel lblField = new JLabel("更正项目:");
+            gbc.gridx = 2;
+            applyPanel.add(lblField, gbc);
+            gbc.gridx = 3;
+            applyPanel.add(cmbField, gbc);
 
-            bottomBar.add(btnRefresh);
+            JLabel lblVal = new JLabel("申请新值:");
+            gbc.gridx = 4;
+            applyPanel.add(lblVal, gbc);
+            gbc.gridx = 5;
+            applyPanel.add(txtNewValue, gbc);
+
+            gbc.gridx = 0; gbc.gridy = 1;
+            applyPanel.add(new JLabel("理由/材料说明:"), gbc);
+            gbc.gridx = 1; gbc.gridwidth = 4;
+            applyPanel.add(txtReason, gbc);
+
+            gbc.gridx = 5; gbc.gridwidth = 1;
+            JButton btnSubmit = new JButton("提交申请");
+            btnSubmit.setBackground(new Color(187, 247, 208));
+            applyPanel.add(btnSubmit, gbc);
+
+            cmbType.addActionListener(e -> {
+                boolean isInfoChange = "基本信息变更".equals(cmbType.getSelectedItem());
+                cmbField.setEnabled(isInfoChange);
+                txtNewValue.setEnabled(isInfoChange);
+            });
+
+            btnSubmit.addActionListener(e -> submitApply());
+            root.add(applyPanel, BorderLayout.NORTH);
+        }
+
+        table.setRowHeight(24);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        JScrollPane scrollPane = new JScrollPane(table);
+        scrollPane.setBorder(new TitledBorder(isAdmin ? "全校学生申请记录" : "我的申请记录与进度"));
+        root.add(scrollPane, BorderLayout.CENTER);
+
+        JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        JButton btnRefresh = new JButton("刷新");
+        btnRefresh.addActionListener(e -> loadData());
+        bottomBar.add(btnRefresh);
+
+        if (isAdmin) {
+            JButton btnApprove = new JButton("同意并同步档案");
+            btnApprove.setBackground(new Color(187, 247, 208));
+            JButton btnReject = new JButton("驳回申请");
+            btnReject.setBackground(new Color(254, 202, 202));
+
+            btnApprove.addActionListener(e -> audit(true));
+            btnReject.addActionListener(e -> audit(false));
+
             bottomBar.add(btnApprove);
             bottomBar.add(btnReject);
-            historyPanel.add(bottomBar, BorderLayout.SOUTH);
-
-            add(historyPanel, BorderLayout.CENTER);
-
-            // ================= 2. 学生申请端界面 =================
-        } else {
-            // 上方：提交异动表单
-            JPanel applyPanel = new JPanel(new BorderLayout(10, 10));
-            applyPanel.setBorder(BorderFactory.createTitledBorder("发起学籍异动申请"));
-
-            JPanel inputGrid = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 8));
-            inputGrid.add(new JLabel("申请人学号: " + studentId));
-            inputGrid.add(new JLabel("申请异动类别:"));
-            inputGrid.add(cmbChangeType);
-
-            JPanel reasonPanel = new JPanel(new BorderLayout(8, 0));
-            reasonPanel.setBorder(new EmptyBorder(0, 15, 8, 15));
-            reasonPanel.add(new JLabel("异动申请理由:"), BorderLayout.WEST);
-            txtReason.setLineWrap(true);
-            reasonPanel.add(new JScrollPane(txtReason), BorderLayout.CENTER);
-
-            btnSubmit.setBackground(new Color(220, 252, 231));
-            btnSubmit.setForeground(Color.BLACK);
-            btnSubmit.setFocusPainted(false);
-            btnSubmit.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(134, 239, 172), 1),
-                BorderFactory.createEmptyBorder(6, 16, 6, 16)
-            ));
-            btnSubmit.addActionListener(e -> submitApplication());
-            reasonPanel.add(btnSubmit, BorderLayout.EAST);
-
-            applyPanel.add(inputGrid, BorderLayout.NORTH);
-            applyPanel.add(reasonPanel, BorderLayout.CENTER);
-            add(applyPanel, BorderLayout.NORTH);
-
-            // 下方：个人申请历史与进度（纯查看，无审核按钮）
-            JPanel historyPanel = new JPanel(new BorderLayout());
-            historyPanel.setBorder(BorderFactory.createTitledBorder("我的异动申请与审批进度"));
-            table.setRowHeight(26);
-            table.getTableHeader().setReorderingAllowed(false);
-            historyPanel.add(new JScrollPane(table), BorderLayout.CENTER);
-
-            JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 12, 10));
-            JButton btnRefresh = createStyledButton("刷新我的申请", new Color(241, 245, 249), new Color(203, 213, 225));
-            btnRefresh.addActionListener(e -> loadHistory());
-            bottomBar.add(btnRefresh);
-            historyPanel.add(bottomBar, BorderLayout.SOUTH);
-
-            add(historyPanel, BorderLayout.CENTER);
         }
+
+        JButton btnClose = new JButton("关闭");
+        btnClose.addActionListener(e -> dispose());
+        bottomBar.add(btnClose);
+
+        root.add(bottomBar, BorderLayout.SOUTH);
+        setContentPane(root);
     }
 
-    private JButton createStyledButton(String text, Color bg, Color border) {
-        JButton btn = new JButton(text);
-        btn.setBackground(bg);
-        btn.setForeground(Color.BLACK);
-        btn.setFocusPainted(false);
-        btn.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createLineBorder(border, 1),
-            BorderFactory.createEmptyBorder(5, 14, 5, 14)
-        ));
-        return btn;
-    }
-
-    private void submitApplication() {
-        if (studentId == null || studentId.trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "未能识别当前学生账号，请重新登录", "提示", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        String reason = txtReason.getText().trim();
-        if (reason.isEmpty()) {
-            JOptionPane.showMessageDialog(this, "请输入具体的异动申请理由！", "提示", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-
-        ApplyStatusChangeRequest req = new ApplyStatusChangeRequest(
-            studentId, (String) cmbChangeType.getSelectedItem(), reason
-        );
-
+    private void loadData() {
         new SwingWorker<Response, Void>() {
             @Override
             protected Response doInBackground() {
                 try {
-                    return context.send(StudentActions.APPLY_STATUS_CHANGE, req);
-                } catch (IOException ex) {
+                    String reqParam = isAdmin ? "" : currentStudentId;
+                    return context.send(StudentActions.LIST_STATUS_CHANGES, reqParam);
+                } catch (IOException e) {
                     return null;
                 }
             }
 
             @Override
+            @SuppressWarnings("unchecked")
             protected void done() {
                 try {
                     Response res = get();
-                    if (res != null && res.isSuccess()) {
-                        JOptionPane.showMessageDialog(StatusChangeDialog.this, "异动申请已成功提交，请等待管理员审核！", "提交成功", JOptionPane.INFORMATION_MESSAGE);
-                        txtReason.setText("");
-                        loadHistory();
-                    } else {
-                        JOptionPane.showMessageDialog(StatusChangeDialog.this, res != null ? res.getMessage() : "提交失败", "错误", JOptionPane.ERROR_MESSAGE);
-                    }
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
-            }
-        }.execute();
-    }
-
-    @SuppressWarnings("unchecked")
-    private void loadHistory() {
-        tableModel.setRowCount(0);
-        new SwingWorker<Response, Void>() {
-            @Override
-            protected Response doInBackground() {
-                try {
-                    // 管理员查询全部 (传 null)，学生仅查询本人 (传 studentId)
-                    return context.send(StudentActions.LIST_STATUS_CHANGES, isAdminMode ? null : studentId);
-                } catch (IOException ex) {
-                    return null;
-                }
-            }
-
-            @Override
-            protected void done() {
-                try {
-                    Response res = get();
+                    tableModel.setRowCount(0);
                     if (res != null && res.isSuccess() && res.getData() instanceof List) {
-                        List<StatusChangeDto> list = (List<StatusChangeDto>) res.getData();
-                        for (StatusChangeDto item : list) {
+                        changeList = (List<StatusChangeDto>) res.getData();
+                        for (StatusChangeDto c : changeList) {
                             tableModel.addRow(new Object[]{
-                                item.getChangeId(),
-                                item.getStudentId(),
-                                item.getStudentName(),
-                                item.getChangeType(),
-                                item.getReason(),
-                                item.getChangeDate(),
-                                item.getAuditStatus(),
-                                item.getOperator()
+                                c.getChangeId(),
+                                c.getStudentId(),
+                                c.getStudentName(),
+                                c.getChangeType(),
+                                c.getReason(),
+                                c.getChangeDate(),
+                                c.getAuditStatus(),
+                                c.getOperator() != null ? c.getOperator() : "-"
                             });
                         }
-                    } else if (res != null && !res.isSuccess()) {
-                        JOptionPane.showMessageDialog(StatusChangeDialog.this, res.getMessage(), "提示", JOptionPane.WARNING_MESSAGE);
                     }
-                } catch (Exception ex) {
-                    ex.printStackTrace();
+                } catch (Exception ignored) {
                 }
             }
         }.execute();
     }
 
-    private void auditSelected(boolean approved) {
+    private void submitApply() {
+        String type = (String) cmbType.getSelectedItem();
+        String field = (String) cmbField.getSelectedItem();
+        String newVal = txtNewValue.getText().trim();
+        String reasonText = txtReason.getText().trim();
+
+        if ("基本信息变更".equals(type) && newVal.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "请输入需要更正的新值！", "提示", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (reasonText.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "请填写更正理由或证明材料说明！", "提示", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        String finalReason = "基本信息变更".equals(type)
+            ? String.format("[变更: %s -> %s] %s", field, newVal, reasonText)
+            : reasonText;
+
+        ApplyStatusChangeRequest req = new ApplyStatusChangeRequest(currentStudentId, type, finalReason);
+
+        try {
+            Response res = context.send(StudentActions.APPLY_STATUS_CHANGE, req);
+            if (res != null && res.isSuccess()) {
+                JOptionPane.showMessageDialog(this, "申请已提交，请等待管理员审核！", "成功", JOptionPane.INFORMATION_MESSAGE);
+                txtNewValue.setText("");
+                txtReason.setText("");
+                loadData();
+            } else {
+                JOptionPane.showMessageDialog(this, "提交受阻: " + (res != null ? res.getMessage() : "网络超时"), "错误", JOptionPane.ERROR_MESSAGE);
+            }
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "提交异常: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void audit(boolean approve) {
         int row = table.getSelectedRow();
         if (row < 0) {
-            JOptionPane.showMessageDialog(this, "请选择需要处理的异动申请记录！", "提示", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, "请先在表格中选择一条待审核记录！", "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        Long changeId = (Long) tableModel.getValueAt(row, 0);
-        String currentStatus = (String) tableModel.getValueAt(row, 6);
-        if (!"待审核".equals(currentStatus)) {
-            JOptionPane.showMessageDialog(this, "该记录已完成审核，请勿重复操作！", "提示", JOptionPane.WARNING_MESSAGE);
+        StatusChangeDto item = changeList.get(row);
+        if (!"待审核".equals(item.getAuditStatus())) {
+            JOptionPane.showMessageDialog(this, "该记录已被处理，不能重复审核！", "提示", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        AuditStatusChangeRequest req = new AuditStatusChangeRequest(changeId, approved);
-        new SwingWorker<Response, Void>() {
-            @Override
-            protected Response doInBackground() {
-                try {
-                    return context.send(StudentActions.AUDIT_STATUS_CHANGE, req);
-                } catch (IOException ex) {
-                    return null;
-                }
-            }
+        AuditStatusChangeRequest req = new AuditStatusChangeRequest(item.getChangeId(), approve);
 
-            @Override
-            protected void done() {
-                try {
-                    Response res = get();
-                    if (res != null && res.isSuccess()) {
-                        JOptionPane.showMessageDialog(StatusChangeDialog.this, "审核完成！", "提示", JOptionPane.INFORMATION_MESSAGE);
-                        loadHistory();
-                        if (onSuccessCallback != null) onSuccessCallback.run();
-                    } else {
-                        JOptionPane.showMessageDialog(StatusChangeDialog.this, res != null ? res.getMessage() : "审核权限不足", "警告", JOptionPane.WARNING_MESSAGE);
-                    }
-                } catch (Exception ex) {
-                    ex.printStackTrace();
+        try {
+            Response res = context.send(StudentActions.AUDIT_STATUS_CHANGE, req);
+            if (res != null && res.isSuccess()) {
+                JOptionPane.showMessageDialog(this, "审批已成功处理！" + (approve ? "\n学生档案已联动实时同步更新！" : ""), "提示", JOptionPane.INFORMATION_MESSAGE);
+                loadData();
+                if (onUpdated != null) {
+                    onUpdated.run();
                 }
+            } else {
+                JOptionPane.showMessageDialog(this, "处理受阻: " + (res != null ? res.getMessage() : "未知异常"), "错误", JOptionPane.ERROR_MESSAGE);
             }
-        }.execute();
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, "异常: " + ex.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
+        }
     }
 }

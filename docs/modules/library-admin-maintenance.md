@@ -49,6 +49,8 @@
 | `ADMIN_QUERY_BORROWS` | `AdminBorrowQueryRequest` | `List<AdminBorrowRecordDTO>` |
 | `ADMIN_QUERY_RESERVATIONS` | `AdminReservationQueryRequest` | `List<AdminReservationDTO>` |
 | `ADMIN_STATISTICS` | 无 data | `LibraryStatisticsDTO` |
+| `ADMIN_LIST_LOCATIONS` | 无 data | `List<LibraryLocationDTO>` |
+| `ADMIN_ADD_LOCATION` | `AddLocationRequest` | `LibraryLocationDTO` |
 
 ## 关键业务规则
 
@@ -57,7 +59,14 @@
   `INACTIVE` 仍保留馆藏数，但业务可借数固定为 0；
 - 新增书目与登记实体单册分离，同 ISBN 不能重复新增；同一 barcode 全馆唯一；
 - 分类是服务端字典：管理员可新增，书目只引用分类 ID；分类名称不可重复，本轮不删除已被引用的分类；
+- 馆藏地同样是服务端字典，但**以名称为主键**：`tblBookCopy.location` 存的就是房间名，
+  所以既有数据无需迁移。登记（`ADD_BOOK_COPY`）与迁移（`UPDATE_BOOK_COPY`）单册时名字必须
+  已在字典中，否则返回 `LIBRARY_LOCATION_NOT_FOUND`；重名新增返回 `LIBRARY_DUPLICATE_LOCATION`。
+  与分类一样只能新增：改名会让所有引用旧名字的单册失联。客户端把馆藏地做成只读下拉框，
+  旁边就是「＋ 新增馆藏地」，因此不需要手打房间名；
+- 「馆藏地在架册数」不含 `WITHDRAWN` 单册；馆藏地本身不会因为有单册注销而消失；
 - `UPDATE_BOOK_COPY` 只接收 `copyId / location / callNumber`，不能绕过状态机；
+  状态检查先于馆藏地字典检查——已注销或预约待取的单册优先报 `LIBRARY_INVALID_COPY_STATUS`；
 - 注销是 `BookCopy -> WITHDRAWN` 的软删除，不物理删除书目或借阅历史；借出中的单册禁止注销；
 - 管理员可以将误注销的单册恢复为 `AVAILABLE`，恢复前仍须确认不存在当前借阅记录；
 - `RESERVED` 在界面显示为“预约待取”，不能直接编辑、归架、注销或恢复；预约取消、过期或本人取书负责流转；
@@ -73,7 +82,10 @@
 - 停用书目普通用户不可见且不可借，管理员仍能查询和恢复；
 - `LOANED` 禁止注销，归还后必须先确认上架；
 - 全馆当前/历史/逾期筛选以及动态逾期判断；
-- 实际 Socket 管理生命周期和 Swing 管理页面的权限可见性、表格限制、状态按钮禁用逻辑。
+- 馆藏地字典：稳定顺序与在架册数、未登记的馆藏地不能登记或迁移单册、新增后立即可用、
+  重名（忽略大小写与首尾空格）被拒、迁移时两侧计数同步更新、已注销单册不再计数、越权被拒；
+- 实际 Socket 管理生命周期和 Swing 管理页面的权限可见性、表格限制、状态按钮禁用逻辑、
+  馆藏地下拉来自服务器字典且新建单册时默认落在第一个馆藏地。
 
 完整验证命令：`mvn clean verify`。正式服务器使用 Access，书目、单册状态和借阅记录会跨重启保留；
 `ServerModules.createRouter()` 创建的普通测试服务器仍使用 InMemory 数据。

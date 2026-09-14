@@ -696,8 +696,11 @@ classDiagram
 
 1. **书目维护**：查询全部书目（含停用）、新增与编辑元数据、切换"开放借阅 / 停止借阅"。
 2. **分类维护**：新增可复用分类，名称忽略大小写去重；书目只保存稳定分类 ID。
-3. **单册维护**：登记唯一馆藏条码、维护馆藏地与索书号、确认归架、软注销、恢复误注销单册。
-4. **借阅查询**：按"当前借阅 / 借阅历史 / 逾期未还"三个范围查询全馆记录。
+3. **单册维护**：登记唯一馆藏条码、从**馆藏地字典**中选择馆藏地、维护索书号、确认归架、软注销、恢复误注销单册。
+4. **馆藏地字典**：查看全馆馆藏地及其在架册数，新增馆藏地；登记或迁移单册只能落到字典里已有的名字上。
+5. **借阅查询**：按"当前借阅 / 借阅历史 / 逾期未还"三个范围查询全馆记录。
+6. **预约查询**：只读查看全馆排队与待取情况。
+7. **统计**：全馆快照与 CSV 导出。
 
 ### 8.3 界面设计
 
@@ -707,7 +710,7 @@ classDiagram
 | 馆藏查询 | `LibraryPanel` | 关键词与分类检索、结果表与翻页控件、按馆藏地展示的馆藏详情、预约提交 |
 | 我的图书馆 | `MyLibraryPanel` | 当前借阅 / 历史借阅 / 我的预约三个页签，含续借与取消预约 |
 | 模拟自助终端 | `SelfServicePanel` | 条码输入、服务器预检、按预检结果启用借书或归还 |
-| 图书管理员工作台 | `LibraryAdminPanel` | 书目维护 / 实体单册 / 借阅查询 / 预约查询 / 统计五个页签 |
+| 图书管理员工作台 | `LibraryAdminPanel` | 书目维护 / 实体单册 / 借阅查询 / 预约查询 / 统计五个页签；馆藏地以下拉选择并可当场新增 |
 
 页面状态约定：
 
@@ -925,6 +928,8 @@ classDiagram
 | `LIBRARY.ADMIN_QUERY_BORROWS` | `AdminBorrowQueryRequest(scope, userId)` | `List<AdminBorrowRecordDTO>` |
 | `LIBRARY.ADMIN_QUERY_RESERVATIONS` | `AdminReservationQueryRequest(scope)` | `List<AdminReservationDTO>` |
 | `LIBRARY.ADMIN_STATISTICS` | `null` | `LibraryStatisticsDTO` |
+| `LIBRARY.ADMIN_LIST_LOCATIONS` | `null` | `List<LibraryLocationDTO>`（含各馆藏地的在架册数） |
+| `LIBRARY.ADMIN_ADD_LOCATION` | `AddLocationRequest(locationName)` | `LibraryLocationDTO` |
 
 借还类请求 DTO **不含 `userId`**：当前用户一律由 `Request.token -> SessionInfo.userId` 确认，
 防止越权代操作。
@@ -934,6 +939,7 @@ classDiagram
 | 分类 | 错误码 |
 |---|---|
 | 书目与单册 | `LIBRARY_BOOK_NOT_FOUND`、`LIBRARY_COPY_NOT_FOUND`、`LIBRARY_CATEGORY_NOT_FOUND`、`LIBRARY_DUPLICATE_ISBN`、`LIBRARY_DUPLICATE_BARCODE`、`LIBRARY_DUPLICATE_CATEGORY`、`LIBRARY_INVALID_BOOK_STATUS`、`LIBRARY_INVALID_COPY_STATUS`、`LIBRARY_COPY_NOT_AVAILABLE`、`LIBRARY_COPY_RESERVED_FOR_OTHER` |
+| 馆藏地 | `LIBRARY_LOCATION_NOT_FOUND`（登记或迁移单册时馆藏地不在字典里）、`LIBRARY_DUPLICATE_LOCATION`（新增馆藏地重名，忽略大小写与首尾空格） |
 | 借还与续借 | `LIBRARY_BORROW_RECORD_NOT_FOUND`、`LIBRARY_BORROW_LIMIT_REACHED`、`LIBRARY_ALREADY_BORROWED`、`LIBRARY_OVERDUE_BORROW_EXISTS`、`LIBRARY_RENEWAL_NOT_ALLOWED`、`LIBRARY_RENEWAL_LIMIT_REACHED`、`LIBRARY_RENEWAL_BLOCKED_BY_RESERVATION` |
 | 预约 | `LIBRARY_RESERVATION_NOT_FOUND`、`LIBRARY_RESERVATION_LIMIT_REACHED`、`LIBRARY_DUPLICATE_RESERVATION`、`LIBRARY_RESERVATION_COOLDOWN`、`LIBRARY_RESERVATION_NOT_CANCELLABLE`、`LIBRARY_INVALID_PICKUP_LOCATION` |
 | 费用 | `LIBRARY_FEE_NOT_PAYABLE`（无费用或已结清）、`LIBRARY_OUTSTANDING_FEE`（有未缴费用，阻止借阅与预约）、`LIBRARY_LOST_NOT_REPORTABLE`（该借阅不能申报丢失）、`CARD_INSUFFICIENT_BALANCE`（校园卡余额不足，由卡模块透传） |
@@ -944,7 +950,7 @@ classDiagram
 
 ### 8.8 数据表与并发规则
 
-五张表：`tblBook`、`tblBookCopy`、`tblBookCategory`、`tblBorrowRecord`、`tblReservation`。
+六张表：`tblBook`、`tblBookCopy`、`tblBookCategory`、`tblBookLocation`、`tblBorrowRecord`、`tblReservation`。
 字段、主外键、唯一索引与不变量的完整定义见[图书馆数据字典](../../database/schema/library.md)，此处只列设计要点：
 
 - `tblBook` 是书目元数据，**不保存 `totalCount` / `availableCount`**；两个值由未注销
@@ -962,15 +968,20 @@ classDiagram
   书若找回，管理员用既有的「恢复单册」即可。
 - 未缴费用会阻止新的借阅与预约（`LIBRARY_OUTSTANDING_FEE`），结清后立即恢复。扣款通过校园卡
   `debit` 完成，其 `商户号 + reference` 幂等；若本地写入失败则 `credit` 补偿退款。
+- `tblBookLocation` 把馆藏地从自由文本变成一份**以名称为主键**的字典。单册仍然只存房间名，
+  所以既有数据不需要迁移；登记与迁移单册时服务层会先查字典，名字不在其中就报
+  `LIBRARY_LOCATION_NOT_FOUND`。代价与分类相同：**只能新增、不能改名**——改名会让所有引用
+  旧名字的单册失联。升级既有数据库时会把 `tblBookCopy` 里已经出现过的房间名自动收进字典，
+  这样老库里的单册不会被新的校验挡住。
 - `tblReservation` 的排队顺序由 `createdAt` 加 `reservationId` 决定，保证相同创建时间下顺序稳定。
-- 唯一索引：`tblBook.isbn`、`tblBookCopy.barcode`；跨模块 `userId` 不建外键。
+- 唯一索引：`tblBook.isbn`、`tblBookCopy.barcode`、`tblBookLocation.locationName`；跨模块 `userId` 不建外键。
 
 并发规则分两层：
 
 1. **同一服务器实例内**：`LibraryService.circulationLock` 串行化全部读写，管理操作与流通操作共用同一临界区，
    避免交错破坏状态。预约到期的清理没有后台定时器，而是在检索、预约、借还和管理状态操作前于事务内原子执行。
 2. **持久化层**：`AccessLibraryStore` 在事务开始时把同一个 JDBC Connection 绑定到当前线程，
-   五个 Access Repository 在一次业务中复用该连接，任一步失败整体回滚。InMemory 版本通过
+   六个 Access Repository 在一次业务中复用该连接，任一步失败整体回滚。InMemory 版本通过
    第二步失败时补偿第一步维持测试状态一致。
 
 尚未覆盖的是**跨进程或跨服务器实例**的并发：系统没有 `SELECT ... FOR UPDATE` 与乐观锁版本号，
@@ -978,13 +989,14 @@ classDiagram
 
 ### 8.9 测试与验收
 
-自动化测试共 **137 个用例**（服务端 12 个测试类、客户端 11 个测试类），详见
+自动化测试共 **146 个用例**（服务端 13 个测试类、客户端 11 个测试类），详见
 [交付说明](../modules/library-borrow-return.md)：
 
 | 测试类 | 覆盖内容 |
 |---|---|
 | `LibraryServiceTest` | 关键词 trim、分类过滤、馆藏地汇总语义、停用书目对读者的可见性 |
 | `LibraryCatalogSearchTest` | 索书号与条码命中单册所属书目、大小写不敏感、出版社/出版年可检索、逐页取完等于全量且不重不漏、末页余数与总数、越界页码与极大页码返回空页、非法页码与页大小被拒、分类过滤先于分页、管理员检索同样覆盖索书号且保留停用书目 |
+| `LibraryLocationTest` | 字典按稳定顺序列出馆藏地与在架册数、未入库的馆藏地不能登记或迁移单册、新增后即可使用、重名（忽略大小写与首尾空格）被拒、迁移时两个馆藏地计数同时更新、已注销单册不再计数但馆藏地保留、非管理员不能读或写字典 |
 | `LibraryValidationTest` | 字段长度上限（恰好等于上限通过 / 超一字符拒绝）、ISBN 的 10 位与 13 位写法与分隔符归一化、长度检查先于格式检查、出版年 1000–9999 边界 |
 | `LibraryBoundaryTest` | 逾期与预约过期的时刻边界、第五本借阅与第三条预约的恰好边界、借已注销单册、续借已归还记录、有活跃借阅时归架与恢复被拒、未知标识的未找到分支 |
 | `LibraryCirculationPhaseTwoTest` | 条码借还、30 天借期、五本上限、同书目重复、逾期停借、终端预检、他人归还拒绝、并发借同一册、事务回滚 |
@@ -992,7 +1004,7 @@ classDiagram
 | `LibraryAdminServiceTest` | 分类新增与去重、ISBN 规范化、单册生命周期、状态专用操作、全馆借阅查询与越权拒绝 |
 | `LibraryServerModuleTest` | 23 个 Action 契约反射冻结、鉴权、DTO 类型校验、会话身份优先于载荷 |
 | `LibraryFeeServiceTest` | 滞纳金费率与封顶、未归还不计费、缴费幂等、余额不足、扣款后本地写入失败补偿退款、未缴费用阻止借书与预约；丢书赔偿=书价+手续费、单册转已注销、两类费用互斥、重复申报被拒 |
-| `AccessLibraryRepositoryTest` | 真实 `.accdb` 建表与索引、唯一约束、借还/预约事务回滚、演示种子不变量 |
+| `AccessLibraryRepositoryTest` | 真实 `.accdb` 建表与索引、唯一约束、借还/预约事务回滚、演示种子不变量、**缺 `tblBookLocation` 的旧库升级时收纳单册已在用的房间名且不重新播种** |
 | `LibraryPersistenceIntegrationTest` | 真实 Socket 下跨多次服务器重启的状态保留、演示数据不重复播种 |
 | `LibraryFeeGatewayIntegrationTest` | 真实 Socket + 真实卡网关：归还逾期书产生滞纳金、未结清不能借书、缴费扣款、结清后恢复借阅、重复缴费不重复扣款、结清状态与余额跨重启保留 |
 | `LibraryWorkflowUiTest` / `LibraryAdminUiTest` / `LibraryReservationUiTest` / `LibrarySearchIntegrationTest` / `LibraryAdminIntegrationTest` | 模式切换、预约与取消、续借、终端预检、管理员可见性与状态按钮禁用、跨 Socket 全链路 |
@@ -1019,6 +1031,8 @@ classDiagram
 - [ ] 书目定价超出 0.01–9999.99 元时拒绝保存。
 - [ ] 非图书馆管理员调用任一管理 Action 返回 `AUTH_FORBIDDEN`；无 token 返回 `AUTH_REQUIRED`。
 - [ ] 关键词能命中索书号与馆藏条码：用 "C002/" 或 "seu-b004-002" 检索，返回《红楼梦》而不返回其他书目。
+- [ ] 登记或迁移单册时，馆藏地只能是字典里已有的名字；用未登记的馆藏地提交返回 `LIBRARY_LOCATION_NOT_FOUND`。
+- [ ] 新增馆藏地后立即可用于登记单册；重名（忽略大小写）返回 `LIBRARY_DUPLICATE_LOCATION`。
 - [ ] 逐页取完检索结果与一次性全量取回完全相同：顺序一致、不重复、不遗漏。
 - [ ] 页码越界（含 `Integer.MAX_VALUE`）返回空列表而不是异常；`pageSize` 超过 100 返回 `COMMON_INVALID_ARGUMENT`。
 - [ ] 同一单册的并发借阅只有一次成功（`LibraryCirculationPhaseTwoTest`）。
@@ -1052,8 +1066,9 @@ classDiagram
 - 按读者检索借阅需要管理员手工输入稳定读者编号（如 `U-STUDENT-001`），
   界面不提供按姓名或学号搜索，也不做用户列表下拉。
 - 统计的导出只有 CSV，没有图表；统计口径固定在服务端，不能自定义时间范围。
-- 无独立馆藏地字典，取书地点由现存单册的 `location` 反推；因此馆藏地既不可枚举，
-  也无法在"取书地点"下拉里呈现一个尚未有单册的新馆藏地。
+- 馆藏地字典**只能新增，不能改名或删除**：单册与预约都以房间名引用馆藏地，改名会让它们失联。
+  与分类的取舍一致。读者的"取书地点"下拉仍然只列**该书目有单册的馆藏地**——预约必须落在
+  真实存在单册的地方，字典解决的是"有哪些房间"，不是"这本书在哪些房间"。
 - 逾期只有动态判定与拦截，没有催还动作与状态位。
 
 **工程限制**：

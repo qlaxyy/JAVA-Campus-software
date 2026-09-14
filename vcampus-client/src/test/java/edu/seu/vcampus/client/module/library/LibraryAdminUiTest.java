@@ -6,6 +6,7 @@ import edu.seu.vcampus.common.library.BookCopyIdRequest;
 import edu.seu.vcampus.common.library.CategoryStatisticDTO;
 import edu.seu.vcampus.common.library.CreateReservationRequest;
 import edu.seu.vcampus.common.library.LibraryActions;
+import edu.seu.vcampus.common.library.LibraryLocationDTO;
 import edu.seu.vcampus.common.library.LibraryStatisticsDTO;
 import edu.seu.vcampus.common.library.PopularBookDTO;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
@@ -104,7 +105,7 @@ class LibraryAdminUiTest {
             onEdt(() -> copies.setRowSelectionInterval(0, 0));
             awaitUi(restore::isEnabled);
             assertFalse(withdraw.isEnabled());
-            assertFalse(named(admin, JTextField.class, "library.admin.location").isEnabled());
+            assertFalse(named(admin, JComboBox.class, "library.admin.location").isEnabled());
             onEdt(restore::doClick);
             awaitUi(() -> copies.isEnabled() && "在架".equals(copies.getValueAt(0, 4)));
 
@@ -144,12 +145,54 @@ class LibraryAdminUiTest {
             assertEquals("预约待取", copies.getValueAt(0, 4));
             assertEquals("不可借（预约待取）", copies.getValueAt(0, 5));
             onEdt(() -> copies.setRowSelectionInterval(0, 0));
-            assertFalse(named(admin, JTextField.class, "library.admin.location").isEnabled());
+            assertFalse(named(admin, JComboBox.class, "library.admin.location").isEnabled());
             assertFalse(named(admin, JTextField.class, "library.admin.callNumber").isEnabled());
             assertFalse(button(admin, "保存位置与索书号").isEnabled());
             assertFalse(button(admin, "确认归架").isEnabled());
             assertFalse(button(admin, "恢复单册").isEnabled());
             assertFalse(button(admin, "注销单册").isEnabled());
+        }
+    }
+
+    @Test
+    void copyEditorPicksLocationsFromTheDictionaryInsteadOfFreeText() throws Exception {
+        try (CampusServer server = new CampusServer(0, 2)) {
+            server.start();
+            ClientContext librarian = login(server, "20260003");
+            AtomicReference<LibraryModePanel> root = new AtomicReference<>();
+            onEdt(() -> root.set((LibraryModePanel)
+                    new LibraryClientModule().createView(librarian)));
+            LibraryAdminPanel admin = named(root.get(), LibraryAdminPanel.class, "library.admin");
+            onEdt(() -> {
+                named(root.get(), JButton.class, "library.mode.admin").doClick();
+                admin.refresh();
+            });
+
+            JTable books = named(admin, JTable.class, "library.admin.books");
+            awaitUi(() -> books.getRowCount() > 0 && books.isEnabled());
+            @SuppressWarnings("rawtypes")
+            JComboBox locations = named(admin, JComboBox.class, "library.admin.location");
+            awaitUi(() -> locations.getItemCount() == 2);
+            assertEquals(List.of("九龙湖校区—中文图书阅览室3", "四牌楼校区—中文书库二楼"),
+                    java.util.stream.IntStream.range(0, locations.getItemCount())
+                            .mapToObj(index -> ((LibraryLocationDTO) locations.getItemAt(index))
+                                    .getLocationName())
+                            .toList(),
+                    "馆藏地来自服务器字典，登记单册时不再手打房间名");
+            assertFalse(locations.isEnabled(), "尚未开始登记或选中单册时不可选择馆藏地");
+
+            JTable copies = named(admin, JTable.class, "library.admin.copies");
+            JButton newCopy = button(admin, "＋ 登记新单册");
+            onEdt(() -> {
+                books.setRowSelectionInterval(0, 0);
+                named(admin, JTabbedPane.class, "library.admin.tabs").setSelectedIndex(1);
+            });
+            awaitUi(() -> copies.isEnabled() && newCopy.isEnabled());
+            onEdt(newCopy::doClick);
+            awaitUi(locations::isEnabled);
+            assertEquals("九龙湖校区—中文图书阅览室3", locations.getSelectedItem().toString(),
+                    "新建单册默认落在第一个馆藏地");
+            assertTrue(button(admin, "＋ 新增馆藏地").isEnabled());
         }
     }
 

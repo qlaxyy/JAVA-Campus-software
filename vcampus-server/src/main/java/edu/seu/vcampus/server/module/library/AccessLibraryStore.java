@@ -19,8 +19,12 @@ final class AccessLibraryStore implements LibraryTransactionManager {
     private static final String BOOK_TABLE = "tblBook";
     private static final String COPY_TABLE = "tblBookCopy";
     private static final String CATEGORY_TABLE = "tblBookCategory";
+    private static final String LOCATION_TABLE = "tblBookLocation";
     private static final String BORROW_TABLE = "tblBorrowRecord";
     private static final String RESERVATION_TABLE = "tblReservation";
+
+    private static final String FIRST_LOCATION = "九龙湖校区—中文图书阅览室3";
+    private static final String SECOND_LOCATION = "四牌楼校区—中文书库二楼";
 
     private final AccessDatabase database;
     private final ThreadLocal<Connection> transactionConnection = new ThreadLocal<>();
@@ -97,8 +101,14 @@ final class AccessLibraryStore implements LibraryTransactionManager {
             boolean copyExists = tableExists(connection, COPY_TABLE);
             boolean borrowExists = tableExists(connection, BORROW_TABLE);
             boolean reservationExists = tableExists(connection, RESERVATION_TABLE);
+            boolean locationExists = tableExists(connection, LOCATION_TABLE);
             boolean newlyCreated = !(categoryExists || bookExists || copyExists
-                    || borrowExists || reservationExists);
+                    || borrowExists || reservationExists || locationExists);
+            if (!locationExists) {
+                executeSql(connection, "CREATE TABLE tblBookLocation ("
+                        + "locationName TEXT(100) PRIMARY KEY, "
+                        + "sortOrder LONG DEFAULT 0 NOT NULL)");
+            }
             if (!categoryExists) {
                 executeSql(connection, "CREATE TABLE tblBookCategory ("
                         + "categoryId TEXT(20) PRIMARY KEY, "
@@ -210,6 +220,7 @@ final class AccessLibraryStore implements LibraryTransactionManager {
     private void seedDemonstrationCatalog() {
         execute(() -> {
             seedCategories();
+            seedLocations();
             if (rowCount(BOOK_TABLE) != 0) {
                 return;
             }
@@ -235,6 +246,57 @@ final class AccessLibraryStore implements LibraryTransactionManager {
         insertCategoryIfMissing("C001", "计算机");
         insertCategoryIfMissing("C002", "文学");
         insertCategoryIfMissing("C003", "历史");
+    }
+
+    /**
+     * Seeds the location dictionary and adopts any name already used by a copy.
+     *
+     * <p>Adoption matters for databases created before this table existed: without it those
+     * existing copies would reference a location the dictionary does not know, and the next edit
+     * of any of them would be rejected. Adopting keeps every stored copy valid, at the cost of
+     * carrying forward any historical typo as its own entry — which the admin can see in the list.
+     */
+    private void seedLocations() {
+        insertLocationIfMissing(FIRST_LOCATION);
+        insertLocationIfMissing(SECOND_LOCATION);
+        read("Cannot read physical copy locations.", connection -> {
+            List<String> stored = new java.util.ArrayList<>();
+            try (Statement statement = connection.createStatement();
+                 ResultSet result = statement.executeQuery(
+                         "SELECT DISTINCT location FROM tblBookCopy")) {
+                while (result.next()) {
+                    stored.add(result.getString("location"));
+                }
+            }
+            stored.forEach(this::insertLocationIfMissing);
+            return null;
+        });
+    }
+
+    private void insertLocationIfMissing(String locationName) {
+        if (locationName == null || locationName.isBlank()) {
+            return;
+        }
+        boolean present = read("Cannot inspect library location.", connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "SELECT locationName FROM tblBookLocation WHERE locationName = ?")) {
+                statement.setString(1, locationName);
+                try (ResultSet result = statement.executeQuery()) {
+                    return result.next();
+                }
+            }
+        });
+        if (present) {
+            return;
+        }
+        write("Cannot seed library location.", connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "INSERT INTO tblBookLocation (locationName, sortOrder) "
+                            + "VALUES (?, (SELECT COUNT(*) FROM tblBookLocation) + 1)")) {
+                statement.setString(1, locationName);
+                statement.executeUpdate();
+            }
+        });
     }
 
     private void insertCategoryIfMissing(String id, String name) {
@@ -291,14 +353,12 @@ final class AccessLibraryStore implements LibraryTransactionManager {
     }
 
     private void insertSeedCopies(SeedBook book) {
-        String firstLocation = "九龙湖校区—中文图书阅览室3";
-        String secondLocation = "四牌楼校区—中文书库二楼";
         for (int index = 1; index <= book.totalCount(); index++) {
             int copyNumber = index;
             write("Cannot seed physical book copy.", connection -> {
                 String suffix = String.format("%03d", copyNumber);
                 String location = copyNumber <= Math.max(1, (book.totalCount() + 1) / 2)
-                        ? firstLocation : secondLocation;
+                        ? FIRST_LOCATION : SECOND_LOCATION;
                 String sql = "INSERT INTO tblBookCopy "
                         + "(copyId, barcode, bookId, location, callNumber, [status]) "
                         + "VALUES (?, ?, ?, ?, ?, ?)";

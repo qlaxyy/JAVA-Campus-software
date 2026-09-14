@@ -22,7 +22,8 @@ class LibraryAdminServiceTest {
 
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-09-06T08:00:00Z"), ZoneOffset.UTC);
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 6, 8, 0);
-    private static final String JIULONGHU = "九龙湖校区—中文图书阅览室3";
+    private static final String JIULONGHU = InMemoryBookCopyRepository.JIULONGHU;
+    private static final String SIPAILOU = InMemoryBookCopyRepository.SIPAILOU;
     private static final SessionInfo ADMIN = new SessionInfo("admin", "A-1", "libraryadmin", "管理员",
             Role.USER, Set.of(AdminScope.LIBRARY));
     private static final SessionInfo READER = new SessionInfo("reader", "U-1", "reader", "读者", Role.USER);
@@ -61,18 +62,24 @@ class LibraryAdminServiceTest {
         failure(ErrorCodes.LIBRARY_DUPLICATE_ISBN, () -> service.addBook(ADMIN, request));
 
         BookCopyDTO copy = service.addBookCopy(ADMIN,
-                new AddBookCopyRequest(created.getBookId(), " BC-001 ", "九龙湖", "TP312/1"));
+                new AddBookCopyRequest(created.getBookId(), " BC-001 ", JIULONGHU, "TP312/1"));
         assertEquals("BC-001", copy.getBarcode());
         assertEquals("AVAILABLE", copy.getStatus());
+        failure(ErrorCodes.LIBRARY_LOCATION_NOT_FOUND,
+                () -> service.addBookCopy(ADMIN,
+                        new AddBookCopyRequest(created.getBookId(), "BC-002", "九龙湖", "TP312/3")));
         failure(ErrorCodes.LIBRARY_DUPLICATE_BARCODE,
                 () -> service.addBookCopy(ADMIN,
-                        new AddBookCopyRequest("B001", "BC-001", "四牌楼", "TP312/2")));
+                        new AddBookCopyRequest("B001", "BC-001", SIPAILOU, "TP312/2")));
         assertEquals(5_000, created.getPriceFen());
         assertEquals(1, service.searchBooksForAdmin(ADMIN,
                 new BookSearchRequest(created.getIsbn(), null)).getBooks().getFirst().getTotalCount());
 
+        failure(ErrorCodes.LIBRARY_LOCATION_NOT_FOUND,
+                () -> service.updateBookCopy(ADMIN,
+                        new UpdateBookCopyRequest(copy.getCopyId(), "九龙湖", "I247/2")));
         BookCopyDTO moved = service.updateBookCopy(ADMIN,
-                new UpdateBookCopyRequest(copy.getCopyId(), "四牌楼", "I247/2"));
+                new UpdateBookCopyRequest(copy.getCopyId(), SIPAILOU, "I247/2"));
         assertEquals(copy.getBarcode(), moved.getBarcode());
         assertEquals("AVAILABLE", moved.getStatus());
         BookCopyDTO withdrawn = service.withdrawBookCopy(ADMIN, new BookCopyIdRequest(copy.getCopyId()));
@@ -83,7 +90,7 @@ class LibraryAdminServiceTest {
                 new ListBookCopiesRequest(created.getBookId())).getFirst().getStatus());
         failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
                 () -> service.updateBookCopy(ADMIN,
-                        new UpdateBookCopyRequest(copy.getCopyId(), "九龙湖", "TP312/2")));
+                        new UpdateBookCopyRequest(copy.getCopyId(), JIULONGHU, "TP312/2")));
         failure(ErrorCodes.LIBRARY_INVALID_COPY_STATUS,
                 () -> service.withdrawBookCopy(ADMIN, new BookCopyIdRequest(copy.getCopyId())));
         failure(ErrorCodes.AUTH_FORBIDDEN,

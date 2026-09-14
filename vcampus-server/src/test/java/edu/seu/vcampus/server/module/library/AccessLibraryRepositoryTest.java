@@ -233,6 +233,34 @@ class AccessLibraryRepositoryTest {
     }
 
     @Test
+    void upgradingADatabaseWithoutTheLocationTableAdoptsTheRoomsItsCopiesAlreadyUse() throws Exception {
+        Path databasePath = temporaryDirectory.resolve("pre-location-dictionary.accdb");
+        Repositories first = repositories(databasePath);
+        assertEquals(List.of("九龙湖校区—中文图书阅览室3", "四牌楼校区—中文书库二楼"),
+                new AccessBookLocationRepository(first.store()).findAll());
+
+        // 模拟旧库：删掉字典表，并把一册挪到种子之外的房间——这正是升级前可能存在的状态。
+        try (java.sql.Connection connection = new AccessDatabase(databasePath).openConnection();
+             java.sql.Statement statement = connection.createStatement()) {
+            statement.executeUpdate("DROP TABLE tblBookLocation");
+            statement.executeUpdate("UPDATE tblBookCopy SET location = '九龙湖校区—旧书库' "
+                    + "WHERE copyId = 'CP-B001-001'");
+        }
+
+        Repositories upgraded = repositories(databasePath);
+        AccessBookLocationRepository locations = new AccessBookLocationRepository(upgraded.store());
+        assertTrue(locations.findAll().contains("九龙湖校区—旧书库"),
+                "旧库中单册已经在用的房间名必须被收进字典，否则这些单册再也改不动");
+        assertEquals(List.of("九龙湖校区—中文图书阅览室3", "四牌楼校区—中文书库二楼",
+                        "九龙湖校区—旧书库"),
+                locations.findAll(), "种子房间在前，被收纳的房间按发现顺序追加");
+        assertFalse(upgraded.store().isNewlyCreatedLibrarySchema(),
+                "补建字典表不等于新建整套图书馆表，演示数据不应重新播种");
+        assertEquals("九龙湖校区—旧书库",
+                upgraded.copies().findById("CP-B001-001").orElseThrow().location());
+    }
+
+    @Test
     void existingEmptyLibrarySchemaDoesNotReceiveDemonstrationActivity() {
         Path databasePath = temporaryDirectory.resolve("existing-empty.accdb");
         Repositories first = repositories(databasePath);

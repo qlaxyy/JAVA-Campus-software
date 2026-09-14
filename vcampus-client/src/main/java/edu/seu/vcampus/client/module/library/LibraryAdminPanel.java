@@ -4,6 +4,7 @@ import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.common.library.AddBookCopyRequest;
 import edu.seu.vcampus.common.library.AddBookCategoryRequest;
 import edu.seu.vcampus.common.library.AddBookRequest;
+import edu.seu.vcampus.common.library.AddLocationRequest;
 import edu.seu.vcampus.common.library.AdminBorrowQueryRequest;
 import edu.seu.vcampus.common.library.AdminBorrowRecordDTO;
 import edu.seu.vcampus.common.library.AdminReservationDTO;
@@ -16,6 +17,7 @@ import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BookSearchResult;
 import edu.seu.vcampus.common.library.CategoryStatisticDTO;
 import edu.seu.vcampus.common.library.LibraryActions;
+import edu.seu.vcampus.common.library.LibraryLocationDTO;
 import edu.seu.vcampus.common.library.LibraryStatisticsDTO;
 import edu.seu.vcampus.common.library.PopularBookDTO;
 import edu.seu.vcampus.common.library.ListBookCopiesRequest;
@@ -82,7 +84,8 @@ public final class LibraryAdminPanel extends JPanel {
     });
     private final JTable copyTable = new JTable(copyModel);
     private final JTextField barcode = new JTextField(18);
-    private final JTextField location = new JTextField(18);
+    private final JComboBox<LibraryLocationDTO> location = new JComboBox<>();
+    private final JButton addLocation = new JButton("＋ 新增馆藏地");
     private final JTextField callNumber = new JTextField(18);
     private final JButton newCopy = primaryAction("＋ 登记新单册");
     private final JButton addCopy = new JButton("确认登记");
@@ -270,7 +273,11 @@ public final class LibraryAdminPanel extends JPanel {
                 LibraryUiTheme.cardBorder(10, 10), "单册资料与状态"));
         GridBagConstraints c = formConstraints();
         row(editor, c, 0, "馆藏条码", barcode);
-        row(editor, c, 1, "馆藏地", location);
+        JPanel locationEditor = new JPanel(new BorderLayout(5, 0));
+        locationEditor.setOpaque(false);
+        locationEditor.add(location, BorderLayout.CENTER);
+        locationEditor.add(addLocation, BorderLayout.EAST);
+        row(editor, c, 1, "馆藏地", locationEditor);
         row(editor, c, 2, "索书号", callNumber);
         JPanel actions = new JPanel(new GridLayout(0, 1, 0, 6));
         actions.setOpaque(false);
@@ -556,16 +563,18 @@ public final class LibraryAdminPanel extends JPanel {
     private void applyVisualTheme() {
         for (JTextField field : List.of(
                 keyword, isbn, title, author, publisher, year,
-                language, barcode, location, callNumber)) {
+                language, barcode, callNumber)) {
             LibraryUiTheme.styleTextField(field);
         }
         LibraryUiTheme.styleComboBox(category);
         LibraryUiTheme.styleComboBox(borrowScope);
+        LibraryUiTheme.styleComboBox(location);
+        LibraryUiTheme.styleComboBox(reservationScope);
 
         for (JButton button : List.of(
                 refreshBooks, newBook, addCategory, activateBook, newCopy,
                 updateCopy, restoreCopy, refreshCopies, refreshBorrows,
-                previousBookPage, nextBookPage)) {
+                previousBookPage, nextBookPage, addLocation)) {
             LibraryUiTheme.styleSecondaryButton(button);
         }
         for (JButton button : List.of(saveBook, addCopy, shelfCopy)) {
@@ -585,6 +594,7 @@ public final class LibraryAdminPanel extends JPanel {
         nextBookPage.addActionListener(event -> changeBookPage(1));
         newBook.addActionListener(event -> beginNewBook());
         addCategory.addActionListener(event -> addCategory());
+        addLocation.addActionListener(event -> addLocation());
         saveBook.addActionListener(event -> saveBook());
         activateBook.addActionListener(event -> changeBookStatus(ACTIVE));
         deactivateBook.addActionListener(event -> changeBookStatus(INACTIVE));
@@ -649,9 +659,13 @@ public final class LibraryAdminPanel extends JPanel {
             protected CatalogLoad doInBackground() throws Exception {
                 List<BookCategoryDTO> categories = LibraryCategories.read(
                         context.send(LibraryActions.LIST_CATEGORIES, null));
-                return new CatalogLoad(categories, context.send(LibraryActions.ADMIN_SEARCH_BOOKS,
-                        new BookSearchRequest(query, null, requestedPage,
-                                BookSearchRequest.DEFAULT_PAGE_SIZE)));
+                List<LibraryLocationDTO> locations = requireList(
+                        context.send(LibraryActions.ADMIN_LIST_LOCATIONS, null),
+                        LibraryLocationDTO.class);
+                return new CatalogLoad(categories, locations,
+                        context.send(LibraryActions.ADMIN_SEARCH_BOOKS,
+                                new BookSearchRequest(query, null, requestedPage,
+                                        BookSearchRequest.DEFAULT_PAGE_SIZE)));
             }
             protected void done() {
                 try {
@@ -659,6 +673,10 @@ public final class LibraryAdminPanel extends JPanel {
                     BookSearchResult result = requireData(loaded.books(), BookSearchResult.class);
                     category.removeAllItems();
                     loaded.categories().forEach(category::addItem);
+                    String chosen = selectedLocation();
+                    location.removeAllItems();
+                    loaded.locations().forEach(location::addItem);
+                    selectLocation(chosen);
                     books = result.getBooks();
                     // The server echoes the page it answered, so the pager cannot drift from the
                     // rows on screen even when the results shrank since the last request.
@@ -855,7 +873,7 @@ public final class LibraryAdminPanel extends JPanel {
         selectedCopyId = copy.getCopyId();
         addingCopy = false;
         barcode.setText(copy.getBarcode());
-        location.setText(copy.getLocation());
+        selectLocation(copy.getLocation());
         callNumber.setText(copy.getCallNumber());
         outcome.setText("已选择单册 " + copy.getBarcode() + " · " + displayCopyStatus(copy.getStatus()));
         updateControls();
@@ -863,24 +881,73 @@ public final class LibraryAdminPanel extends JPanel {
 
     private void addCopy() {
         if (working || !addingCopy || selectedBookId == null) { return; }
-        if (barcode.getText().isBlank() || location.getText().isBlank() || callNumber.getText().isBlank()) {
+        if (barcode.getText().isBlank() || selectedLocation() == null
+                || callNumber.getText().isBlank()) {
             outcome.setText("请填写馆藏条码、馆藏地和索书号");
             return;
         }
         submitCopy(LibraryActions.ADD_BOOK_COPY,
-                new AddBookCopyRequest(selectedBookId, barcode.getText(), location.getText(), callNumber.getText()),
+                new AddBookCopyRequest(selectedBookId, barcode.getText(),
+                        selectedLocation(), callNumber.getText()),
                 "登记单册");
     }
 
     private void updateCopy() {
         if (working || addingCopy || selectedCopyId == null) { return; }
-        if (location.getText().isBlank() || callNumber.getText().isBlank()) {
+        if (selectedLocation() == null || callNumber.getText().isBlank()) {
             outcome.setText("馆藏地和索书号不能为空");
             return;
         }
         submitCopy(LibraryActions.UPDATE_BOOK_COPY,
-                new UpdateBookCopyRequest(selectedCopyId, location.getText(), callNumber.getText()),
+                new UpdateBookCopyRequest(selectedCopyId, selectedLocation(), callNumber.getText()),
                 "修改单册资料");
+    }
+
+    /** @return the chosen location name, or {@code null} when the dictionary is empty */
+    private String selectedLocation() {
+        LibraryLocationDTO selected = (LibraryLocationDTO) location.getSelectedItem();
+        return selected == null ? null : selected.getLocationName();
+    }
+
+    /**
+     * Selects one location by name, adding it to the list when the dictionary does not know it.
+     *
+     * <p>A copy can outlive its dictionary entry if the database was edited by hand. Showing the
+     * stored name keeps the editor honest; silently falling back to the first entry would let an
+     * "update" move the copy to a room nobody chose.
+     */
+    private void selectLocation(String locationName) {
+        if (locationName == null || locationName.isBlank()) {
+            location.setSelectedIndex(-1);
+            return;
+        }
+        for (int index = 0; index < location.getItemCount(); index++) {
+            if (location.getItemAt(index).getLocationName().equals(locationName)) {
+                location.setSelectedIndex(index);
+                return;
+            }
+        }
+        LibraryLocationDTO unknown = new LibraryLocationDTO(locationName, 0);
+        location.addItem(unknown);
+        location.setSelectedItem(unknown);
+    }
+
+    private void addLocation() {
+        if (working || uncertainWrite) return;
+        String name = JOptionPane.showInputDialog(this,
+                "输入新的馆藏地名称（登记单册时只能从这份列表中选择）", "新增馆藏地",
+                JOptionPane.PLAIN_MESSAGE);
+        if (name == null) return;
+        if (name.isBlank()) {
+            outcome.setText("馆藏地名称不能为空");
+            return;
+        }
+        submit(LibraryActions.ADMIN_ADD_LOCATION, new AddLocationRequest(name),
+                "新增馆藏地", LibraryLocationDTO.class, added -> {
+                    location.addItem(added);
+                    location.setSelectedItem(added);
+                    outcome.setText("馆藏地“" + added.getLocationName() + "”已新增，可用于登记或迁移单册");
+                });
     }
 
     private void mutateCopy(String action, String operation) {
@@ -1053,8 +1120,14 @@ public final class LibraryAdminPanel extends JPanel {
     private void clearCopyForm() {
         selectedCopyId = null;
         addingCopy = false;
-        barcode.setText(""); location.setText(""); callNumber.setText("");
+        barcode.setText("");
+        selectLocation(defaultLocationName());
+        callNumber.setText("");
         copyTable.clearSelection();
+    }
+
+    private String defaultLocationName() {
+        return location.getItemCount() == 0 ? null : location.getItemAt(0).getLocationName();
     }
 
     private void selectCategory(String categoryId) {
@@ -1111,6 +1184,7 @@ public final class LibraryAdminPanel extends JPanel {
                 || copy != null && !RESERVED.equals(copy.getStatus())
                 && !WITHDRAWN.equals(copy.getStatus()));
         location.setEnabled(copyEditable);
+        addLocation.setEnabled(ready);
         callNumber.setEnabled(copyEditable);
         addCopy.setEnabled(ready && addingCopy);
         updateCopy.setEnabled(ready && !addingCopy && copy != null
@@ -1204,5 +1278,6 @@ public final class LibraryAdminPanel extends JPanel {
         return cause == null || cause.getMessage() == null ? "请检查连接后重试" : cause.getMessage();
     }
 
-    private record CatalogLoad(List<BookCategoryDTO> categories, Response books) { }
+    private record CatalogLoad(List<BookCategoryDTO> categories,
+            List<LibraryLocationDTO> locations, Response books) { }
 }

@@ -5,7 +5,7 @@
 - 模块：图书馆
 - 对应 Epic：#6
 - 当前实现：预约与入口调整阶段 4 已完成；正式启动使用 Access，单元测试和普通测试服务器仍可使用 InMemory
-- 建库方式：`AccessLibraryStore` 首次连接时自动创建五张表和索引；仅在整套图书馆表首次创建且业务表为空时初始化一致的演示数据
+- 建库方式：`AccessLibraryStore` 首次连接时自动创建六张表和索引；仅在整套图书馆表首次创建且业务表为空时初始化一致的演示数据
 
 ## 2. 表清单
 
@@ -14,6 +14,7 @@
 | `tblBook` | 书目元数据 | `bookId` | ISBN 唯一，状态为 `ACTIVE` 或 `INACTIVE` |
 | `tblBookCopy` | 可流转的实体单册 | `copyId` | barcode 唯一，状态变化只能经过专用业务操作 |
 | `tblBookCategory` | 分类字典 | `categoryId` | 名称必填，书目只引用有效分类 |
+| `tblBookLocation` | 馆藏地字典 | `locationName` | 名字唯一，单册与预约以名字引用馆藏地 |
 | `tblBorrowRecord` | 用户借阅和归还历史 | `recordId` | 一份单册同一时刻最多一条 `BORROWED` 记录 |
 | `tblReservation` | 用户书目预约及单册分配 | `reservationId` | 一个保留单册同一时刻只对应一条待取预约 |
 
@@ -70,6 +71,21 @@
 初始字典为 `C001=计算机`、`C002=文学`、`C003=历史`。图书管理员可新增分类，服务器生成
 `categoryId`，分类名称忽略大小写后不得重复。书目保存分类 ID，因此新增分类无需修改书目表结构；
 本轮不提供重命名和删除，以免已有书目引用失效。
+
+### `tblBookLocation`
+
+| 字段 | Access 类型 | 必填 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `locationName` | Short Text(100) | 是 | 无 | 馆藏地主键，同时是 `tblBookCopy.location` 与 `tblReservation.pickupLocation` 的取值 |
+| `sortOrder` | Long | 是 | 0 | 下拉列表的稳定顺序，新增时取当前行数 + 1 |
+
+初始字典为演示数据里的两个房间：`九龙湖校区—中文图书阅览室3`、`四牌楼校区—中文书库二楼`。
+`AccessLibraryStore` 在播种时还会把 `tblBookCopy` 中已经出现过的任何房间名收进本表，
+因此升级既有数据库后不会出现"单册引用了一个字典里没有的馆藏地"的状态。
+
+单册存储房间名而非外键，是刻意的取舍：既有的 `location` 列不必迁移，数据字典打开即可读；
+代价是重命名会让引用失效，所以与 `tblBookCategory` 一样**只能新增**。登记或迁移单册时，
+`LibraryService` 先查本表，名字不在其中返回 `LIBRARY_LOCATION_NOT_FOUND`。
 
 ### `tblBorrowRecord`
 
@@ -134,7 +150,7 @@
 
 ## 4. 关联与索引
 
-- `tblBook.isbn`、`tblBookCopy.barcode` 建唯一索引；
+- `tblBook.isbn`、`tblBookCopy.barcode` 建唯一索引，`tblBookLocation.locationName` 为主键（隐含唯一）；
 - `tblBook.categoryId -> tblBookCategory.categoryId`、`tblBookCopy.bookId -> tblBook.bookId`、
   `tblBorrowRecord.copyId -> tblBookCopy.copyId`、`tblReservation.bookId -> tblBook.bookId`、
   `tblReservation.assignedCopyId -> tblBookCopy.copyId` 建外键；跨用户模块的 `userId` 只保存稳定标识，不建跨模块外键；
@@ -160,6 +176,13 @@
 - `RESERVED`、`LOANED` 和 `WAITING_SHELVING` 都计入馆藏，但不计入可借数；
 - `WITHDRAWN` 不计入馆藏数或可借数。
 
+关键词同时匹配书目行与单册行：书名、作者、ISBN、分类名、出版社、语种、出版年来自 `tblBook`
+（`BookDTO.matchesKeyword`），索书号与馆藏条码来自 `tblBookCopy`。两边分别匹配后取并集，
+可见性仍由书目行决定——读者只看到 `ACTIVE` 书目，单册命中不会把停用书目暴露出来。
+
+检索结果分页返回：`page` 从 1 开始，`pageSize` 默认 20、上限 100；响应带 `totalCount` 与总页数。
+分页在馆藏汇总之前完成，因此一次检索只读取本页涉及的复本。
+
 ## 6. 借还一致性规则
 
 - 用户身份只允许从 `Request.token -> SessionInfo.userId` 获取，借还 DTO 不接受 `userId`；
@@ -178,6 +201,8 @@
 ## 7. 预约规则与一致性
 
 - 用户身份只从 `Request.token -> SessionInfo.userId` 获取；创建预约只接受 `bookId` 和取书馆藏地；
+  取书馆藏地只校验"该书目在该馆藏地有未注销单册"。因为单册本身只能落在字典里的馆藏地，
+  合法取值必然也属于 `tblBookLocation`，无需第二次查字典；
 - 最多同时存在 3 条 `WAITING/READY_FOR_PICKUP` 预约；逾期未还、已借同书目或同书目已有有效预约时拒绝；
 - 有可借单册时立即保留 24 小时，否则进入队列；待取过期后，同一用户 7 天内不能再次预约同一书目，主动取消不触发冷却；
 - 归架、新增或恢复单册时，优先分配给相同书目和馆藏地的队首；取消或过期释放单册并自动顺延；

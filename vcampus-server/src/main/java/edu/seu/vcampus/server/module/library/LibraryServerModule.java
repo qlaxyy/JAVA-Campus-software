@@ -3,6 +3,7 @@ package edu.seu.vcampus.server.module.library;
 import edu.seu.vcampus.common.library.AddBookCopyRequest;
 import edu.seu.vcampus.common.library.AddBookCategoryRequest;
 import edu.seu.vcampus.common.library.AddBookRequest;
+import edu.seu.vcampus.common.library.AddLocationRequest;
 import edu.seu.vcampus.common.library.AdminBorrowQueryRequest;
 import edu.seu.vcampus.common.library.AdminReservationDTO;
 import edu.seu.vcampus.common.library.AdminReservationQueryRequest;
@@ -76,6 +77,7 @@ public final class LibraryServerModule implements ServerModule {
         BookCategoryRepository categories = new AccessBookCategoryRepository(store);
         BookCopyRepository copies = new AccessBookCopyRepository(store);
         ReservationRepository reservations = new AccessReservationRepository(store);
+        BookLocationRepository locations = new AccessBookLocationRepository(store);
         AccessLibraryDemonstrationData.seedIfEligible(
                 store, copies, records, reservations, clock);
         LibraryService service = new LibraryService(
@@ -88,7 +90,8 @@ public final class LibraryServerModule implements ServerModule {
                 reservations,
                 store,
                 () -> UUID.randomUUID().toString(),
-                campusCards);
+                campusCards,
+                locations);
         return new LibraryServerModule(service, campusCards);
     }
 
@@ -179,6 +182,10 @@ public final class LibraryServerModule implements ServerModule {
                 (actor, data) -> new ArrayList<>(service.queryReservations(actor, data))));
         router.register(LibraryActions.ADMIN_STATISTICS, request -> administer(
                 request, context, service::statistics));
+        router.register(LibraryActions.ADMIN_LIST_LOCATIONS, request -> administer(
+                request, context, actor -> new ArrayList<>(service.listLocations(actor))));
+        router.register(LibraryActions.ADMIN_ADD_LOCATION, request -> administer(
+                request, context, AddLocationRequest.class, service::addLocation));
     }
 
     private Response searchBooks(Request request, ServerContext context) {

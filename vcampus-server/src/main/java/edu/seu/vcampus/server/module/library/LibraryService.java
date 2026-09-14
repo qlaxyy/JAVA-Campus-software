@@ -3,11 +3,13 @@ package edu.seu.vcampus.server.module.library;
 import edu.seu.vcampus.common.library.AddBookCopyRequest;
 import edu.seu.vcampus.common.library.AddBookCategoryRequest;
 import edu.seu.vcampus.common.library.AddBookRequest;
+import edu.seu.vcampus.common.library.AddLocationRequest;
 import edu.seu.vcampus.common.library.AdminBorrowQueryRequest;
 import edu.seu.vcampus.common.library.AdminBorrowRecordDTO;
 import edu.seu.vcampus.common.library.AdminReservationDTO;
 import edu.seu.vcampus.common.library.AdminReservationQueryRequest;
 import edu.seu.vcampus.common.library.CategoryStatisticDTO;
+import edu.seu.vcampus.common.library.LibraryLocationDTO;
 import edu.seu.vcampus.common.library.LibraryStatisticsDTO;
 import edu.seu.vcampus.common.library.PopularBookDTO;
 import edu.seu.vcampus.common.library.BookCategoryDTO;
@@ -77,6 +79,7 @@ final class LibraryService {
     private final LibraryTransactionManager transactionManager;
     private final Supplier<String> reservationIdSupplier;
     private final CampusCardWallet campusCards;
+    private final BookLocationRepository locationRepository;
 
     LibraryService(
             BookRepository bookRepository,
@@ -134,6 +137,19 @@ final class LibraryService {
             LibraryTransactionManager transactionManager,
             Supplier<String> reservationIdSupplier,
             CampusCardWallet campusCards) {
+        this(bookRepository, borrowRecordRepository, clock, recordIdSupplier, categoryRepository,
+                bookCopyRepository, reservationRepository, transactionManager,
+                reservationIdSupplier, campusCards, new InMemoryBookLocationRepository());
+    }
+
+    LibraryService(BookRepository bookRepository, BorrowRecordRepository borrowRecordRepository,
+            Clock clock, Supplier<String> recordIdSupplier,
+            BookCategoryRepository categoryRepository, BookCopyRepository bookCopyRepository,
+            ReservationRepository reservationRepository,
+            LibraryTransactionManager transactionManager,
+            Supplier<String> reservationIdSupplier,
+            CampusCardWallet campusCards,
+            BookLocationRepository locationRepository) {
         this.bookRepository = Objects.requireNonNull(
                 bookRepository, "bookRepository must not be null");
         this.borrowRecordRepository = Objects.requireNonNull(
@@ -151,6 +167,8 @@ final class LibraryService {
         this.reservationIdSupplier = Objects.requireNonNull(
                 reservationIdSupplier, "reservationIdSupplier must not be null");
         this.campusCards = campusCards;
+        this.locationRepository = Objects.requireNonNull(
+                locationRepository, "locationRepository must not be null");
     }
 
     BookSearchResult searchBooks(BookSearchRequest request) {
@@ -236,6 +254,56 @@ final class LibraryService {
     }
 
     List<BookCategoryDTO> listCategories() { return categoryRepository.findAll(); }
+
+    /**
+     * Lists the holding-location dictionary with how many copies sit at each place.
+     *
+     * @param actor must be a library administrator
+     */
+    List<LibraryLocationDTO> listLocations(SessionInfo actor) {
+        requireAdministrator(actor);
+        synchronized (circulationLock) {
+            Map<String, Integer> counts = new java.util.HashMap<>();
+            for (BookCopy copy : bookCopyRepository.findAll()) {
+                if (copy.status() != BookCopyStatus.WITHDRAWN) {
+                    counts.merge(copy.location(), 1, Integer::sum);
+                }
+            }
+            return locationRepository.findAll().stream()
+                    .map(name -> new LibraryLocationDTO(name, counts.getOrDefault(name, 0)))
+                    .toList();
+        }
+    }
+
+    LibraryLocationDTO addLocation(SessionInfo actor, AddLocationRequest request) {
+        requireAdministrator(actor);
+        Objects.requireNonNull(request, "request must not be null");
+        synchronized (circulationLock) {
+            String name = boundedText(request.getLocationName(), "馆藏地", 100);
+            if (locationRepository.findAll().stream().anyMatch(existing ->
+                    existing.equalsIgnoreCase(name))) {
+                throw failure(ErrorCodes.LIBRARY_DUPLICATE_LOCATION, "该馆藏地已经存在");
+            }
+            locationRepository.save(name);
+            return new LibraryLocationDTO(name, 0);
+        }
+    }
+
+    /**
+     * Accepts a location only if the dictionary knows it.
+     *
+     * <p>A copy is filed by room name, so a typo would silently strand it in a room that does not
+     * exist — it would disappear from every "<em>this book</em> is at" list an administrator or
+     * reader can enumerate. Requiring a dictionary entry makes a new room a deliberate act.
+     */
+    private String requireLocation(String value) {
+        String location = boundedText(value, "馆藏地", 100);
+        if (!locationRepository.exists(location)) {
+            throw failure(ErrorCodes.LIBRARY_LOCATION_NOT_FOUND,
+                    "馆藏地不在字典中，请先新增该馆藏地");
+        }
+        return location;
+    }
 
     BookCategoryDTO addCategory(SessionInfo actor, AddBookCategoryRequest request) {
         requireAdministrator(actor);
@@ -338,14 +406,14 @@ final class LibraryService {
                 if (bookCopyRepository.findByBarcode(barcode).isPresent()) {
                     throw failure(ErrorCodes.LIBRARY_DUPLICATE_BARCODE, "馆藏条码已存在");
                 }
+                String location = requireLocation(request.getLocation());
+                String callNumber = boundedText(request.getCallNumber(), "索书号", 100);
                 String copyId;
                 do {
                     copyId = "CP-" + UUID.randomUUID().toString().replace("-", "");
                 } while (bookCopyRepository.findById(copyId).isPresent());
                 BookCopy copy = new BookCopy(copyId, barcode, book.getBookId(),
-                        boundedText(request.getLocation(), "馆藏地", 100),
-                        boundedText(request.getCallNumber(), "索书号", 100),
-                        BookCopyStatus.AVAILABLE);
+                        location, callNumber, BookCopyStatus.AVAILABLE);
                 bookCopyRepository.insert(copy);
                 return toBookCopyDTO(assignAvailableCopy(copy, now));
             });
@@ -381,7 +449,7 @@ final class LibraryService {
                             "预约保留中的单册不能修改");
                 }
                 BookCopy updated = original.withLocation(
-                        boundedText(request.getLocation(), "馆藏地", 100),
+                        requireLocation(request.getLocation()),
                         boundedText(request.getCallNumber(), "索书号", 100));
                 bookCopyRepository.update(updated);
                 return toBookCopyDTO(updated);

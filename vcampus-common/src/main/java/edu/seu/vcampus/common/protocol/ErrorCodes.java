@@ -130,6 +130,10 @@ public final class ErrorCodes {
             "LIBRARY_OUTSTANDING_FEE";
     public static final String LIBRARY_LOST_NOT_REPORTABLE =
             "LIBRARY_LOST_NOT_REPORTABLE";
+    public static final String LIBRARY_LOCATION_NOT_FOUND =
+            "LIBRARY_LOCATION_NOT_FOUND";
+    public static final String LIBRARY_DUPLICATE_LOCATION =
+            "LIBRARY_DUPLICATE_LOCATION";
 
     private ErrorCodes() {
     }

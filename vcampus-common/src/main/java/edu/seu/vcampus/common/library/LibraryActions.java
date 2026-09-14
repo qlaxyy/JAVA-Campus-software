@@ -98,6 +98,12 @@ public final class LibraryActions {
     /** Reads the whole-library statistics snapshot; library administrators only. */
     public static final String ADMIN_STATISTICS =
             ActionNames.of(ModuleNames.LIBRARY, "ADMIN_STATISTICS");
+    /** Lists the holding-location dictionary with copy counts; library administrators only. */
+    public static final String ADMIN_LIST_LOCATIONS =
+            ActionNames.of(ModuleNames.LIBRARY, "ADMIN_LIST_LOCATIONS");
+    /** Adds one holding location to the dictionary; library administrators only. */
+    public static final String ADMIN_ADD_LOCATION =
+            ActionNames.of(ModuleNames.LIBRARY, "ADMIN_ADD_LOCATION");
 
     private LibraryActions() {
     }

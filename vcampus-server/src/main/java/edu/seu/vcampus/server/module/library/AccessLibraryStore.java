@@ -150,6 +150,8 @@ final class AccessLibraryStore implements LibraryTransactionManager {
                         + "dueTime DATETIME NOT NULL, "
                         + "renewalCount LONG DEFAULT 0 NOT NULL, "
                         + "returnTime DATETIME, "
+                        + "lostReportedAt DATETIME, "
+                        + "feeSettledAt DATETIME, "
                         + "[status] TEXT(20) NOT NULL, "
                         + "CONSTRAINT fk_tblBorrowRecord_copy FOREIGN KEY (copyId) "
                         + "REFERENCES tblBookCopy (copyId))");
@@ -157,9 +159,19 @@ final class AccessLibraryStore implements LibraryTransactionManager {
                         + "ON tblBorrowRecord (userId, [status])");
                 executeSql(connection, "CREATE INDEX ix_tblBorrowRecord_copy_status "
                         + "ON tblBorrowRecord (copyId, [status])");
-            } else if (!columnExists(connection, BORROW_TABLE, "renewalCount")) {
-                executeSql(connection,
-                        "ALTER TABLE tblBorrowRecord ADD COLUMN renewalCount LONG DEFAULT 0");
+            } else {
+                if (!columnExists(connection, BORROW_TABLE, "renewalCount")) {
+                    executeSql(connection,
+                            "ALTER TABLE tblBorrowRecord ADD COLUMN renewalCount LONG DEFAULT 0");
+                }
+                if (!columnExists(connection, BORROW_TABLE, "lostReportedAt")) {
+                    executeSql(connection,
+                            "ALTER TABLE tblBorrowRecord ADD COLUMN lostReportedAt DATETIME");
+                }
+                if (!columnExists(connection, BORROW_TABLE, "feeSettledAt")) {
+                    executeSql(connection,
+                            "ALTER TABLE tblBorrowRecord ADD COLUMN feeSettledAt DATETIME");
+                }
             }
             if (!reservationExists) {
                 executeSql(connection, "CREATE TABLE tblReservation ("

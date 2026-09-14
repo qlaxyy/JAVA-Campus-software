@@ -890,7 +890,7 @@ classDiagram
 
 ### 8.7 Action、DTO 与错误码
 
-读者与通用 Action（10 个）：
+读者与通用 Action（11 个）：
 
 | Action | Request.data | 成功 Response.data | 权限 |
 |---|---|---|---|
@@ -901,6 +901,7 @@ classDiagram
 | `LIBRARY.CANCEL_RESERVATION` | `ReservationIdRequest(reservationId)` | `ReservationDTO` | 已登录且为预约本人 |
 | `LIBRARY.GET_BORROW_RECORDS` | `null` | `List<BorrowRecordDTO>` | 已登录 |
 | `LIBRARY.RENEW_BORROW` | `BorrowRecordIdRequest(recordId)` | `BorrowRecordDTO` | 已登录且为借阅本人 |
+| `LIBRARY.PAY_FEE` | `BorrowRecordIdRequest(recordId)` | `BorrowRecordDTO` | 已登录且为借阅本人；通过校园卡扣款 |
 | `LIBRARY.INSPECT_COPY` | `CopyInspectionRequest(barcode)` | `CopyInspectionDTO` | 已登录 |
 | `LIBRARY.BORROW_COPY` | `CopyBorrowRequest(barcode)` | `null` | 已登录 |
 | `LIBRARY.RETURN_COPY` | `CopyReturnRequest(barcode)` | `null` | 已登录 |
@@ -929,6 +930,7 @@ classDiagram
 | 书目与单册 | `LIBRARY_BOOK_NOT_FOUND`、`LIBRARY_COPY_NOT_FOUND`、`LIBRARY_CATEGORY_NOT_FOUND`、`LIBRARY_DUPLICATE_ISBN`、`LIBRARY_DUPLICATE_BARCODE`、`LIBRARY_DUPLICATE_CATEGORY`、`LIBRARY_INVALID_BOOK_STATUS`、`LIBRARY_INVALID_COPY_STATUS`、`LIBRARY_COPY_NOT_AVAILABLE`、`LIBRARY_COPY_RESERVED_FOR_OTHER` |
 | 借还与续借 | `LIBRARY_BORROW_RECORD_NOT_FOUND`、`LIBRARY_BORROW_LIMIT_REACHED`、`LIBRARY_ALREADY_BORROWED`、`LIBRARY_OVERDUE_BORROW_EXISTS`、`LIBRARY_RENEWAL_NOT_ALLOWED`、`LIBRARY_RENEWAL_LIMIT_REACHED`、`LIBRARY_RENEWAL_BLOCKED_BY_RESERVATION` |
 | 预约 | `LIBRARY_RESERVATION_NOT_FOUND`、`LIBRARY_RESERVATION_LIMIT_REACHED`、`LIBRARY_DUPLICATE_RESERVATION`、`LIBRARY_RESERVATION_COOLDOWN`、`LIBRARY_RESERVATION_NOT_CANCELLABLE`、`LIBRARY_INVALID_PICKUP_LOCATION` |
+| 费用 | `LIBRARY_FEE_NOT_PAYABLE`（无费用或已结清）、`LIBRARY_OUTSTANDING_FEE`（有未缴费用，阻止借阅与预约）、`CARD_INSUFFICIENT_BALANCE`（校园卡余额不足，由卡模块透传） |
 | 认证 | `AUTH_REQUIRED`（无 token 或会话失效）、`AUTH_FORBIDDEN`（非图书馆管理员调用管理 Action） |
 
 参数非法（超长文本、非法 ISBN、非法出版年、未知查询范围）返回 `COMMON_INVALID_ARGUMENT`；
@@ -943,6 +945,11 @@ classDiagram
   `tblBookCopy` 按馆藏地实时汇总，`INACTIVE` 书目保留馆藏数但业务可借数固定为 0。
 - `tblBorrowRecord` 只保存 `copyId` 而不保存 `bookId`；`renewalCount` 记录成功续借次数（上限 1）。
 - 逾期**不落库、不占第三种状态**，由 `BORROWED && now > dueTime` 动态计算。
+- **费用金额同样不落库**，只保存 `feeSettledAt`（结清时间，`NULL` 表示未缴）。已归还记录的费用
+  由 `dueTime` 与 `returnTime` 推导：`min(逾期天数 × 0.5 元, 50 元)`；恰好到期归还的当天不计费。
+  已归还记录的 `returnTime` 不再变化，因此金额可推导且不会漂移。
+- 未缴费用会阻止新的借阅与预约（`LIBRARY_OUTSTANDING_FEE`），结清后立即恢复。扣款通过校园卡
+  `debit` 完成，其 `商户号 + reference` 幂等；若本地写入失败则 `credit` 补偿退款。
 - `tblReservation` 的排队顺序由 `createdAt` 加 `reservationId` 决定，保证相同创建时间下顺序稳定。
 - 唯一索引：`tblBook.isbn`、`tblBookCopy.barcode`；跨模块 `userId` 不建外键。
 
@@ -959,7 +966,7 @@ classDiagram
 
 ### 8.9 测试与验收
 
-自动化测试共 **97 个用例**（服务端 10 个测试类、客户端 9 个测试类），详见
+自动化测试共 **109 个用例**（服务端 11 个测试类、客户端 9 个测试类），详见
 [交付说明](../modules/library-borrow-return.md)：
 
 | 测试类 | 覆盖内容 |
@@ -970,7 +977,8 @@ classDiagram
 | `LibraryCirculationPhaseTwoTest` | 条码借还、30 天借期、五本上限、同书目重复、逾期停借、终端预检、他人归还拒绝、并发借同一册、事务回滚 |
 | `LibraryReservationServiceTest` | 立即保留、FIFO 排队与稳定 tie-break、24 小时过期、7 天冷却、取消顺延、续借三条规则、并发抢最后一册 |
 | `LibraryAdminServiceTest` | 分类新增与去重、ISBN 规范化、单册生命周期、状态专用操作、全馆借阅查询与越权拒绝 |
-| `LibraryServerModuleTest` | 22 个 Action 契约反射冻结、鉴权、DTO 类型校验、会话身份优先于载荷 |
+| `LibraryServerModuleTest` | 23 个 Action 契约反射冻结、鉴权、DTO 类型校验、会话身份优先于载荷 |
+| `LibraryFeeServiceTest` | 滞纳金费率与封顶、未归还不计费、缴费幂等、余额不足、扣款后本地写入失败补偿退款、未缴费用阻止借书与预约 |
 | `AccessLibraryRepositoryTest` | 真实 `.accdb` 建表与索引、唯一约束、借还/预约事务回滚、演示种子不变量 |
 | `LibraryPersistenceIntegrationTest` | 真实 Socket 下跨多次服务器重启的状态保留、演示数据不重复播种 |
 | `LibraryWorkflowUiTest` / `LibraryAdminUiTest` / `LibraryReservationUiTest` / `LibrarySearchIntegrationTest` / `LibraryAdminIntegrationTest` | 模式切换、预约与取消、续借、终端预检、管理员可见性与状态按钮禁用、跨 Socket 全链路 |
@@ -987,6 +995,9 @@ classDiagram
 - [ ] 到期时刻本身不算逾期；预约截止时刻本身算过期。
 - [ ] 归还后单册为 `WAITING_SHELVING`，可借数不立即恢复；管理员确认归架后恢复。
 - [ ] 续借从原到期日顺延 30 天，逾期、已续借过一次或同书目有有效预约时拒绝。
+- [ ] 逾期归还产生滞纳金（每天 0.5 元，封顶 50 元），未归还的逾期记录不产生费用。
+- [ ] 缴费从校园卡扣款且重复提交不重复扣款；余额不足返回 `CARD_INSUFFICIENT_BALANCE`。
+- [ ] 存在未缴费用时不能借书与预约，结清后恢复。
 - [ ] 非图书馆管理员调用任一管理 Action 返回 `AUTH_FORBIDDEN`；无 token 返回 `AUTH_REQUIRED`。
 - [ ] 同一单册的并发借阅只有一次成功（`LibraryCirculationPhaseTwoTest`）。
 - [ ] 服务器重启后借阅、预约与单册状态保持不变，已有数据库不重新播种演示数据。
@@ -996,8 +1007,10 @@ classDiagram
 
 **文档声明排除、本轮不实现**（出处见各模块文档的"范围"说明）：
 
-- 逾期罚款、欠款与遗失赔偿：无金额字段、无计费规则、无缴费 Action。
-  上游已为图书馆预留校园卡缴费钩子 `LibraryServerModule.settleFee(...)`，但图书馆侧尚未接入。
+- 遗失赔偿：逾期滞纳金与校园卡缴费已接入（见 8.7、8.8 节），但**丢书赔偿尚未实现** ——
+  书目没有价格字段，读者也无法申报丢失。`tblBorrowRecord` 已预留 `lostReportedAt` 列，
+  单册状态机也无需改动（可复用 `WITHDRAWN`），接入时以书价加手续费计算赔偿。
+- 欠款台账：费用挂在借阅记录上，没有跨记录的汇总视图与历史欠费查询。
 - 消息通知：预约到书、到期提醒与逾期催还均无推送，用户只能主动刷新查看。
 - 委托借阅、书评、书架收藏、荐购与热门排行。
 - 采购批次、馆藏盘点与馆际互借。
@@ -1073,7 +1086,7 @@ classDiagram
 
 > 上表以用户模块为例说明 Action 的命名与请求/响应约定，**不是跨模块的全量清单**。
 > Action 名统一为 `<模块>.<动作>`，由 `ActionNames.of(ModuleNames.XXX, "VERB")` 生成。
-> 各业务模块的完整 Action 表在其子系统章节中给出，例如图书馆的 22 个 Action（10 个读者与通用、
+> 各业务模块的完整 Action 表在其子系统章节中给出，例如图书馆的 23 个 Action（11 个读者与通用、
 > 12 个管理）见 8.7 节。
 
 ### 11.2 Request
@@ -1324,7 +1337,7 @@ flowchart LR
 | `LibraryPersistenceIntegrationTest` | 真实 Socket 下演示借阅与预约跨重启保留、已有库不重复补种，以及借书、归还、管理员上架。 |
 | `UserAdministrationIntegrationTest`、`AccessUserAuditRepositoryTest` | 超级管理员账号维护、越权拦截、成功/失败审计记录及 Access 重启后记录保留。 |
 
-图书馆模块的服务端 10 个测试类与客户端 9 个测试类共 97 个用例，完整清单见 8.9 节。
+图书馆模块的服务端 11 个测试类与客户端 9 个测试类共 109 个用例，完整清单见 8.9 节。
 其余模块的测试同样由 `.github/workflows/ci.yml` 在每次 PR 上执行。
 
 ### 16.2 登录模块验收条件

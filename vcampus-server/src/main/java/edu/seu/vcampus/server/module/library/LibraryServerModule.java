@@ -85,7 +85,8 @@ public final class LibraryServerModule implements ServerModule {
                 copies,
                 reservations,
                 store,
-                () -> UUID.randomUUID().toString());
+                () -> UUID.randomUUID().toString(),
+                campusCards);
         return new LibraryServerModule(service, campusCards);
     }
 
@@ -132,6 +133,8 @@ public final class LibraryServerModule implements ServerModule {
                 request -> getBorrowRecords(request, context));
         router.register(LibraryActions.RENEW_BORROW,
                 request -> renewBorrow(request, context));
+        router.register(LibraryActions.PAY_FEE,
+                request -> payFee(request, context));
         router.register(LibraryActions.CREATE_RESERVATION,
                 request -> createReservation(request, context));
         router.register(LibraryActions.GET_MY_RESERVATIONS,
@@ -271,6 +274,29 @@ public final class LibraryServerModule implements ServerModule {
         } catch (IllegalArgumentException exception) {
             return invalidArgument(request, exception);
         }
+    }
+
+    private Response payFee(Request request, ServerContext context) {
+        Optional<SessionInfo> session = session(request, context);
+        if (session.isEmpty()) {
+            return authenticationRequired(request);
+        }
+        if (!(request.getData() instanceof BorrowRecordIdRequest data)) {
+            return invalidRequest(request, "缴费请求格式不正确");
+        }
+        try {
+            BorrowRecordDTO settled = service.payFee(session.orElseThrow(), data);
+            return Response.success(request, "费用已结清，共 "
+                    + formatYuan(settled.getFeeFen()) + " 元", settled);
+        } catch (LibraryBusinessException exception) {
+            return businessFailure(request, exception);
+        } catch (IllegalArgumentException exception) {
+            return invalidArgument(request, exception);
+        }
+    }
+
+    private static String formatYuan(int fen) {
+        return java.math.BigDecimal.valueOf(fen, 2).toPlainString();
     }
 
     private Response createReservation(Request request, ServerContext context) {

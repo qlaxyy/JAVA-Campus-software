@@ -78,6 +78,8 @@
 | `dueTime` | Date/Time | 是 | 无 | 当前到期时间；初借为借阅时间加 30 天，续借后再顺延 30 天 |
 | `renewalCount` | Long Integer | 是 | `0` | 已成功续借次数，本轮最大为 1 |
 | `returnTime` | Date/Time | 否 | `NULL` | 实际归还时间 |
+| `lostReportedAt` | Date/Time | 否 | `NULL` | 读者申报丢失的时间；非空表示该借阅以丢书结案（丢书赔偿尚未实现，本列为后续预留） |
+| `feeSettledAt` | Date/Time | 否 | `NULL` | 费用结清时间；`NULL` 表示尚未结清 |
 | `status` | Short Text(20) | 是 | `BORROWED` | `BORROWED`、`RETURNED` |
 
 记录不变量：
@@ -87,7 +89,17 @@
 - `dueTime >= borrowTime`，非空 `returnTime >= borrowTime`；
 - 当前借阅最多续借一次；从原 `dueTime` 顺延 30 天，不重置 `borrowTime`；
 - 一份 `BookCopy` 同一时刻最多存在一条 `BORROWED` 记录；
-- `BookCopy.status == LOANED` 当且仅当存在该单册的当前 `BORROWED` 记录。
+- `BookCopy.status == LOANED` 当且仅当存在该单册的当前 `BORROWED` 记录；
+- `lostReportedAt` 非空时必然 `RETURNED` 且 `returnTime` 非空；
+- 记录一旦 `RETURNED`，除**结清费用**（`feeSettledAt` 由 `NULL` 变为非空）外不可再修改；
+  该规则由 `BorrowRecord.requireValidTransition` 统一实现，Access 与 InMemory 两套仓储共用。
+
+费用不变量：
+
+- **金额不落库**。已归还记录的费用由 `dueTime` 与 `returnTime` 推导：
+  `min(逾期天数 × 50 分, 5000 分)`；到期时刻本身不算逾期；
+- 只有 `RETURNED` 记录可能产生费用；未归还的逾期记录由"存在逾期未还"拦截，不产生金额；
+- `feeSettledAt` 只在费用大于 0 时才能从 `NULL` 变为非空，且只能变一次。
 
 ### `tblReservation`
 

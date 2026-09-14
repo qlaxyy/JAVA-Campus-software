@@ -33,6 +33,13 @@ public final class LibraryActions {
     public static final String RENEW_BORROW =
             ActionNames.of(ModuleNames.LIBRARY, "RENEW_BORROW");
 
+    /**
+     * Settles the outstanding fee of one borrow record owned by the authenticated user,
+     * charging the campus card. Repeating the same record is a no-op once settled.
+     */
+    public static final String PAY_FEE =
+            ActionNames.of(ModuleNames.LIBRARY, "PAY_FEE");
+
     /** Creates a reservation for the authenticated user. */
     public static final String CREATE_RESERVATION =
             ActionNames.of(ModuleNames.LIBRARY, "CREATE_RESERVATION");

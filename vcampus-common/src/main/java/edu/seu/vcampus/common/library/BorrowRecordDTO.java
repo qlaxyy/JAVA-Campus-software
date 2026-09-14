@@ -4,11 +4,11 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
-/** Immutable personal borrow record; overdue is computed by the server at query time. */
+/** Immutable personal borrow record; overdue and the fee are computed by the server at query time. */
 public final class BorrowRecordDTO implements Serializable {
 
     @Serial
-    private static final long serialVersionUID = 3L;
+    private static final long serialVersionUID = 4L;
 
     private final String recordId;
     private final String bookId;
@@ -21,6 +21,8 @@ public final class BorrowRecordDTO implements Serializable {
     private final String status;
     private final boolean overdue;
     private final int renewalCount;
+    private final int feeFen;
+    private final boolean feeSettled;
 
     /**
      * @param recordId borrow record identifier
@@ -33,11 +35,15 @@ public final class BorrowRecordDTO implements Serializable {
      * @param returnTime actual return time, or null while borrowed
      * @param status BORROWED or RETURNED
      * @param overdue whether the active record is overdue at query time
+     * @param renewalCount successful renewals so far
+     * @param feeFen outstanding-or-settled fee in fen; zero when this record owes nothing
+     * @param feeSettled whether the fee of this record has been settled
      */
     public BorrowRecordDTO(String recordId, String bookId, String bookTitle,
             String copyId, String barcode,
             LocalDateTime borrowTime, LocalDateTime dueTime, LocalDateTime returnTime,
-            String status, boolean overdue, int renewalCount) {
+            String status, boolean overdue, int renewalCount,
+            int feeFen, boolean feeSettled) {
         this.recordId = recordId;
         this.bookId = bookId;
         this.bookTitle = bookTitle;
@@ -49,6 +55,8 @@ public final class BorrowRecordDTO implements Serializable {
         this.status = status;
         this.overdue = overdue;
         this.renewalCount = renewalCount;
+        this.feeFen = feeFen;
+        this.feeSettled = feeSettled;
     }
 
     /** @return borrow record identifier */
@@ -83,4 +91,10 @@ public final class BorrowRecordDTO implements Serializable {
 
     /** @return number of successful renewals for this loan */
     public int getRenewalCount() { return renewalCount; }
+
+    /** @return fee in fen; zero when this record owes nothing */
+    public int getFeeFen() { return feeFen; }
+
+    /** @return whether this record still owes an unsettled fee */
+    public boolean isFeeSettled() { return feeSettled; }
 }

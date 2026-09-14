@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 /** Immutable administrator view of one borrow record. */
 public final class AdminBorrowRecordDTO implements Serializable {
     @Serial
-    private static final long serialVersionUID = 2L;
+    private static final long serialVersionUID = 3L;
 
     private final String recordId;
     private final String userId;
@@ -21,11 +21,14 @@ public final class AdminBorrowRecordDTO implements Serializable {
     private final String status;
     private final boolean overdue;
     private final int renewalCount;
+    private final int feeFen;
+    private final boolean feeSettled;
 
     public AdminBorrowRecordDTO(String recordId, String userId, String bookId,
             String bookTitle, String copyId, String barcode,
             LocalDateTime borrowTime, LocalDateTime dueTime, LocalDateTime returnTime,
-            String status, boolean overdue, int renewalCount) {
+            String status, boolean overdue, int renewalCount,
+            int feeFen, boolean feeSettled) {
         this.recordId = recordId;
         this.userId = userId;
         this.bookId = bookId;
@@ -38,6 +41,8 @@ public final class AdminBorrowRecordDTO implements Serializable {
         this.status = status;
         this.overdue = overdue;
         this.renewalCount = renewalCount;
+        this.feeFen = feeFen;
+        this.feeSettled = feeSettled;
     }
 
     public String getRecordId() { return recordId; }
@@ -52,4 +57,6 @@ public final class AdminBorrowRecordDTO implements Serializable {
     public String getStatus() { return status; }
     public boolean isOverdue() { return overdue; }
     public int getRenewalCount() { return renewalCount; }
+    public int getFeeFen() { return feeFen; }
+    public boolean isFeeSettled() { return feeSettled; }
 }

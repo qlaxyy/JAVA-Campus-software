@@ -28,6 +28,8 @@ import edu.seu.vcampus.common.library.UpdateBookRequest;
 import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.ModuleNames;
 import edu.seu.vcampus.common.user.SessionInfo;
+import edu.seu.vcampus.server.module.card.CampusCardWallet;
+import edu.seu.vcampus.server.module.card.CardBusinessException;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -52,6 +54,8 @@ final class LibraryService {
     private static final int MAX_ACTIVE_RESERVATIONS = 3;
     private static final int RESERVATION_HOLD_HOURS = 24;
     private static final int RESERVATION_COOLDOWN_DAYS = 7;
+    private static final int FINE_PER_DAY_FEN = 50;
+    private static final int MAX_FINE_FEN = 5_000;
 
     private final BookRepository bookRepository;
     private final BorrowRecordRepository borrowRecordRepository;
@@ -63,6 +67,7 @@ final class LibraryService {
     private final ReservationRepository reservationRepository;
     private final LibraryTransactionManager transactionManager;
     private final Supplier<String> reservationIdSupplier;
+    private final CampusCardWallet campusCards;
 
     LibraryService(
             BookRepository bookRepository,
@@ -104,6 +109,22 @@ final class LibraryService {
             ReservationRepository reservationRepository,
             LibraryTransactionManager transactionManager,
             Supplier<String> reservationIdSupplier) {
+        this(bookRepository, borrowRecordRepository, clock, recordIdSupplier,
+                categoryRepository, bookCopyRepository, reservationRepository,
+                transactionManager, reservationIdSupplier, null);
+    }
+
+    /**
+     * @param campusCards campus-card wallet used to settle fees,
+     *        or {@code null} when the module runs without payment (unit tests, memory router)
+     */
+    LibraryService(BookRepository bookRepository, BorrowRecordRepository borrowRecordRepository,
+            Clock clock, Supplier<String> recordIdSupplier,
+            BookCategoryRepository categoryRepository, BookCopyRepository bookCopyRepository,
+            ReservationRepository reservationRepository,
+            LibraryTransactionManager transactionManager,
+            Supplier<String> reservationIdSupplier,
+            CampusCardWallet campusCards) {
         this.bookRepository = Objects.requireNonNull(
                 bookRepository, "bookRepository must not be null");
         this.borrowRecordRepository = Objects.requireNonNull(
@@ -120,6 +141,7 @@ final class LibraryService {
                 transactionManager, "transactionManager must not be null");
         this.reservationIdSupplier = Objects.requireNonNull(
                 reservationIdSupplier, "reservationIdSupplier must not be null");
+        this.campusCards = campusCards;
     }
 
     BookSearchResult searchBooks(BookSearchRequest request) {
@@ -482,6 +504,10 @@ final class LibraryService {
             throw failure(ErrorCodes.LIBRARY_OVERDUE_BORROW_EXISTS,
                     "存在逾期未还图书，请先归还后再预约");
         }
+        if (!outstandingFeeRecords(userId).isEmpty()) {
+            throw failure(ErrorCodes.LIBRARY_OUTSTANDING_FEE,
+                    "存在未缴清的图书费用，请先结清后再预约");
+        }
         if (currentBorrows.stream().map(this::requireCopyForRecord)
                 .anyMatch(copy -> copy.bookId().equals(bookId))) {
             throw failure(ErrorCodes.LIBRARY_ALREADY_BORROWED,
@@ -661,6 +687,10 @@ final class LibraryService {
             return BorrowDecision.denied(ErrorCodes.LIBRARY_OVERDUE_BORROW_EXISTS,
                     "你有逾期未还图书，请先归还后再借阅");
         }
+        if (!outstandingFeeRecords(userId).isEmpty()) {
+            return BorrowDecision.denied(ErrorCodes.LIBRARY_OUTSTANDING_FEE,
+                    "你有未缴清的图书费用，请先结清后再借阅");
+        }
         if (currentBorrows.size() >= MAX_ACTIVE_BORROWS) {
             return BorrowDecision.denied(ErrorCodes.LIBRARY_BORROW_LIMIT_REACHED,
                     "你已达到同时借阅 5 本的上限");
@@ -740,6 +770,86 @@ final class LibraryService {
                 return toBorrowRecordDTO(renewed, now);
             });
         }
+    }
+
+    /**
+     * Settles the outstanding fee of one record through the campus-card wallet.
+     *
+     * <p>Concurrency is already covered by {@code circulationLock}: two concurrent payments for
+     * the same record serialize, and the second sees {@code feeSettledAt} set and is rejected
+     * before any money moves. The wallet's own idempotency on {@code merchant + reference} is a
+     * second line of defence. If the local write fails after a successful debit, the charge is
+     * credited back so the reader is never left out of pocket.
+     *
+     * @param session authenticated reader; the record must belong to this user
+     * @param request identifies the borrow record
+     * @return the settled record
+     */
+    BorrowRecordDTO payFee(SessionInfo session, BorrowRecordIdRequest request) {
+        Objects.requireNonNull(session, "session must not be null");
+        Objects.requireNonNull(request, "request must not be null");
+        String recordId = requireText(request.getRecordId(), "recordId");
+        synchronized (circulationLock) {
+            return inTransaction(() -> {
+                LocalDateTime now = now();
+                BorrowRecord record = borrowRecordRepository.findById(recordId)
+                        .filter(value -> value.userId().equals(session.getUserId()))
+                        .orElseThrow(() -> failure(
+                                ErrorCodes.LIBRARY_BORROW_RECORD_NOT_FOUND,
+                                "借阅记录不存在，请刷新后重试"));
+                int feeFen = feeFenOf(record);
+                if (feeFen <= 0 || record.feeSettledAt() != null) {
+                    throw failure(ErrorCodes.LIBRARY_FEE_NOT_PAYABLE,
+                            "该记录没有待缴费用，或费用已经结清");
+                }
+                if (campusCards == null) {
+                    throw failure(ErrorCodes.LIBRARY_FEE_NOT_PAYABLE,
+                            "当前服务器未连接校园卡网关，暂时无法缴费");
+                }
+                boolean charged = false;
+                try {
+                    campusCards.debit(session, feeFen, ModuleNames.LIBRARY, "fee:" + recordId);
+                    charged = true;
+                } catch (CardBusinessException exception) {
+                    throw mapCardFailure(exception);
+                }
+                BorrowRecord settled = record.feeSettledAt(now);
+                try {
+                    borrowRecordRepository.update(settled);
+                } catch (RuntimeException exception) {
+                    if (charged) {
+                        campusCards.credit(session, feeFen, ModuleNames.LIBRARY,
+                                "fee-refund:" + recordId);
+                    }
+                    throw exception;
+                }
+                return toBorrowRecordDTO(settled, now);
+            });
+        }
+    }
+
+    /**
+     * Fee owed by one record: the overdue fine of a late return, or lost-book compensation
+     * once that is reported. The two are mutually exclusive — a lost loan produces no fine.
+     *
+     * <p>The amount is never stored: it is derived from {@code returnTime} and {@code dueTime},
+     * which do not change once written, matching the module's "overdue is computed, not stored"
+     * design.
+     */
+    private int feeFenOf(BorrowRecord record) {
+        return record.overdueFineFen(FINE_PER_DAY_FEN, MAX_FINE_FEN);
+    }
+
+    /** Closed records that still owe money; settled fees and fee-free records are excluded. */
+    private List<BorrowRecord> outstandingFeeRecords(String userId) {
+        return borrowRecordRepository.findByUserId(userId).stream()
+                .filter(record -> record.feeSettledAt() == null)
+                .filter(record -> feeFenOf(record) > 0)
+                .toList();
+    }
+
+    private LibraryBusinessException mapCardFailure(CardBusinessException exception) {
+        return new LibraryBusinessException(exception.code(), exception.getMessage());
     }
 
     List<AdminBorrowRecordDTO> queryBorrows(
@@ -1001,7 +1111,7 @@ final class LibraryService {
         return new BorrowRecordDTO(record.recordId(), copy.bookId(), title,
                 copy.copyId(), copy.barcode(), record.borrowTime(), record.dueTime(),
                 record.returnTime(), record.status().name(), record.isOverdueAt(now),
-                record.renewalCount());
+                record.renewalCount(), feeFenOf(record), record.feeSettledAt() != null);
     }
 
     private AdminBorrowRecordDTO toAdminBorrowRecordDTO(
@@ -1013,7 +1123,7 @@ final class LibraryService {
         return new AdminBorrowRecordDTO(record.recordId(), record.userId(), copy.bookId(),
                 title, copy.copyId(), copy.barcode(), record.borrowTime(), record.dueTime(),
                 record.returnTime(), record.status().name(), record.isOverdueAt(now),
-                record.renewalCount());
+                record.renewalCount(), feeFenOf(record), record.feeSettledAt() != null);
     }
 
     private BookCopy requireCopyForRecord(BorrowRecord record) {

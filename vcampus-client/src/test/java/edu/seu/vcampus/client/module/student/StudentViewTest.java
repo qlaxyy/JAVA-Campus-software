@@ -27,6 +27,11 @@ class StudentViewTest {
         verify("20260009", "U-STUDENT-004", true, "20260020", "20260020");
     }
 
+    @Test void studentIdentityDoesNotDependOnSeedIdsOrCardNumberArithmetic() throws Exception {
+        verify("20260039", "U-89ea546759124ad8a52462a140644335", true, "20260039");
+        verify("20270001", "U-STUDENT-100", true, "20270001");
+    }
+
     private void verify(String number, String id, boolean found, String expected,
                         String... manual) throws Exception {
         ActionRouter router = new ActionRouter();
@@ -60,7 +65,32 @@ class StudentViewTest {
                 if (manual.length > 0) { field(view.get()).setText(manual[0]); }
             });
             assertTrue(done.await(10, TimeUnit.SECONDS));
-            SwingUtilities.invokeAndWait(() -> assertEquals(expected, field(view.get()).getText()));
+            SwingUtilities.invokeAndWait(() -> {
+                assertEquals(expected, field(view.get()).getText());
+                if (found) {
+                    try {
+                        var identity = StudentView.class.getDeclaredMethod("isCurrentSelfStudent", String.class);
+                        identity.setAccessible(true);
+                        assertEquals(true, identity.invoke(view.get(), number));
+                        assertEquals(false, identity.invoke(view.get(), number.substring(1)));
+                        assertEquals(false, identity.invoke(view.get(), "20269999"));
+                        var visibility = StudentView.class.getDeclaredMethod(
+                                "updateButtonVisibility", StudentProfileDto.class);
+                        visibility.setAccessible(true);
+                        StudentProfileDto own = new StudentProfileDto();
+                        own.setStudentId(number);
+                        visibility.invoke(view.get(), own);
+                        var edit = StudentView.class.getDeclaredField("btnEdit");
+                        edit.setAccessible(true);
+                        assertTrue(((JButton) edit.get(view.get())).isVisible());
+                        own.setStudentId("20269999");
+                        visibility.invoke(view.get(), own);
+                        assertFalse(((JButton) edit.get(view.get())).isVisible());
+                    } catch (ReflectiveOperationException exception) {
+                        throw new AssertionError(exception);
+                    }
+                }
+            });
         }
     }
 

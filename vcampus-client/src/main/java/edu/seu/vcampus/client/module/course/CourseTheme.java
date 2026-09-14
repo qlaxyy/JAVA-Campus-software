@@ -109,6 +109,13 @@ final class CourseTheme {
         return label;
     }
 
+    /** Redundant heading descriptions do not occupy space; empty-state subtitles remain visible. */
+    static JLabel pageSubtitle(String text) {
+        JLabel label = new JLabel();
+        label.setVisible(false);
+        return label;
+    }
+
     static JLabel subtitle(
         String text) {
 

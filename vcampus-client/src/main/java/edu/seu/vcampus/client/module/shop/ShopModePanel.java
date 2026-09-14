@@ -52,7 +52,7 @@ final class ShopModePanel extends JPanel {
         manageButton.setEnabled(false);
         manageButton.setText("登录后进入");
         statusLabel.setForeground(ShopPalette.MUTED);
-        statusLabel.setText("请先到“用户管理”登录，商店管理员返回后可选择购物或管理。");
+        statusLabel.setText("请先登录。");
     }
 
     private JPanel createHeader(Runnable refreshAccess) {
@@ -70,7 +70,6 @@ final class ShopModePanel extends JPanel {
         accountLabel.setForeground(ShopPalette.PRIMARY_DARK);
         copy.add(title);
         copy.add(Box.createVerticalStrut(5));
-        copy.add(subtitle);
         copy.add(Box.createVerticalStrut(8));
         copy.add(accountLabel);
 
@@ -113,8 +112,6 @@ final class ShopModePanel extends JPanel {
         JLabel rule = new JLabel(requirement);
         rule.setForeground(ShopPalette.MUTED);
         heading.add(title);
-        heading.add(Box.createVerticalStrut(7));
-        heading.add(rule);
 
         JLabel featureList = new JLabel(
                 "<html><body style='line-height:1.8'>" + features + "</body></html>");

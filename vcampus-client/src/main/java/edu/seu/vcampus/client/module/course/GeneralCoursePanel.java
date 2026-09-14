@@ -118,7 +118,7 @@ final class GeneralCoursePanel
                 "通选课");
 
         JLabel subtitle =
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "按照通选类别查看当前开放课程");
 
         titleArea.add(

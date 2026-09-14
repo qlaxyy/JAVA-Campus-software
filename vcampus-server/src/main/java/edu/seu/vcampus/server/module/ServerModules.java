@@ -87,6 +87,7 @@ public final class ServerModules {
             CampusCardWallet wallet,
             ServerContext context) {
         ActionRouter router = new ActionRouter();
+        router.configureDatabaseAudit(context.sessions());
         router.register(Actions.PING, request ->
                 Response.success(
                         request,
@@ -105,6 +106,7 @@ public final class ServerModules {
             HospitalServerModule hospitalModule) {
         ActionRouter router = new ActionRouter();
         ServerContext context = context(authentication, courseModule);
+        router.configureDatabaseAudit(context.sessions());
         router.register(Actions.PING, request ->
                 Response.success(request, "Server is reachable.", "PONG"));
         modules(

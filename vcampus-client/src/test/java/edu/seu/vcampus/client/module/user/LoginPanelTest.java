@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class LoginPanelTest {
 
     @Test
-    void initialViewOffersCredentialFieldsLoginActionAndTestAccounts() throws Exception {
+    void initialViewOffersCredentialsWithoutPublicDemoAccounts() throws Exception {
         AtomicReference<LoginPanel> panelReference = new AtomicReference<>();
         SwingUtilities.invokeAndWait(() -> panelReference.set(new LoginPanel(
                 new ClientContext(new CampusClient("127.0.0.1", 1)))));
@@ -43,31 +43,11 @@ class LoginPanelTest {
 
         assertEquals(List.of("登录"), buttons);
         assertTrue(labels.contains("欢迎登录"));
-        assertTrue(labels.contains("开发阶段测试账号"));
-        assertTrue(labels.contains("以下账号统一密码：123456"));
+        assertFalse(labels.contains("开发阶段测试账号"));
+        assertFalse(labels.contains("以下账号统一密码：123456"));
         assertFalse(labels.contains("用户登录"));
         assertFalse(labels.contains("开发期基础登录"));
-        assertTrue(labels.contains("超级管理员  20260000"));
-        assertTrue(labels.contains("学生账号  20260006"));
-        assertTrue(labels.contains("医生账号  20260030"));
-        assertTrue(labels.contains("学籍管理员  20260001"));
-        assertTrue(labels.contains("选课管理员  20260002"));
-        assertTrue(labels.contains("图书馆管理员  20260003"));
-        assertTrue(labels.contains("商店管理员  20260004"));
-        assertTrue(labels.contains("医院管理员  20260005"));
-        assertTrue(labels.contains("教师账号  20260021"));
-        assertEquals(List.of(
-                "超级管理员  20260000",
-                "学籍管理员  20260001",
-                "选课管理员  20260002",
-                "图书馆管理员  20260003",
-                "商店管理员  20260004",
-                "医院管理员  20260005",
-                "学生账号  20260006",
-                "教师账号  20260021",
-                "医生账号  20260030"),
-                labels.stream().filter(text -> text.matches(".*2026\\d{4}"))
-                        .toList());
+        assertTrue(labels.stream().noneMatch(text -> text.matches(".*2026\\d{4}")));
     }
 
     @Test

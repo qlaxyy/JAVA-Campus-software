@@ -14,6 +14,8 @@ import java.util.logging.Logger;
 public final class AccessDatabase {
 
     private static final String DRIVER_CLASS = "net.ucanaccess.jdbc.UcanaccessDriver";
+    // JUL keeps named loggers weakly; retain this one across database connections.
+    private static final Logger CURSOR_LOGGER = Logger.getLogger("net.ucanaccess.commands.AbstractCursorCommand");
 
     private final Path path;
 
@@ -31,7 +33,12 @@ public final class AccessDatabase {
         String url = "jdbc:ucanaccess://" + path + ";newDatabaseVersion=V2010";
         Connection connection = DriverManager.getConnection(url);
         suppressMisleadingCursorWarnings();
-        return connection;
+        try {
+            return DatabaseAuditTrail.wrap(connection);
+        } catch (SQLException | RuntimeException exception) {
+            connection.close();
+            throw exception;
+        }
     }
 
     /** Returns the normalized database file path. */
@@ -65,8 +72,7 @@ public final class AccessDatabase {
         // Opening the first connection can reset this UCanAccess logger. Configure it
         // afterwards: rejected WHERE candidates are normal, while real SQL failures
         // still surface as exceptions and SEVERE records.
-        Logger logger = Logger.getLogger("net.ucanaccess.commands.AbstractCursorCommand");
-        logger.setLevel(Level.SEVERE);
-        logger.setFilter(record -> record.getLevel().intValue() >= Level.SEVERE.intValue());
+        CURSOR_LOGGER.setLevel(Level.SEVERE);
+        CURSOR_LOGGER.setFilter(record -> record.getLevel().intValue() >= Level.SEVERE.intValue());
     }
 }

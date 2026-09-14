@@ -116,7 +116,7 @@ final class CourseCenterPanel
                 "选课中心");
 
         JLabel subtitle =
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "选择当前学期的选课批次，进入课程选择与调整");
 
         titleArea.add(

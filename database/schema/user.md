@@ -117,7 +117,7 @@
 | `USER.ADMIN_UPDATE_ACCOUNT` | `SUPER_ADMIN` | 修改显示名称和子系统管理范围 |
 | `USER.ADMIN_UPDATE_STATUS` | `SUPER_ADMIN` | 启用或停用账号，不物理删除 |
 | `USER.ADMIN_RESET_PASSWORD` | `SUPER_ADMIN` | 重置账号密码并清除该账号已有会话 |
-| `USER.ADMIN_LIST_AUDIT_LOGS` | `SUPER_ADMIN` | 查看全部账号管理操作记录 |
+| `USER.ADMIN_LIST_AUDIT_LOGS` | `SUPER_ADMIN` | 合并查看全部账号审计与各模块数据库写入 |
 | `USER.CURRENT_TEACHER_PROFILE` | 任意已登录账号 | 查询本人是否具有有效教师资格及院系、职称 |
 | `USER.ADMIN_LIST_TEACHERS` | `SUPER_ADMIN` | 查看全部教师档案，包括已停用资格 |
 | `USER.ADMIN_SAVE_TEACHER_PROFILE` | `SUPER_ADMIN` | 为已有账号新增或更新教师档案，并启用或停用教师资格 |
@@ -140,7 +140,13 @@
 
 旧的英文字母测试登录名仍可在兼容启动中迁移；已经是 8 位数字的一卡通号不会再被普通启动过程静默重排。最终演示数据只能通过停服后的 `--rebuild-demo-database` 命令生成，旧库会先自动备份。
 
-## 7. 待评审问题
+## 7. 统一数据库写入审计
+
+新增 `tblDatabaseAuditLog`，由共享 JDBC 基础设施维护：`auditId`（Text36 主键）、`occurredAt`（Date/Time，索引）、`actorUserId`（Text64）、`actorUsername`（Text50）、`actorDisplayName`（Text100）、`actionCode`（Text80）、`targetText`（Text120）、`successful`（Yes/No）、`detailText`（Long Text），均为必填。
+
+类型为 `DATABASE.INSERT/UPDATE/DELETE/CREATE/ALTER/DROP`。详情仅包含触发的业务 Action、影响条数和请求编号，不含业务字段原值、新值或敏感参数。只保留成功提交的 DML；失败或回滚不伪装成成功。账号业务失败仍由既有 `tblUserAuditLog` 记录，两类日志合并读取但不互相覆盖，姓名保留当时快照。范围与限制见[数据库说明](../README.md#统一数据库操作记录)。
+
+## 8. 待评审问题
 
 - UCanAccess 连接、建表、事务写入和重连读取已完成最小实验；并发生成账号已验证不会重复。跨模块同时写同一个 Access 文件仍需专项压力测试。
 - 当前采用 JDK 自带 PBKDF2-HMAC-SHA256，每账号独立 16 字节随机盐、120000 次迭代；正式部署前仍应根据验收电脑性能复测参数。

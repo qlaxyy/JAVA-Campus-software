@@ -114,7 +114,7 @@ final class CourseAdminTeacherPanel
                 5));
 
         header.add(
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "从公共有效教师名单中选择教师，并分配至指定教学班"));
 
         add(

@@ -19,6 +19,32 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class LibraryPanelTest {
 
     @Test
+    void terminalShowsStatusOnlyAfterBarcodeInputAndUsesPlainResultText() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            SelfServicePanel panel = new SelfServicePanel(
+                    new ClientContext(new CampusClient("127.0.0.1", 1, 100)));
+            javax.swing.JLabel status = named(panel, javax.swing.JLabel.class,
+                    "library.selfService.reservationCheck");
+            javax.swing.JLabel result = named(panel, javax.swing.JLabel.class,
+                    "library.selfService.outcome");
+            javax.swing.JTextField barcode = named(panel, javax.swing.JTextField.class,
+                    "library.selfService.barcode");
+            assertFalse(status.isVisible());
+            assertFalse(result.isVisible());
+            barcode.setText("TEST-COPY");
+            assertTrue(status.isVisible());
+            barcode.setText("");
+            assertFalse(status.isVisible());
+            assertFalse(result.isVisible());
+            result.setText("借书成功");
+            assertTrue(result.isVisible());
+            assertFalse(result.isOpaque());
+            assertEquals(null, result.getBorder());
+            assertEquals(status.getParent(), result.getParent());
+        });
+    }
+
+    @Test
     void tableUsesSingleSelectionAndClickingAnotherBookReplacesSelection() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             JTable table = createResultTable();

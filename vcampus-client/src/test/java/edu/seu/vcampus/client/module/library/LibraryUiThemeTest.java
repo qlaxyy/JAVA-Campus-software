@@ -3,6 +3,7 @@ package edu.seu.vcampus.client.module.library;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.SwingUtilities;
 import java.awt.Color;
 import java.awt.Graphics2D;
@@ -15,6 +16,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Guards the button contrast regression that previously hid action labels. */
 class LibraryUiThemeTest {
+
+    @Test
+    void queryScopesLeaveEnoughRoomForEveryOptionAndArrow() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JComboBox<String> scope = new JComboBox<>(
+                    new String[]{"当前借阅", "借阅历史", "逾期未还"});
+            LibraryUiTheme.styleComboBox(scope);
+            scope.setSize(scope.getPreferredSize());
+            scope.doLayout();
+            int arrowWidth = 0;
+            for (java.awt.Component child : scope.getComponents()) {
+                if (child instanceof javax.swing.AbstractButton) {
+                    arrowWidth += child.getWidth();
+                }
+            }
+            int available = scope.getWidth() - arrowWidth
+                    - scope.getInsets().left - scope.getInsets().right;
+            for (int index = 0; index < scope.getItemCount(); index++) {
+                int textWidth = scope.getFontMetrics(scope.getFont())
+                        .stringWidth(scope.getItemAt(index));
+                assertTrue(available >= textWidth + 8,
+                        "query scope must display its complete option, without ellipsis");
+            }
+        });
+    }
 
     @Test
     void everyButtonKindKeepsDisabledTextReadable() throws Exception {

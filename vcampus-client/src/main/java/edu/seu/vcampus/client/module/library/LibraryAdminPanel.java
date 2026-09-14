@@ -122,7 +122,7 @@ public final class LibraryAdminPanel extends JPanel {
     private final JTable popularTable = new JTable(popularModel);
     private LibraryStatisticsDTO statistics;
 
-    private final JLabel outcome = new JLabel("管理员操作均由服务器再次校验权限");
+    private final JLabel outcome = new JLabel(" ");
     private final JLabel status = new JLabel("正在等待加载数据");
     private List<BookDTO> books = List.of();
     private List<BookCopyDTO> copies = List.of();
@@ -339,9 +339,6 @@ public final class LibraryAdminPanel extends JPanel {
         header.add(new JLabel("查询范围"));
         header.add(reservationScope);
         header.add(refreshReservations);
-        JLabel hint = LibraryUiTheme.createMutedLabel(
-                "预约队列只读；取消与顺延由读者操作或系统到期清理触发");
-        header.add(hint);
         panel.add(header, BorderLayout.NORTH);
         panel.add(LibraryUiTheme.tableScrollPane(reservationTable), BorderLayout.CENTER);
         LibraryUiTheme.setColumnWidths(reservationTable,
@@ -779,7 +776,7 @@ public final class LibraryAdminPanel extends JPanel {
         selectCategory(book.getCategoryId());
         copyBook.setText("当前书目：《" + book.getTitle() + "》（" + book.getBookId() + "）· "
                 + displayBookStatus(book.getStatus()));
-        outcome.setText("已选择《" + book.getTitle() + "》；可切换到“实体单册”维护馆藏");
+        outcome.setText("已选择《" + book.getTitle() + "》");
         clearCopyForm();
         updateControls();
     }

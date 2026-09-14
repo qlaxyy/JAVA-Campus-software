@@ -148,7 +148,6 @@ final class HospitalHomePanel extends JPanel {
 
         copy.add(title);
         copy.add(Box.createVerticalStrut(5));
-        copy.add(subtitle);
 
         JButton switchButton = HospitalTheme.quietButton("切换使用模式");
         switchButton.addActionListener(event -> switchMode.run());
@@ -363,7 +362,6 @@ final class HospitalHomePanel extends JPanel {
         javax.swing.JTextArea detail = HospitalResponsiveLayout.wrappingText(
                 description, HospitalTheme.uiFont(Font.PLAIN, 13F), HospitalTheme.MUTED);
         card.add(heading, BorderLayout.NORTH);
-        card.add(detail, BorderLayout.CENTER);
         return card;
     }
 

@@ -45,6 +45,7 @@ public final class InMemoryAuthenticationService
     private final Duration idleTimeout;
     private final Duration absoluteTimeout;
     private final UserAuditRepository auditLogs;
+    private final edu.seu.vcampus.server.infrastructure.database.AccessDatabase auditDatabase;
     private final TeacherRegistryService teacherRegistry;
     private final LoginAttemptLimiter loginAttempts;
     private final ConcurrentMap<String, StoredSession> sessions = new ConcurrentHashMap<>();
@@ -74,6 +75,8 @@ public final class InMemoryAuthenticationService
         this.auditLogs = users instanceof AccessUserRepository accessRepository
                 ? new AccessUserAuditRepository(accessRepository.database())
                 : new InMemoryUserAuditRepository();
+        this.auditDatabase = users instanceof AccessUserRepository accessRepository
+                ? accessRepository.database() : null;
         this.teacherRegistry = new TeacherRegistryService(
                 users,
                 users instanceof AccessUserRepository accessRepository
@@ -88,6 +91,16 @@ public final class InMemoryAuthenticationService
 
     UserAuditRepository auditLogs() {
         return auditLogs;
+    }
+
+    java.util.List<edu.seu.vcampus.common.user.UserAuditLogEntry> allAuditLogs() {
+        var entries = new java.util.ArrayList<>(auditLogs.findAll());
+        if (auditDatabase != null) {
+            entries.addAll(edu.seu.vcampus.server.infrastructure.database.DatabaseAuditTrail.findAll(auditDatabase));
+        }
+        entries.sort(java.util.Comparator.comparingLong(
+                edu.seu.vcampus.common.user.UserAuditLogEntry::getOccurredAtEpochMillis).reversed());
+        return java.util.List.copyOf(entries);
     }
 
     TeacherRegistryService teachers() {

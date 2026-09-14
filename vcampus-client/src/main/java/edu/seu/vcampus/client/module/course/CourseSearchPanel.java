@@ -212,7 +212,7 @@ final class CourseSearchPanel
                 "全校课程查询");
 
         JLabel subtitle =
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "查询当前学期全校开设的课程与教学班");
 
         titleArea.add(

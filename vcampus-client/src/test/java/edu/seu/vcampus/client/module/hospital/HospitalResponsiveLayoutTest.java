@@ -204,6 +204,7 @@ class HospitalResponsiveLayoutTest {
         SwingUtilities.invokeAndWait(() -> {
             JPanel header = HospitalPageHeader.create(
                     "费用清单", "查看费用并完成支付", "医院首页", () -> { }, null);
+            assertEquals(0, countTextAreas(header));
             JButton back = namedButton(header, "hospitalPageBackButton");
 
             assertTrue(back.isContentAreaFilled());
@@ -211,6 +212,15 @@ class HospitalResponsiveLayoutTest {
             assertTrue(back.getBorder().getBorderInsets(back).left >= 8);
             assertEquals(Cursor.HAND_CURSOR, back.getCursor().getType());
         });
+    }
+
+    private static int countTextAreas(java.awt.Container container) {
+        int count = 0;
+        for (java.awt.Component child : container.getComponents()) {
+            if (child instanceof JTextArea) { count++; }
+            else if (child instanceof java.awt.Container nested) { count += countTextAreas(nested); }
+        }
+        return count;
     }
 
     @Test

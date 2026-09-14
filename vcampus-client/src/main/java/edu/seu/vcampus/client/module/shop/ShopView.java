@@ -278,6 +278,7 @@ public final class ShopView extends JPanel {
 
     private void updateShoppingHeader() {
         boolean admin = canManageShop();
+        switchFromShop.putClientProperty("navigation.available", admin);
         modeChip.setText(admin ? "购物" : "顾客");
         modeChip.setBackground(admin ? ShopPalette.PRIMARY_LIGHT : ShopPalette.PRIMARY_LIGHT);
         modeChip.setForeground(ShopPalette.PRIMARY_DARK);

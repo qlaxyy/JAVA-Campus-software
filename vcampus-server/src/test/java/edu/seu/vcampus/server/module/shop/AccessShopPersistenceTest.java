@@ -103,6 +103,66 @@ class AccessShopPersistenceTest {
         assertEquals((byte) 0xD8, cover[1]);
     }
 
+    @Test
+    void restartingDoesNotRewriteAdministratorEditsOrRecreateSeedPhotos() throws Exception {
+        AccessDatabase database = new AccessDatabase(directory.resolve("seed-once.accdb"));
+        new AccessShopCatalog(database);
+        byte[] savedPhoto;
+        try (Connection connection = database.openConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("UPDATE tblShopProduct SET productName = '管理员修改商品', stockQty = 7 WHERE productId = 8");
+            try (ResultSet rows = statement.executeQuery("SELECT photoData FROM tblShopProductPhoto WHERE productId = 8 AND photoIndex = 0")) {
+                assertTrue(rows.next());
+                savedPhoto = rows.getBytes(1);
+            }
+        }
+        int auditCount = edu.seu.vcampus.server.infrastructure.database.DatabaseAuditTrail.findAll(database).size();
+        new AccessShopCatalog(database);
+        assertEquals(auditCount, edu.seu.vcampus.server.infrastructure.database.DatabaseAuditTrail.findAll(database).size());
+        try (Connection connection = database.openConnection();
+             Statement statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery("SELECT productName, stockQty FROM tblShopProduct WHERE productId = 8")) {
+            assertTrue(rows.next());
+            assertEquals("管理员修改商品", rows.getString(1));
+            assertEquals(7, rows.getInt(2));
+        }
+        try (Connection connection = database.openConnection();
+             Statement statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery("SELECT photoData FROM tblShopProductPhoto WHERE productId = 8 AND photoIndex = 0")) {
+            assertTrue(rows.next());
+            org.junit.jupiter.api.Assertions.assertArrayEquals(savedPhoto, rows.getBytes(1));
+        }
+    }
+
+    @Test
+    void firstVersionMarkerAlsoPreservesExistingProductsAndPhotos() throws Exception {
+        AccessDatabase database = new AccessDatabase(directory.resolve("legacy-seed-marker.accdb"));
+        new AccessShopCatalog(database);
+        byte[] photo;
+        try (Connection connection = database.openConnection(); Statement statement = connection.createStatement()) {
+            statement.executeUpdate("DELETE FROM tblShopSeedVersion");
+            statement.executeUpdate("UPDATE tblShopProduct SET productName = '保留旧商品', stockQty = 6 WHERE productId = 8");
+            try (ResultSet rows = statement.executeQuery("SELECT photoData FROM tblShopProductPhoto WHERE productId = 8 AND photoIndex = 0")) {
+                assertTrue(rows.next());
+                photo = rows.getBytes(1);
+            }
+        }
+        int count = edu.seu.vcampus.server.infrastructure.database.DatabaseAuditTrail.findAll(database).size();
+        new AccessShopCatalog(database);
+        assertEquals(count + 1, edu.seu.vcampus.server.infrastructure.database.DatabaseAuditTrail.findAll(database).size());
+        try (Connection connection = database.openConnection(); Statement statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery("SELECT productName, stockQty FROM tblShopProduct WHERE productId = 8")) {
+            assertTrue(rows.next());
+            assertEquals("保留旧商品", rows.getString(1));
+            assertEquals(6, rows.getInt(2));
+        }
+        try (Connection connection = database.openConnection(); Statement statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery("SELECT photoData FROM tblShopProductPhoto WHERE productId = 8 AND photoIndex = 0")) {
+            assertTrue(rows.next());
+            org.junit.jupiter.api.Assertions.assertArrayEquals(photo, rows.getBytes(1));
+        }
+    }
+
     private static SessionInfo session(String userId, String card, String name) {
         return new SessionInfo("token-" + card, userId, card, name, Role.USER);
     }

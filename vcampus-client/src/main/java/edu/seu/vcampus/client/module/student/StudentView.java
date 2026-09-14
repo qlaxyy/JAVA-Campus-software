@@ -89,10 +89,17 @@ public class StudentView extends JPanel {
     private final JButton btnOpenAudit = new JButton("查看毕业审核");
 
     private StudentProfileDto currentProfile;
+    private long initialSearchGeneration;
 
     public StudentView(ClientContext context) {
         this.context = context;
         initUI();
+        addHierarchyListener(event -> {
+            if ((event.getChangeFlags() & java.awt.event.HierarchyEvent.SHOWING_CHANGED) != 0
+                    && isShowing()) {
+                initializeOwnStudentSearch();
+            }
+        });
         clearFormValues();
         setEditableState(false);
         updateButtonVisibility(null);
@@ -104,73 +111,14 @@ public class StudentView extends JPanel {
             .orElse(false);
     }
 
-    private boolean isCurrentSessionAStudent() {
-        return context.currentSession()
-            .map(s -> {
-                String uid = s.getUserId() != null ? s.getUserId().trim().toUpperCase() : "";
-                return uid.startsWith("U-STUDENT-") && !uid.contains("ADMIN");
-            })
-            .orElse(false);
-    }
-
-    private boolean isCurrentTeacher() {
-        return context.currentSession()
-            .map(s -> {
-                String uid = s.getUserId() != null ? s.getUserId().trim().toUpperCase() : "";
-                String role = s.getRole() != null ? s.getRole().name() : "";
-                return uid.startsWith("U-TEACHER-") || "TEACHER".equalsIgnoreCase(role);
-            })
-            .orElse(false);
-    }
-
-    private String cleanId(String id) {
-        if (id == null) return "";
-        String s = id.trim().toLowerCase();
-        if (s.startsWith("u-")) {
-            s = s.substring(2);
-        }
-        return s.replace("-", "");
-    }
-
+    /** The server has already authorized the returned student profile. Never infer identity from ID prefixes. */
     private boolean isCurrentSelfStudent(String targetStudentId) {
-        if (targetStudentId == null || targetStudentId.isBlank() || !isCurrentSessionAStudent()) {
+        if (targetStudentId == null || targetStudentId.isBlank()) {
             return false;
         }
-
-        var sessionOpt = context.currentSession();
-        if (sessionOpt.isEmpty()) {
-            return false;
-        }
-        var session = sessionOpt.get();
-
-        String rawUid = session.getUserId() != null ? session.getUserId().trim() : "";
-        String rawUname = session.getUsername() != null ? session.getUsername().trim() : "";
-        String target = targetStudentId.trim();
-
-        if (target.equalsIgnoreCase(rawUid) || target.equalsIgnoreCase(rawUname)) {
-            return true;
-        }
-
-        try {
-            if (target.matches("\\d{8}") && rawUid.toUpperCase().startsWith("U-STUDENT-")) {
-                int cardNum = Integer.parseInt(target);
-                int studentIdxFromCard = cardNum - 20260005;
-                int studentIdxFromUid = Integer.parseInt(rawUid.replaceAll("[^0-9]", ""));
-
-                if (studentIdxFromCard == studentIdxFromUid) {
-                    return true;
-                }
-            }
-        } catch (Exception ignored) {
-        }
-
-        String cleanTarget = cleanId(target);
-        String cleanUid = cleanId(rawUid);
-        String cleanUname = cleanId(rawUname);
-
-        return cleanTarget.equalsIgnoreCase(cleanUid)
-            || cleanTarget.equalsIgnoreCase(cleanUname)
-            || (!cleanUid.isEmpty() && (cleanTarget.contains(cleanUid) || cleanUid.contains(cleanTarget)));
+        return context.currentSession()
+                .map(session -> targetStudentId.trim().equals(session.getUsername().trim()))
+                .orElse(false);
     }
 
     /**
@@ -226,8 +174,6 @@ public class StudentView extends JPanel {
         lblSubtitle.setForeground(TEXT_MUTED);
 
         headerPanel.add(lblTitle);
-        headerPanel.add(Box.createVerticalStrut(4));
-        headerPanel.add(lblSubtitle);
         mainContainer.add(headerPanel);
         mainContainer.add(Box.createVerticalStrut(15));
 
@@ -246,9 +192,9 @@ public class StudentView extends JPanel {
         bannerPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 90));
         bannerPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JPanel bannerTextPanel = new JPanel(new GridLayout(2, 1, 0, 4));
+        JPanel bannerTextPanel = new JPanel(new GridLayout(1, 1));
         bannerTextPanel.setOpaque(false);
-        JLabel lblBannerTitle = new JLabel("在校学籍全周期管理");
+        JLabel lblBannerTitle = new JLabel("学籍查询");
         lblBannerTitle.setFont(new Font("微软雅黑", Font.BOLD, 17));
         lblBannerTitle.setForeground(Color.WHITE);
 
@@ -259,13 +205,13 @@ public class StudentView extends JPanel {
         lblBannerDesc.setForeground(new Color(220, 240, 235));
 
         bannerTextPanel.add(lblBannerTitle);
-        bannerTextPanel.add(lblBannerDesc);
         bannerPanel.add(bannerTextPanel, BorderLayout.CENTER);
 
         JPanel bannerRightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 5));
         bannerRightPanel.setOpaque(false);
         txtSearchId.setPreferredSize(new Dimension(110, 32));
-        txtSearchId.setText("20260006");
+        txtSearchId.setName("student.searchId");
+        txtSearchId.setText("");
         txtSearchId.setFont(FONT_BODY);
 
         btnSearch.setPreferredSize(new Dimension(95, 32));
@@ -441,6 +387,49 @@ public class StudentView extends JPanel {
         btnSave.addActionListener(e -> executeUpdate());
     }
 
+    /** Membership comes from the server's student profile, not a userId/name heuristic. */
+    SwingWorker<Response, Void> initializeOwnStudentSearch() {
+        long generation = ++initialSearchGeneration;
+        txtSearchId.setText("");
+        clearFormValues();
+        lblStatus.setText("请输入学号开始检索");
+        lblStatus.setForeground(TEXT_MUTED);
+        btnEdit.setEnabled(false);
+        setEditableState(false);
+        var session = context.currentSession();
+        if (session.isEmpty()) {
+            return null;
+        }
+        String token = session.get().getToken();
+        String number = session.get().getUsername();
+        SwingWorker<Response, Void> worker = new SwingWorker<>() {
+            @Override protected Response doInBackground() throws Exception {
+                return context.send(StudentActions.GET_PROFILE, new StudentProfileRequest(number));
+            }
+            @Override protected void done() {
+                if (generation != initialSearchGeneration
+                        || !context.currentSession().map(s -> token.equals(s.getToken())).orElse(false)
+                        || !txtSearchId.getText().isBlank()) {
+                    return;
+                }
+                try {
+                    Response result = get();
+                    if (result.isSuccess() && result.getData() instanceof StudentProfileResponse data
+                            && data.isFound()
+                            && data.getProfile() != null) {
+                        txtSearchId.setText(data.getProfile().getStudentId());
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                } catch (java.util.concurrent.ExecutionException exception) {
+                    // No automatic query error dialog: leave the search field blank for manual use.
+                }
+            }
+        };
+        worker.execute();
+        return worker;
+    }
+
     private void setupContainer(JPanel container, JComponent viewComp, JComponent editComp) {
         container.setOpaque(false);
         container.setLayout(new CardLayout());
@@ -508,7 +497,7 @@ public class StudentView extends JPanel {
         card.setOpaque(false);
         card.setBorder(new EmptyBorder(14, 16, 14, 16));
 
-        JPanel head = new JPanel(new GridLayout(2, 1, 0, 2));
+        JPanel head = new JPanel(new GridLayout(1, 1));
         head.setOpaque(false);
         JLabel lblT = new JLabel(title);
         lblT.setFont(FONT_CARD_TITLE);
@@ -519,7 +508,6 @@ public class StudentView extends JPanel {
         lblD.setForeground(TEXT_MUTED);
 
         head.add(lblT);
-        head.add(lblD);
         card.add(head, BorderLayout.NORTH);
         return card;
     }
@@ -615,7 +603,7 @@ public class StudentView extends JPanel {
         }
 
         btnSearch.setEnabled(false);
-        lblStatus.setText("正在校验权限并获取学籍档案...");
+        lblStatus.setText("正在查询……");
         lblStatus.setForeground(ACCENT_BLUE);
 
         new SwingWorker<Response, Void>() {
@@ -648,7 +636,7 @@ public class StudentView extends JPanel {
                         clearFormValues();
                         updateButtonVisibility(null);
                     } else {
-                        lblStatus.setText("● 学籍档案校验通过，当前已完成全量信息同步");
+                        lblStatus.setText("查询成功");
                         lblStatus.setForeground(new Color(13, 120, 90));
                         currentProfile = profileRes.getProfile();
                         renderProfile(currentProfile);
@@ -688,7 +676,7 @@ public class StudentView extends JPanel {
         );
 
         btnSave.setEnabled(false);
-        lblStatus.setText("正在提交档案更新并进行权限校验...");
+        lblStatus.setText("正在保存……");
         lblStatus.setForeground(ACCENT_BLUE);
 
         new SwingWorker<Response, Void>() {
@@ -801,7 +789,7 @@ public class StudentView extends JPanel {
         }
         valCampus.setText(campusName);
 
-        boolean canViewPolitical = isStudentAdmin() || isCurrentSelfStudent(p.getStudentId()) || isCurrentTeacher();
+        boolean canViewPolitical = currentProfile != null;
         if (canViewPolitical && p.getPoliticalStatus() != null && !p.getPoliticalStatus().isBlank()) {
             cmbPolitical.setSelectedItem(p.getPoliticalStatus());
         } else {

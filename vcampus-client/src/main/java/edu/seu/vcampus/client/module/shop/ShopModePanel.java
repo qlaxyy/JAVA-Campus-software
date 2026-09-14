@@ -42,7 +42,7 @@ final class ShopModePanel extends JPanel {
         manageButton.setEnabled(canManage);
         manageButton.setText(canManage ? "进入管理" : "无权限");
         statusLabel.setForeground(ShopPalette.MUTED);
-        statusLabel.setText("一次只进入一个工作台。购物处理下单与校园卡，管理处理后台上架。");
+        statusLabel.setText(" ");
     }
 
     void showLoginRequired() {
@@ -65,11 +65,8 @@ final class ShopModePanel extends JPanel {
         JLabel title = new JLabel("选择商店使用方式");
         title.setFont(title.getFont().deriveFont(Font.BOLD, 26F));
         title.setForeground(ShopPalette.TEXT);
-        JLabel subtitle = new JLabel("商店管理员可进入购物或管理；一次只打开其中一个工作台");
-        subtitle.setForeground(ShopPalette.MUTED);
         accountLabel.setForeground(ShopPalette.PRIMARY_DARK);
         copy.add(title);
-        copy.add(Box.createVerticalStrut(5));
         copy.add(Box.createVerticalStrut(8));
         copy.add(accountLabel);
 
@@ -85,40 +82,21 @@ final class ShopModePanel extends JPanel {
         modes.setOpaque(false);
         shopButton.addActionListener(event -> openShopping.run());
         manageButton.addActionListener(event -> openManage.run());
-        modes.add(modeCard(
-                "购物",
-                "浏览商品、加入购物车并用校园卡付款",
-                "首页商品<br>购物车<br>校园卡充值与付款<br>我的订单",
-                shopButton));
-        modes.add(modeCard(
-                "管理",
-                "需要商店管理范围授权",
-                "上架商品<br>在售目录<br>成交订单",
-                manageButton));
+        modes.add(modeCard("购物", shopButton));
+        modes.add(modeCard("管理", manageButton));
         return modes;
     }
 
-    private JPanel modeCard(String titleText, String requirement, String features, JButton action) {
+    private JPanel modeCard(String titleText, JButton action) {
         ShopPalette.SurfacePanel card = new ShopPalette.SurfacePanel();
-        card.setLayout(new BorderLayout(0, 16));
-        card.setBorder(BorderFactory.createEmptyBorder(22, 20, 20, 20));
+        card.setLayout(new BorderLayout(0, 24));
+        card.setBorder(BorderFactory.createEmptyBorder(32, 24, 24, 24));
 
-        JPanel heading = new JPanel();
-        heading.setOpaque(false);
-        heading.setLayout(new BoxLayout(heading, BoxLayout.Y_AXIS));
-        JLabel title = new JLabel(titleText);
-        title.setFont(title.getFont().deriveFont(Font.BOLD, 20F));
+        JLabel title = new JLabel(titleText, SwingConstants.CENTER);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 22F));
         title.setForeground(ShopPalette.TEXT);
-        JLabel rule = new JLabel(requirement);
-        rule.setForeground(ShopPalette.MUTED);
-        heading.add(title);
-
-        JLabel featureList = new JLabel(
-                "<html><body style='line-height:1.8'>" + features + "</body></html>");
-        featureList.setForeground(ShopPalette.TEXT);
-        action.setPreferredSize(new Dimension(0, 42));
-        card.add(heading, BorderLayout.NORTH);
-        card.add(featureList, BorderLayout.CENTER);
+        action.setPreferredSize(new Dimension(0, 44));
+        card.add(title, BorderLayout.CENTER);
         card.add(action, BorderLayout.SOUTH);
         return card;
     }

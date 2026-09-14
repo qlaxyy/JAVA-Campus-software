@@ -96,7 +96,16 @@ public final class CourseActions {
         ActionNames.of(
             ModuleNames.COURSE,
             "DROP_COURSE");
-
+    /**
+     * 查询当前登录学生的成绩。
+     *
+     * 请求数据为 null，服务器根据 token
+     * 确定当前学生身份。
+     */
+    public static final String STUDENT_LIST_GRADES =
+        ActionNames.of(
+            ModuleNames.COURSE,
+            "STUDENT_LIST_GRADES");
     /*
      * =========================
      * 教务老师 / 超级管理员 Action

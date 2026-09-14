@@ -399,6 +399,10 @@ final class CourseBatchPanel extends JPanel {
         tabs.addTab(
             "全校课程查询",
             searchPanel);
+        tabs.addTab(
+            "我的成绩",
+            new CourseStudentGradePanel(
+                context));
         /*
          * =========================
          * 标签切换刷新

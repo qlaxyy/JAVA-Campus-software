@@ -122,7 +122,6 @@ final class AdminDoctorPanel extends JPanel {
         JPanel copy = verticalList();
         copy.add(sectionTitle("医生名单"));
         copy.add(Box.createVerticalStrut(4));
-        copy.add(note("按科室查看当前数据库中的全部在岗与已停用医生。"));
         JButton open = HospitalTheme.primaryButton("查看医生名单");
         open.setName("openAdminDoctorDirectoryButton");
         open.addActionListener(event -> openDirectory.run());
@@ -202,7 +201,6 @@ final class AdminDoctorPanel extends JPanel {
         heading.add(sectionTitle("申请记录"), BorderLayout.WEST);
         JLabel hint = new JLabel("最新申请优先");
         hint.setForeground(HospitalTheme.MUTED);
-        heading.add(hint, BorderLayout.EAST);
         panel.add(heading, BorderLayout.NORTH);
         panel.add(history, BorderLayout.CENTER);
         return panel;

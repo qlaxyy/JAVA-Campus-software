@@ -64,14 +64,10 @@ final class LibraryUiTheme {
         JLabel titleLabel = new JLabel(title);
         titleLabel.setForeground(TEXT);
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 24F));
-        JLabel descriptionLabel = new JLabel(description);
-        descriptionLabel.setForeground(MUTED);
-        descriptionLabel.setFont(descriptionLabel.getFont().deriveFont(13F));
 
         JPanel titles = new JPanel(new BorderLayout(0, 3));
         titles.setOpaque(false);
         titles.add(titleLabel, BorderLayout.NORTH);
-        titles.add(descriptionLabel, BorderLayout.CENTER);
         header.add(eyebrowLabel, BorderLayout.NORTH);
         header.add(titles, BorderLayout.CENTER);
         return header;
@@ -135,10 +131,18 @@ final class LibraryUiTheme {
     }
 
     static void styleComboBox(JComboBox<?> comboBox) {
-        comboBox.setPreferredSize(new Dimension(comboBox.getPreferredSize().width, 38));
         comboBox.setBackground(SURFACE);
         comboBox.setForeground(TEXT);
         comboBox.setFont(comboBox.getFont().deriveFont(13F));
+        // Measure after applying the font, leaving space for the taller arrow button.
+        comboBox.setPreferredSize(null);
+        int contentWidth = 0;
+        for (int index = 0; index < comboBox.getItemCount(); index++) {
+            contentWidth = Math.max(contentWidth, comboBox.getFontMetrics(comboBox.getFont())
+                    .stringWidth(String.valueOf(comboBox.getItemAt(index))));
+        }
+        comboBox.setPreferredSize(new Dimension(
+                Math.max(comboBox.getPreferredSize().width, contentWidth + 60), 38));
     }
 
     static void styleTextArea(JTextArea area) {

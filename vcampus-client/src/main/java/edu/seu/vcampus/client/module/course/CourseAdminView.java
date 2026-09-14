@@ -306,13 +306,6 @@ final class CourseAdminView extends JPanel {
                 .orElse(
                     "当前管理员");
 
-        String authority =
-            canEditGrades
-                ? "超级管理员，可修改成绩"
-                : "教务老师，成绩仅供查看";
-
-        return displayName
-            + " · "
-            + authority;
+        return displayName;
     }
 }

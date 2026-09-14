@@ -68,30 +68,22 @@ public final class LibraryModePanel extends JPanel implements ModuleViewLifecycl
         title.setAlignmentX(Component.CENTER_ALIGNMENT);
         title.setForeground(LibraryUiTheme.TEXT);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 25F));
-        JLabel description = new JLabel(
-                "在线完成检索与预约，或进入模拟终端办理实体书借还",
-                SwingConstants.CENTER);
-        description.setAlignmentX(Component.CENTER_ALIGNMENT);
-        description.setForeground(LibraryUiTheme.MUTED);
-        description.setFont(description.getFont().deriveFont(14F));
         heading.add(eyebrow);
         heading.add(Box.createVerticalStrut(8));
         heading.add(title);
-        heading.add(Box.createVerticalStrut(10));
-        heading.add(description);
         selection.add(heading, BorderLayout.NORTH);
 
         JPanel choices = new JPanel(new GridLayout(1, admin == null ? 2 : 3, 20, 0));
         choices.setOpaque(false);
         choices.add(createModeChoice("线上图书馆", "library.mode.online",
                 "ONLINE SERVICES",
-                "以读者身份查询、预约馆藏，并查看个人借阅和预约。",
+                "馆藏查询 · 预约 · 我的借阅",
                 "进入线上图书馆  →", true,
                 () -> cards.show(this, ONLINE_LIBRARY)));
         if (admin != null) {
             choices.add(createModeChoice("图书管理", "library.mode.admin",
                     "LIBRARIAN WORKSPACE",
-                    "切换到图书管理员身份，维护书目、单册、分类并查询全馆记录。",
+                    "书目 · 单册 · 借阅 · 统计",
                     "进入管理工作台  →", false,
                     () -> {
                         cards.show(this, ADMIN_LIBRARY);
@@ -100,15 +92,11 @@ public final class LibraryModePanel extends JPanel implements ModuleViewLifecycl
         }
         choices.add(createModeChoice("模拟自助终端", "library.mode.terminal",
                 "SELF-SERVICE TERMINAL",
-                "模拟扫描实体单册条码，完成借书或归还登记。",
+                "借书 · 还书",
                 "进入模拟终端  →", false,
                 () -> cards.show(this, SELF_SERVICE_TERMINAL)));
         selection.add(choices, BorderLayout.CENTER);
 
-        JLabel footnote = LibraryUiTheme.createMutedLabel(
-                "借阅身份来自当前登录会话，所有预约与借还操作均由服务器再次校验");
-        footnote.setHorizontalAlignment(SwingConstants.CENTER);
-        selection.add(footnote, BorderLayout.SOUTH);
         return selection;
     }
 

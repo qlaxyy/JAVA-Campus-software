@@ -102,7 +102,7 @@ final class CourseAdminStatisticsPanel
                 "数据统计"));
 
         titlePanel.add(
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "查看指定选课批次的课程容量与选课情况"));
 
         header.add(

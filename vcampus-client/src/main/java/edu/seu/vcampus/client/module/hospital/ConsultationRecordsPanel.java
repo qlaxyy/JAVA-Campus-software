@@ -133,7 +133,7 @@ final class ConsultationRecordsPanel extends JPanel {
         recordList.removeAll();
         recordList.add(message("正在读取问诊记录……", HospitalTheme.MUTED, 520));
         statusLabel.setForeground(HospitalTheme.MUTED);
-        statusLabel.setText("进入页面后自动读取最新记录。");
+        statusLabel.setText(" ");
         refresh(recordList);
     }
 
@@ -268,7 +268,7 @@ final class ConsultationRecordsPanel extends JPanel {
         JLabel title = new JLabel("暂无问诊记录");
         title.setFont(HospitalTheme.uiFont(Font.BOLD, 20F));
         title.setForeground(HospitalTheme.TEXT);
-        JLabel detail = new JLabel("医生完成接诊并保存后，记录会自动出现在这里。");
+        JLabel detail = new JLabel("暂无问诊记录。");
         detail.setFont(HospitalTheme.uiFont(Font.PLAIN, 13F));
         detail.setForeground(HospitalTheme.MUTED);
         empty.add(title);

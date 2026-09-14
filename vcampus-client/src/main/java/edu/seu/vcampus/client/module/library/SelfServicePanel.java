@@ -37,9 +37,9 @@ public final class SelfServicePanel extends JPanel {
     private final JButton borrow = new JButton("借书登记");
     private final JButton returnCopy = new JButton("归还登记");
     private final JLabel reservationCheck = new JLabel(
-            "预约校验：借书时由服务器核验单册是否为当前用户保留",
+            " ",
             SwingConstants.CENTER);
-    private final JLabel outcome = new JLabel("请扫描或输入实体书馆藏条码", SwingConstants.CENTER);
+    private final JLabel outcome = new JLabel("", SwingConstants.CENTER);
     private final Runnable circulationChanged;
     private final Timer inspectionTimer;
     private CopyInspectionDTO inspection;
@@ -62,6 +62,10 @@ public final class SelfServicePanel extends JPanel {
         barcode.setName("library.selfService.barcode");
         reservationCheck.setName("library.selfService.reservationCheck");
         outcome.setName("library.selfService.outcome");
+        reservationCheck.setVisible(false);
+        outcome.setVisible(false);
+        outcome.addPropertyChangeListener("text", event ->
+                outcome.setVisible(!outcome.getText().isBlank()));
 
         SessionInfo session = context.currentSession().orElse(null);
         String identity = session == null ? "未登录"
@@ -104,22 +108,18 @@ public final class SelfServicePanel extends JPanel {
         c.gridy = 3;
         form.add(actions, c);
         c.gridy = 4;
-        JLabel instruction = LibraryUiTheme.createMutedLabel(
-                "线上图书馆负责查询和预约；拿到实体书后在这里登记借还");
-        instruction.setHorizontalAlignment(SwingConstants.CENTER);
-        form.add(instruction, c);
-        c.gridy = 5;
         LibraryUiTheme.styleStatusLabel(reservationCheck);
         form.add(reservationCheck, c);
+        c.gridy = 5;
+        outcome.setForeground(LibraryUiTheme.TEXT);
+        outcome.setFont(outcome.getFont().deriveFont(Font.BOLD, 13F));
+        form.add(outcome, c);
 
         JPanel center = new JPanel(new BorderLayout());
         center.setOpaque(false);
         center.setBorder(BorderFactory.createEmptyBorder(0, 50, 0, 50));
         center.add(form, BorderLayout.CENTER);
         add(center, BorderLayout.CENTER);
-        LibraryUiTheme.styleStatusLabel(outcome);
-        outcome.setFont(outcome.getFont().deriveFont(Font.BOLD, 13F));
-        add(outcome, BorderLayout.SOUTH);
 
         inspectionTimer = new Timer(350, event -> inspectBarcode(true));
         inspectionTimer.setRepeats(false);
@@ -148,8 +148,8 @@ public final class SelfServicePanel extends JPanel {
         inspection = null;
         setWorking(true);
         reservationCheck.setText(borrowing
-                ? "服务器正在重新校验借阅条件……"
-                : "服务器正在重新校验归还条件……");
+                ? "正在办理借书……"
+                : "正在办理还书……");
         outcome.setText(borrowing ? "正在登记借书……" : "正在登记归还……");
         new SwingWorker<TerminalResult, Void>() {
             @Override
@@ -169,15 +169,15 @@ public final class SelfServicePanel extends JPanel {
                     TerminalResult result = get();
                     Response response = result.response();
                     if (response == null || !response.isSuccess()) {
-                        reservationCheck.setText("服务器最终校验未通过，正在刷新单册状态");
+                        reservationCheck.setText("正在刷新馆藏状态……");
                         outcome.setText((borrowing ? "借书失败：" : "归还失败：")
                                 + (response == null ? "服务器未返回结果"
                                 : LibraryMessages.failure(response)));
                         return;
                     }
                     reservationCheck.setText(borrowing && result.ownedReservation()
-                            ? "服务器校验通过：已领取本人预约保留的单册"
-                            : "服务器最终校验通过");
+                            ? "已领取预约图书"
+                            : "办理成功");
                     outcome.setText(borrowing
                             ? "借书成功：" + scanned + "，借期 30 天"
                             : "归还成功：" + scanned + "，单册正在等待管理员上架");
@@ -199,19 +199,20 @@ public final class SelfServicePanel extends JPanel {
     }
 
     private void barcodeChanged() {
+        reservationCheck.setVisible(!barcode.getText().isBlank());
         inspectionVersion++;
         inspection = null;
         inspectionTimer.stop();
         updateButtons();
         if (barcode.getText().isBlank()) {
             if (!working) {
-                reservationCheck.setText("单册预检：请输入馆藏条码");
-                outcome.setText("请扫描或输入实体书馆藏条码");
+                reservationCheck.setText(" ");
+                outcome.setText("");
             }
             return;
         }
-        reservationCheck.setText("单册预检：等待检查条码……");
-        outcome.setText("预检完成前不能执行借还操作");
+        reservationCheck.setText("正在查询……");
+        outcome.setText(" ");
         inspectionTimer.restart();
     }
 
@@ -223,9 +224,9 @@ public final class SelfServicePanel extends JPanel {
         int version = inspectionVersion;
         inspection = null;
         updateButtons();
-        reservationCheck.setText("单册预检：正在查询条码……");
+        reservationCheck.setText("正在查询……");
         if (updateOutcome) {
-            outcome.setText("正在检查可执行的借还操作……");
+            outcome.setText(" ");
         }
         new SwingWorker<Response, Void>() {
             @Override
@@ -244,7 +245,7 @@ public final class SelfServicePanel extends JPanel {
                     Response response = get();
                     if (response == null || !response.isSuccess()
                             || !(response.getData() instanceof CopyInspectionDTO value)) {
-                        reservationCheck.setText("单册预检失败：" + (response == null
+                        reservationCheck.setText("查询失败：" + (response == null
                                 ? "服务器未返回结果" : LibraryMessages.failure(response)));
                         if (updateOutcome) {
                             outcome.setText("当前不能执行借还操作");
@@ -252,19 +253,19 @@ public final class SelfServicePanel extends JPanel {
                         return;
                     }
                     inspection = value;
-                    reservationCheck.setText("单册预检：" + value.getBookTitle()
+                    reservationCheck.setText(value.getBookTitle()
                             + "｜" + statusLabel(value.getCopyStatus())
                             + "｜" + value.getStatusMessage());
                     if (updateOutcome) {
                         outcome.setText(value.isBorrowAllowed() || value.isReturnAllowed()
-                                ? "预检完成，请点击已启用的操作"
+                                ? " "
                                 : "当前没有可执行的借还操作");
                     }
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
-                    reservationCheck.setText("单册预检被中断，请重新输入条码");
+                    reservationCheck.setText("查询已中断，请重新输入条码");
                 } catch (ExecutionException exception) {
-                    reservationCheck.setText("单册预检失败，请检查网络后重试");
+                    reservationCheck.setText("查询失败，请检查网络后重试");
                 } finally {
                     updateButtons();
                 }

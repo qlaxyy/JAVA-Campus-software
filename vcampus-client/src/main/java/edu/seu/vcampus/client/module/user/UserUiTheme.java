@@ -123,16 +123,15 @@ final class UserUiTheme {
             Color background,
             Color foreground,
             Color border) {
-        button.setUI(new BasicButtonUI());
+        button.setUI(new edu.seu.vcampus.client.view.RoundedButtonUI());
         button.setBackground(background);
         button.setForeground(foreground);
         button.setFont(button.getFont().deriveFont(Font.BOLD, 13F));
-        button.setBorder(BorderFactory.createCompoundBorder(
-                new LineBorder(border, 1, true),
-                BorderFactory.createEmptyBorder(8, 14, 8, 14)));
+        button.setBorder(BorderFactory.createEmptyBorder(8, 14, 8, 14));
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         button.setFocusPainted(false);
-        button.setOpaque(true);
+        button.setOpaque(false);
+        button.setRolloverEnabled(true);
     }
 
     private static final class AdministrationCellRenderer

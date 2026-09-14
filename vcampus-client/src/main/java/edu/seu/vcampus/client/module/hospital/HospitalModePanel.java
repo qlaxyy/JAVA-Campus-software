@@ -49,7 +49,7 @@ final class HospitalModePanel extends JPanel {
     void showLoading(SessionInfo session) {
         accountLabel.setText(accountText(session));
         statusLabel.setForeground(HospitalTheme.MUTED);
-        statusLabel.setText("正在由服务器检查当前账号可进入的医院模式……");
+        statusLabel.setText("正在加载……");
         retryButton.setVisible(false);
         disableAllButtons("检查权限中");
     }
@@ -60,7 +60,7 @@ final class HospitalModePanel extends JPanel {
         configure(doctorButton, access.canAccess(HospitalMode.DOCTOR), "进入医生模式");
         configure(adminButton, access.canAccess(HospitalMode.ADMIN), "进入管理模式");
         statusLabel.setForeground(HospitalTheme.MUTED);
-        statusLabel.setText("模式只切换当前工作台；实际权限由服务器根据账号和医院绑定判断。");
+        statusLabel.setText(" ");
         retryButton.setVisible(false);
     }
 
@@ -68,7 +68,7 @@ final class HospitalModePanel extends JPanel {
         accountLabel.setText("尚未登录");
         disableAllButtons("登录后检查");
         statusLabel.setForeground(HospitalTheme.WARNING);
-        statusLabel.setText("请先到“用户管理”登录，再返回校医院选择模式。");
+        statusLabel.setText("请先登录。");
         retryButton.setVisible(false);
     }
 
@@ -93,8 +93,6 @@ final class HospitalModePanel extends JPanel {
         subtitle.setForeground(HospitalTheme.MUTED);
         accountLabel.setForeground(HospitalTheme.PRIMARY_DARK);
         copy.add(title);
-        copy.add(Box.createVerticalStrut(5));
-        copy.add(subtitle);
         copy.add(Box.createVerticalStrut(8));
         copy.add(accountLabel);
 
@@ -149,8 +147,6 @@ final class HospitalModePanel extends JPanel {
         JLabel rule = new JLabel(requirement);
         rule.setForeground(HospitalTheme.MUTED);
         heading.add(title);
-        heading.add(Box.createVerticalStrut(7));
-        heading.add(rule);
 
         JLabel featureList = new JLabel(
                 "<html><body style='line-height:1.8'>" + features + "</body></html>");

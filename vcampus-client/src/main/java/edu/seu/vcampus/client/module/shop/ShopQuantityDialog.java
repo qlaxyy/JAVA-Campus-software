@@ -41,7 +41,7 @@ final class ShopQuantityDialog {
         title.setForeground(ShopPalette.TEXT);
         title.setAlignmentX(0f);
 
-        JLabel stockHint = new JLabel("库存 " + product.getStockQty() + " 件，请选择要买的数量");
+        JLabel stockHint = new JLabel("库存 " + product.getStockQty() + " 件");
         stockHint.setFont(new Font("SansSerif", Font.PLAIN, 13));
         stockHint.setForeground(ShopPalette.MUTED);
         stockHint.setAlignmentX(0f);

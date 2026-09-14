@@ -133,7 +133,7 @@ final class CourseTeacherStudentPanel
                 5));
 
         topPanel.add(
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "查看本人负责教学班中的已选学生"));
 
         topPanel.add(

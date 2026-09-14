@@ -175,7 +175,7 @@ final class CourseTeacherGradePanel
                 5));
 
         topPanel.add(
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "分别录入平时成绩和期末成绩，并按教学班比例计算总成绩"));
 
         topPanel.add(

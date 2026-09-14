@@ -70,10 +70,17 @@ public class StudentView extends JPanel {
     private final JTextField txtEmergencyPhone = new JTextField(14);
 
     private StudentProfileDto currentProfile;
+    private long initialSearchGeneration;
 
     public StudentView(ClientContext context) {
         this.context = context;
         initUI();
+        addHierarchyListener(event -> {
+            if ((event.getChangeFlags() & java.awt.event.HierarchyEvent.SHOWING_CHANGED) != 0
+                    && isShowing()) {
+                initializeOwnStudentSearch();
+            }
+        });
         setEditableState(false);
     }
 
@@ -90,13 +97,7 @@ public class StudentView extends JPanel {
      * 获取清洗后的当前登录账号 ID
      */
     private String getCurrentCleanUserId() {
-        String rawId = context.currentSession()
-            .map(s -> s.getUserId() != null ? s.getUserId().trim().toLowerCase() : "")
-            .orElse("");
-        if (rawId.startsWith("u-")) {
-            rawId = rawId.substring(2);
-        }
-        return rawId.replace("-", "");
+        return context.currentSession().map(s -> s.getUsername().trim()).orElse("");
     }
 
     private void initUI() {
@@ -123,8 +124,6 @@ public class StudentView extends JPanel {
         lblSubtitle.setForeground(TEXT_MUTED);
 
         headerPanel.add(lblTitle);
-        headerPanel.add(Box.createVerticalStrut(4));
-        headerPanel.add(lblSubtitle);
         mainContainer.add(headerPanel);
         mainContainer.add(Box.createVerticalStrut(15));
 
@@ -144,9 +143,9 @@ public class StudentView extends JPanel {
         bannerPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 90));
         bannerPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JPanel bannerTextPanel = new JPanel(new GridLayout(2, 1, 0, 4));
+        JPanel bannerTextPanel = new JPanel(new GridLayout(1, 1));
         bannerTextPanel.setOpaque(false);
-        JLabel lblBannerTitle = new JLabel("在校学籍全周期管理");
+        JLabel lblBannerTitle = new JLabel("学籍查询");
         lblBannerTitle.setFont(new Font("微软雅黑", Font.BOLD, 17));
         lblBannerTitle.setForeground(Color.WHITE);
 
@@ -155,14 +154,14 @@ public class StudentView extends JPanel {
         lblBannerDesc.setForeground(new Color(220, 240, 235));
 
         bannerTextPanel.add(lblBannerTitle);
-        bannerTextPanel.add(lblBannerDesc);
         bannerPanel.add(bannerTextPanel, BorderLayout.CENTER);
 
         // Banner 右侧查询交互
         JPanel bannerRightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 5));
         bannerRightPanel.setOpaque(false);
         txtSearchId.setPreferredSize(new Dimension(110, 32));
-        txtSearchId.setText("20260006");
+        txtSearchId.setName("student.searchId");
+        txtSearchId.setText("");
         txtSearchId.setFont(FONT_BODY);
 
         btnSearch.setPreferredSize(new Dimension(95, 32));
@@ -282,8 +281,8 @@ public class StudentView extends JPanel {
             }
 
             // 2. 如果是学生本人，允许打开个人异动申请与进度追踪
-            boolean isSelf = (currentProfile != null && currentUid.equalsIgnoreCase(currentProfile.getStudentId()))
-                || (currentProfile == null && !currentUid.contains("teacher") && !currentUid.contains("admin"));
+            boolean isSelf = currentProfile != null
+                    && currentUid.equalsIgnoreCase(currentProfile.getStudentId());
 
             if (isSelf) {
                 String targetId = currentProfile != null ? currentProfile.getStudentId() : currentUid;
@@ -370,6 +369,49 @@ public class StudentView extends JPanel {
         btnSave.addActionListener(e -> executeUpdate());
     }
 
+    /** Membership comes from the server's student profile, not a userId/name heuristic. */
+    SwingWorker<Response, Void> initializeOwnStudentSearch() {
+        long generation = ++initialSearchGeneration;
+        txtSearchId.setText("");
+        clearFormValues();
+        lblStatus.setText("请输入学号开始检索");
+        lblStatus.setForeground(TEXT_MUTED);
+        btnEdit.setEnabled(false);
+        setEditableState(false);
+        var session = context.currentSession();
+        if (session.isEmpty()) {
+            return null;
+        }
+        String token = session.get().getToken();
+        String number = session.get().getUsername();
+        SwingWorker<Response, Void> worker = new SwingWorker<>() {
+            @Override protected Response doInBackground() throws Exception {
+                return context.send(StudentActions.GET_PROFILE, new StudentProfileRequest(number));
+            }
+            @Override protected void done() {
+                if (generation != initialSearchGeneration
+                        || !context.currentSession().map(s -> token.equals(s.getToken())).orElse(false)
+                        || !txtSearchId.getText().isBlank()) {
+                    return;
+                }
+                try {
+                    Response result = get();
+                    if (result.isSuccess() && result.getData() instanceof StudentProfileResponse data
+                            && data.isFound()
+                            && data.getProfile() != null) {
+                        txtSearchId.setText(data.getProfile().getStudentId());
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                } catch (java.util.concurrent.ExecutionException exception) {
+                    // No automatic query error dialog: leave the search field blank for manual use.
+                }
+            }
+        };
+        worker.execute();
+        return worker;
+    }
+
     private JPanel createCardPanel(String title, String desc) {
         JPanel card = new JPanel(new BorderLayout(0, 10)) {
             @Override
@@ -386,7 +428,7 @@ public class StudentView extends JPanel {
         card.setOpaque(false);
         card.setBorder(new EmptyBorder(14, 16, 14, 16));
 
-        JPanel head = new JPanel(new GridLayout(2, 1, 0, 2));
+        JPanel head = new JPanel(new GridLayout(1, 1));
         head.setOpaque(false);
         JLabel lblT = new JLabel(title);
         lblT.setFont(FONT_CARD_TITLE);
@@ -397,7 +439,6 @@ public class StudentView extends JPanel {
         lblD.setForeground(TEXT_MUTED);
 
         head.add(lblT);
-        head.add(lblD);
         card.add(head, BorderLayout.NORTH);
         return card;
     }
@@ -480,7 +521,7 @@ public class StudentView extends JPanel {
         }
 
         btnSearch.setEnabled(false);
-        lblStatus.setText("正在校验权限并获取学籍档案...");
+        lblStatus.setText("正在查询……");
         lblStatus.setForeground(ACCENT_BLUE);
 
         new SwingWorker<Response, Void>() {
@@ -513,7 +554,7 @@ public class StudentView extends JPanel {
                         clearFormValues();
                         btnEdit.setEnabled(false);
                     } else {
-                        lblStatus.setText("● 学籍档案校验通过，当前已完成全量信息同步");
+                        lblStatus.setText("查询成功");
                         lblStatus.setForeground(new Color(13, 120, 90));
                         currentProfile = profileRes.getProfile();
                         renderProfile(currentProfile);
@@ -558,7 +599,7 @@ public class StudentView extends JPanel {
         );
 
         btnSave.setEnabled(false);
-        lblStatus.setText("正在提交档案更新并进行权限校验...");
+        lblStatus.setText("正在保存……");
         lblStatus.setForeground(ACCENT_BLUE);
 
         new SwingWorker<Response, Void>() {

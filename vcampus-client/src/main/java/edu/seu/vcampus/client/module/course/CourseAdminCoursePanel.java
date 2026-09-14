@@ -130,7 +130,7 @@ final class CourseAdminCoursePanel
                 "课程管理"));
 
         titlePanel.add(
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "查询并修改课程代码、名称、学分和课程类型"));
 
         header.add(

@@ -37,6 +37,8 @@ final class AccessShopCatalog implements ShopCatalogRepository {
     private static final String PRODUCT_TABLE = "tblShopProduct";
     private static final String PHOTO_TABLE = "tblShopProductPhoto";
     private static final String LISTING_TABLE = "tblShopListingRecord";
+    private static final String SEED_VERSION = "shop-demo-catalog-2026-09-v1";
+    private static final Object SEED_LOCK = new Object();
     private static final DateTimeFormatter CLOCK =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -45,9 +47,10 @@ final class AccessShopCatalog implements ShopCatalogRepository {
     AccessShopCatalog(AccessDatabase database) {
         this.database = Objects.requireNonNull(database, "database must not be null");
         initializeSchema();
-        seedIfEmpty();
-        refreshOfficialDemoSeed();
-        retireRemovedOfficialDemoProducts();
+        synchronized (SEED_LOCK) {
+            boolean freshlySeeded = seedIfEmpty();
+            migrateOfficialDemoSeed(freshlySeeded);
+        }
     }
 
     @Override
@@ -326,14 +329,18 @@ final class AccessShopCatalog implements ShopCatalogRepository {
                         + "detailText MEMO, operatorNameSnapshot TEXT(100) NOT NULL, "
                         + "createdAt TEXT(30) NOT NULL)");
             }
+            if (!tableExists(connection, "tblShopSeedVersion")) {
+                statement.executeUpdate("CREATE TABLE tblShopSeedVersion ("
+                        + "seedKey TEXT(100) PRIMARY KEY, appliedAt TEXT(30) NOT NULL)");
+            }
         } catch (SQLException exception) {
             throw failure("Cannot initialize shop catalog schema.", exception);
         }
     }
 
-    private void seedIfEmpty() {
+    private boolean seedIfEmpty() {
         if (!listCategories().isEmpty()) {
-            return;
+            return false;
         }
         try (Connection connection = database.openConnection()) {
             connection.setAutoCommit(false);
@@ -366,32 +373,46 @@ final class AccessShopCatalog implements ShopCatalogRepository {
         } catch (SQLException exception) {
             throw failure("Cannot seed shop catalog.", exception);
         }
+        return true;
     }
 
     /**
-     * Upserts official demo SKUs so existing Access files pick up new titles,
-     * copy and photos without a full rebuild. Existing stock is left unchanged.
+     * Applies a catalog upgrade once, not on every server restart. The migration
+     * marker and old-file changes share a transaction; administrator edits survive later starts.
      */
-    private void refreshOfficialDemoSeed() {
+    private void migrateOfficialDemoSeed(boolean freshlySeeded) {
         try (Connection connection = database.openConnection()) {
             connection.setAutoCommit(false);
             try {
-                for (ProductSummaryDto product : InMemoryShopCatalog.seedProducts()) {
-                    if (productExists(connection, product.getProductId())) {
-                        updateOfficialDemoProduct(connection, product);
-                        deletePhotos(connection, product.getProductId());
-                        insertPhotos(connection, product);
-                    } else {
-                        insertProduct(connection, product);
-                        insertPhotos(connection, product);
-                        if (product.getSaleStatus() == ProductSaleStatus.ON_SALE) {
-                            insertListing(connection, product, "上架",
-                                    "上架 " + product.getName() + "，单价 "
-                                            + formatYuan(product.getPriceFen()) + "，库存 "
-                                            + product.getStockQty() + " 件",
-                                    "校园商店", "2026-08-20 09:00:00");
+                try (PreparedStatement version = connection.prepareStatement(
+                        "SELECT seedKey FROM tblShopSeedVersion WHERE seedKey = ?")) {
+                    version.setString(1, SEED_VERSION);
+                    try (ResultSet rows = version.executeQuery()) {
+                        if (rows.next()) { return; }
+                    }
+                }
+                if (!freshlySeeded) {
+                    for (ProductSummaryDto product : InMemoryShopCatalog.seedProducts()) {
+                        if (!productExists(connection, product.getProductId())) {
+                            insertProduct(connection, product);
+                            insertPhotos(connection, product);
+                            if (product.getSaleStatus() == ProductSaleStatus.ON_SALE) {
+                                insertListing(connection, product, "上架",
+                                        "上架 " + product.getName() + "，单价 "
+                                                + formatYuan(product.getPriceFen()) + "，库存 "
+                                                + product.getStockQty() + " 件",
+                                        "校园商店", "2026-08-20 09:00:00");
+                            }
                         }
                     }
+                    // Never overwrite an existing product/photo or retire it during normal startup.
+                    // A clean official catalogue is generated only by explicit database rebuilding.
+                }
+                try (PreparedStatement version = connection.prepareStatement(
+                        "INSERT INTO tblShopSeedVersion (seedKey, appliedAt) VALUES (?, ?)")) {
+                    version.setString(1, SEED_VERSION);
+                    version.setString(2, java.time.LocalDateTime.now().format(CLOCK));
+                    version.executeUpdate();
                 }
                 connection.commit();
             } catch (SQLException | RuntimeException exception) {
@@ -407,27 +428,16 @@ final class AccessShopCatalog implements ShopCatalogRepository {
      * Drops retired official demo SKUs (ids 1–15 no longer in the seed list)
      * so existing Access files do not keep leftover catalog cards.
      */
-    private void retireRemovedOfficialDemoProducts() {
+    private void retireRemovedOfficialDemoProducts(Connection connection) throws SQLException {
         Set<Long> keep = new HashSet<>();
         for (ProductSummaryDto product : InMemoryShopCatalog.seedProducts()) {
             keep.add(product.getProductId());
         }
-        try (Connection connection = database.openConnection()) {
-            connection.setAutoCommit(false);
-            try {
-                for (long productId = 1L; productId <= 15L; productId++) {
-                    if (keep.contains(productId) || !productExists(connection, productId)) {
-                        continue;
-                    }
-                    deleteRetiredProduct(connection, productId);
-                }
-                connection.commit();
-            } catch (SQLException | RuntimeException exception) {
-                rollback(connection, exception);
-                throw exception;
+        for (long productId = 1L; productId <= 15L; productId++) {
+            if (keep.contains(productId) || !productExists(connection, productId)) {
+                continue;
             }
-        } catch (SQLException exception) {
-            throw failure("Cannot retire removed shop demo products.", exception);
+            deleteRetiredProduct(connection, productId);
         }
     }
 

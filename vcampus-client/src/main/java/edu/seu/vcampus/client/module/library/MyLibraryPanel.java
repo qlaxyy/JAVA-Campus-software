@@ -56,7 +56,7 @@ public final class MyLibraryPanel extends JPanel {
     private final JButton payFee = new JButton("缴纳选中费用");
     private final JLabel feeHint = new JLabel("选择有“待缴”费用的历史借阅后结清");
     private final JLabel reservationHint = new JLabel("只有“排队中”和“待取书”预约可以取消");
-    private final JLabel statusLabel = new JLabel("打开此页后加载本人的借阅与预约记录");
+    private final JLabel statusLabel = new JLabel(" ");
     private final JLabel renewHint = new JLabel("每次借阅最多续借 1 次；逾期或已有预约时不能续借");
     private List<BorrowRecordDTO> currentBorrows = List.of();
     private List<BorrowRecordDTO> historyBorrows = List.of();

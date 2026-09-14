@@ -170,7 +170,7 @@ final class CourseStudentGradePanel
             BorderLayout.NORTH);
 
         titlePanel.add(
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "查看本人课程成绩和成绩构成"),
             BorderLayout.CENTER);
 

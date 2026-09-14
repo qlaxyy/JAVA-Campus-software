@@ -63,7 +63,7 @@ public final class UserAdminPanel extends JPanel {
     private final JTable table = new JTable(tableModel);
     private final TableRowSorter<UserAccountTableModel> tableSorter =
             new TableRowSorter<>(tableModel);
-    private final JLabel statusLabel = new JLabel("进入页面后加载账号列表");
+    private final JLabel statusLabel = new JLabel(" ");
     private final JLabel summaryLabel = new JLabel("账号数据尚未加载");
     private final JTextField searchField = new JTextField();
     private final JComboBox<String> statusFilter = new JComboBox<>(new String[]{
@@ -497,37 +497,18 @@ public final class UserAdminPanel extends JPanel {
     }
 
     private void showAuditLogs(List<UserAuditLogEntry> entries) {
-        String[] columns = {"时间", "操作者", "操作", "目标", "结果", "说明"};
-        Object[][] rows = new Object[entries.size()][columns.length];
-        DateTimeFormatter formatter = DateTimeFormatter
-                .ofPattern("yyyy-MM-dd HH:mm:ss")
-                .withZone(ZoneId.systemDefault());
-        for (int index = 0; index < entries.size(); index++) {
-            UserAuditLogEntry entry = entries.get(index);
-            rows[index] = new Object[]{
-                    formatter.format(Instant.ofEpochMilli(entry.getOccurredAtEpochMillis())),
-                    entry.getActorDisplayName() + "（" + entry.getActorUsername() + "）",
-                    auditActionText(entry.getActionCode()),
-                    entry.getTarget(),
-                    entry.isSuccessful() ? "成功" : "失败",
-                    entry.getDetail()
-            };
-        }
-        DefaultTableModel model = new DefaultTableModel(rows, columns) {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return false;
-            }
-        };
-        JTable auditTable = new JTable(model);
-        auditTable.setAutoCreateRowSorter(true);
-        JScrollPane scrollPane = UserUiTheme.createTableScrollPane(auditTable);
-        scrollPane.setPreferredSize(new java.awt.Dimension(920, 420));
-        JOptionPane.showMessageDialog(
-                this,
-                scrollPane,
-                "账号管理操作记录",
-                JOptionPane.PLAIN_MESSAGE);
+        var owner = SwingUtilities.getWindowAncestor(this);
+        var dialog = new javax.swing.JDialog(owner, "操作记录", java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+        dialog.setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
+        dialog.setContentPane(new AuditLogPanel(entries));
+        dialog.setResizable(true);
+        dialog.setMinimumSize(new java.awt.Dimension(780, 460));
+        java.awt.Rectangle screen = owner == null ? java.awt.GraphicsEnvironment
+                .getLocalGraphicsEnvironment().getMaximumWindowBounds()
+                : owner.getGraphicsConfiguration().getBounds();
+        dialog.setSize(Math.min(1120, screen.width - 40), Math.min(720, screen.height - 60));
+        dialog.setLocationRelativeTo(owner);
+        dialog.setVisible(true);
     }
 
     private static String auditActionText(String actionCode) {

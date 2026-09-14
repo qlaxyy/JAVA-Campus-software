@@ -278,7 +278,7 @@ final class PatientHealthRecordPanel extends JPanel {
         overviewContent.removeAll();
         overviewContent.add(message("正在整理健康档案……", HospitalTheme.MUTED, 520),
                 BorderLayout.NORTH);
-        statusLabel.setText("进入页面后自动读取最新资料。");
+        statusLabel.setText(" ");
         refresh(overviewContent);
         cards.show(pages, OVERVIEW_PAGE);
     }
@@ -289,7 +289,7 @@ final class PatientHealthRecordPanel extends JPanel {
         renderProfile();
         renderHistory();
         renderReports();
-        statusLabel.setText("患者自述信息可自行维护；医生签署的诊疗记录始终只读。");
+        statusLabel.setText(" ");
         cards.show(pages, OVERVIEW_PAGE);
         if (openPriorityReportAfterLoad) {
             openPriorityReportAfterLoad = false;

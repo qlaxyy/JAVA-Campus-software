@@ -105,7 +105,7 @@ class LibraryWorkflowUiTest {
             JLabel reservationCheck = named(
                     terminal, JLabel.class, "library.selfService.reservationCheck");
             awaitUi(() -> outcome.getText().contains("借书成功"));
-            assertTrue(reservationCheck.getText().contains("本人预约保留"));
+            assertEquals("已领取预约图书", reservationCheck.getText());
 
             JTable current = named(records, JTable.class, "library.currentBorrows");
             onEdt(() -> named(terminalMode, JButton.class,

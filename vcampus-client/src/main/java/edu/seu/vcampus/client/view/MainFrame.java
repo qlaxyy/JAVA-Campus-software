@@ -143,22 +143,22 @@ public final class MainFrame extends JFrame {
         workspace.setBackground(SURFACE);
 
         JPanel headerPanel = createWorkspaceHeader();
-        JPanel statusPanel = createStatusBar();
 
         List<ClientModule> modules = ClientModules.all().stream()
                 .filter(module -> ModuleAccessPolicy.isVisible(session, module.id()))
                 .toList();
         CardLayout moduleLayout = new CardLayout();
         JPanel modulePanel = new JPanel(moduleLayout);
-        modulePanel.add(createModuleHome(modules, modulePanel, moduleLayout), MODULE_HOME_CARD);
+        JPanel home = new JPanel(new BorderLayout());
+        home.add(headerPanel, BorderLayout.NORTH);
+        home.add(createModuleHome(modules, modulePanel, moduleLayout), BorderLayout.CENTER);
+        modulePanel.add(home, MODULE_HOME_CARD);
         for (ClientModule module : modules) {
             modulePanel.add(createModulePage(module, modulePanel, moduleLayout), module.id());
         }
         moduleLayout.show(modulePanel, MODULE_HOME_CARD);
 
-        workspace.add(headerPanel, BorderLayout.NORTH);
         workspace.add(modulePanel, BorderLayout.CENTER);
-        workspace.add(statusPanel, BorderLayout.SOUTH);
         return workspace;
     }
 
@@ -274,42 +274,21 @@ public final class MainFrame extends JFrame {
             ClientModule module,
             JPanel modulePanel,
             CardLayout moduleLayout) {
-        JPanel page = new JPanel(new BorderLayout());
-        page.setBackground(SURFACE);
         JComponent moduleView = module.createView(context);
-        JButton backButton = new JButton("←  返回校园服务");
-        backButton.setName("module.back." + module.id());
-        backButton.addActionListener(event -> {
+        return new ModulePage(module.id(), moduleView, () -> {
             if (moduleView instanceof ModuleViewLifecycle lifecycle) {
                 lifecycle.onModuleExit();
             }
             moduleLayout.show(modulePanel, MODULE_HOME_CARD);
         });
-        styleOutlineButton(backButton);
-
-        JPanel toolbar = new JPanel(new BorderLayout());
-        toolbar.setBackground(Color.WHITE);
-        toolbar.setBorder(BorderFactory.createCompoundBorder(
-                new MatteBorder(0, 0, 1, 0, BORDER),
-                BorderFactory.createEmptyBorder(12, 30, 12, 30)));
-        toolbar.add(backButton, BorderLayout.WEST);
-        JLabel moduleTitle = new JLabel(module.displayName(), SwingConstants.RIGHT);
-        moduleTitle.setForeground(TEXT);
-        moduleTitle.setFont(moduleTitle.getFont().deriveFont(Font.BOLD, 18F));
-        toolbar.add(moduleTitle, BorderLayout.EAST);
-
-        page.add(toolbar, BorderLayout.NORTH);
-        page.add(moduleView, BorderLayout.CENTER);
-        return page;
     }
 
     private static void styleHeaderButton(JButton button) {
-        button.setUI(new BasicButtonUI());
+        button.setUI(new RoundedButtonUI());
+        button.setBackground(new Color(19, 104, 101));
         button.setForeground(Color.WHITE);
         button.setFont(button.getFont().deriveFont(Font.BOLD, 13F));
-        button.setBorder(BorderFactory.createCompoundBorder(
-                new MatteBorder(1, 1, 1, 1, new Color(121, 191, 184)),
-                BorderFactory.createEmptyBorder(8, 15, 8, 15)));
+        button.setBorder(BorderFactory.createEmptyBorder(8, 15, 8, 15));
         button.setFocusPainted(false);
         button.setContentAreaFilled(false);
         button.setOpaque(false);
@@ -503,8 +482,13 @@ public final class MainFrame extends JFrame {
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
                     statusLabel.setText("密码修改已中断");
+                    JOptionPane.showMessageDialog(MainFrame.this, "密码修改已中断，请重试。",
+                            "修改密码", JOptionPane.WARNING_MESSAGE);
                 } catch (ExecutionException exception) {
                     statusLabel.setText("密码修改失败，请确认服务器已经启动");
+                    JOptionPane.showMessageDialog(MainFrame.this,
+                            "密码修改失败，请确认服务器连接正常。", "修改密码",
+                            JOptionPane.ERROR_MESSAGE);
                 } finally {
                     changePasswordButton.setEnabled(true);
                     logoutButton.setEnabled(true);

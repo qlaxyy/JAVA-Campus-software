@@ -95,7 +95,7 @@ final class SubstituteCoursePanel
                 "方案外课程");
 
         JLabel subtitle =
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "查看可用于满足培养方案要求的替代课程");
 
         header.add(

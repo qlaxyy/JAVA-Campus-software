@@ -175,7 +175,6 @@ final class LoginPanelDesign {
 
         constraints.gridy = 8;
         constraints.insets = new Insets(0, 0, 0, 0);
-        card.add(createDemoAccountsPanel(), constraints);
         return card;
     }
 
@@ -210,7 +209,7 @@ final class LoginPanelDesign {
     }
 
     private static void stylePrimaryButton(JButton button) {
-        button.setUI(new BasicButtonUI());
+        button.setUI(new edu.seu.vcampus.client.view.RoundedButtonUI());
         button.setPreferredSize(new Dimension(0, 44));
         button.setBackground(PRIMARY);
         button.setForeground(Color.WHITE);
@@ -218,7 +217,7 @@ final class LoginPanelDesign {
         button.setBorder(BorderFactory.createEmptyBorder(10, 18, 10, 18));
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         button.setFocusPainted(false);
-        button.setOpaque(true);
+        button.setOpaque(false);
     }
 
     private static JPanel createDemoAccountsPanel() {

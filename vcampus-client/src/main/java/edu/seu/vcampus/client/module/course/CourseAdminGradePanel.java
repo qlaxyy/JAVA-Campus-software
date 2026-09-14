@@ -156,7 +156,7 @@ final class CourseAdminGradePanel
                 "成绩管理"));
 
         titlePanel.add(
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 superAdmin
                     ? "查询学生成绩并修改成绩"
                     : "查询学生课程成绩"));

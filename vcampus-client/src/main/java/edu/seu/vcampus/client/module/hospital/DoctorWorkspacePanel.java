@@ -241,7 +241,7 @@ final class DoctorWorkspacePanel extends JPanel {
         JPanel page = basePage();
         page.add(pageHeader("返回我的排班", this::openSchedulesPage,
                 new JLabel("我签署的诊疗记录"),
-                new JLabel("只读查看本人已保存的诊疗记录")), BorderLayout.NORTH);
+                new JLabel("已完成诊疗")), BorderLayout.NORTH);
         page.add(scroll(signedRecordList), BorderLayout.CENTER);
         return page;
     }
@@ -385,7 +385,7 @@ final class DoctorWorkspacePanel extends JPanel {
         currentAppointmentId = null;
         doctorIdentity.setText("正在读取医生档案和排班……");
         statusLabel.setForeground(HospitalTheme.MUTED);
-        statusLabel.setText("进入医生模式后自动读取最新数据。");
+        statusLabel.setText(" ");
         scheduleGrid.removeAll();
         scheduleGrid.add(message("正在加载排班……", HospitalTheme.MUTED, 260));
         refresh(scheduleGrid);
@@ -649,7 +649,7 @@ final class DoctorWorkspacePanel extends JPanel {
                 .toList();
         if (visibleSchedules.isEmpty()) {
             scheduleGrid.add(message(
-                    "近期没有待接诊患者或可用号源。新排班发布后，重新进入医生模式会自动显示。",
+                    "暂无待接诊患者或可用号源。",
                     HospitalTheme.MUTED,
                     420));
         } else {
@@ -708,7 +708,7 @@ final class DoctorWorkspacePanel extends JPanel {
         patientList.removeAll();
         if (schedule.getPendingAppointments().isEmpty()) {
             patientList.add(message(
-                    "这个排班暂时没有待接诊患者。患者完成预约后，重新进入医生模式即可看到。",
+                    "该排班暂无待接诊患者。",
                     HospitalTheme.MUTED,
                     520));
         } else {

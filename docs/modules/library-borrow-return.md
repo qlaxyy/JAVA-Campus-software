@@ -17,6 +17,9 @@
   再次进入图书馆，也始终从模式选择页开始；不修改六模块首页。
 - **线上图书馆 / 馆藏查询**：按关键词、分类查询书目，展示按馆藏地汇总的馆藏数和可借数；
   选择书目和取书馆藏地后预约，不在网页检索结果中直接借走实体书。
+  关键词同时匹配书目元数据（书名、作者、ISBN、分类名、出版社、语种、出版年）与实体单册
+  （索书号、馆藏条码），所以拿着书脊上的索书号或条码就能直接查到它在哪个馆藏地。
+  结果分页展示（每页 20 条），底部给出"第几页 / 共几页"与上一页、下一页按钮。
 - **线上图书馆 / 我的图书馆**：分为当前借阅、历史借阅和我的预约。当前借阅支持合规续借；预约页显示状态、排队位次、
   分配条码和取书截止时间，排队中或待取预约可以取消。
 - **模拟自助终端**：复用当前登录会话，扫描或输入实体书馆藏条码后先由服务器预检；界面展示
@@ -34,6 +37,8 @@
 | `LIBRARY.SEARCH_BOOKS` | `BookSearchRequest` | `BookSearchResult` | 已登录 |
 | `LIBRARY.GET_BORROW_RECORDS` | `null` | `List<BorrowRecordDTO>` | 已登录 |
 | `LIBRARY.RENEW_BORROW` | `BorrowRecordIdRequest(recordId)` | `BorrowRecordDTO` | 已登录且为借阅本人 |
+| `LIBRARY.PAY_FEE` | `BorrowRecordIdRequest(recordId)` | `BorrowRecordDTO` | 已登录且为借阅本人；经校园卡扣款 |
+| `LIBRARY.REPORT_LOST` | `BorrowRecordIdRequest(recordId)` | `BorrowRecordDTO` | 已登录且为借阅本人；注销单册并产生赔偿 |
 | `LIBRARY.BORROW_COPY` | `CopyBorrowRequest(barcode)` | `null` | 已登录 |
 | `LIBRARY.RETURN_COPY` | `CopyReturnRequest(barcode)` | `null` | 已登录 |
 | `LIBRARY.INSPECT_COPY` | `CopyInspectionRequest(barcode)` | `CopyInspectionDTO` | 已登录 |
@@ -71,6 +76,29 @@ V1 的 `BORROW_BOOK`、`RETURN_BOOK`、`UPDATE_STOCK`、`DELETE_BOOK` 以及对�
 - `RESERVED` 不计可借数但计入馆藏数，且不能被他人借阅、编辑或注销；停用书目会取消其有效预约；
 - 系统不使用后台定时器，而是在检索、预约、借还和管理状态操作前原子清理到期预约。
 
+费用规则：
+
+两类费用互斥，一条记录最多产生一笔：
+
+- **逾期滞纳金**（已归还且未申报丢失）：`min(逾期天数 × 0.5 元, 50 元)`；
+  恰好到期时刻归还不算逾期、不计费。未归还的逾期记录不产生金额，
+  此时仍由"存在逾期未还"拦截借阅与预约；
+- **丢书赔偿**（读者申报丢失）：`书价 + 5 元手续费`。申报成功后单册立即转为 `WITHDRAWN`，
+  记录同时关闭并写入 `lostReportedAt`，三件事在同一事务内完成。既逾期又丢失时**只算赔偿**，
+  不叠加滞纳金。书若找回，管理员用既有的「恢复单册」把它变回可借；
+- 书价来自 `tblBook.priceFen`（管理员在书目维护中填写，0.01–9999.99 元，必填）；
+- 金额**不落库**：只保存结清时间 `feeSettledAt`，其余由 `dueTime`、`returnTime`、
+  `lostReportedAt` 与书价推导。这些输入一旦写入就不再变化，因此金额稳定且不会漂移；
+- 存在未结清费用时，借书与预约分别返回 `LIBRARY_OUTSTANDING_FEE`；结清后立即恢复；
+- 缴费经校园卡 `debit` 完成，商户号为 `LIBRARY`、reference 为 `fee:<recordId>`。
+  按 `recordId` 在 `circulationLock` 内串行，重复提交因记录已结清而被拒绝
+  （`LIBRARY_FEE_NOT_PAYABLE`）；钱包侧的 `商户号 + reference` 幂等是第二道防线；
+- 扣款成功但本地写入失败时，用 `fee-refund:<recordId>` 补偿退款，读者不会被多扣；
+- 余额不足由卡模块返回 `CARD_INSUFFICIENT_BALANCE`，图书馆原样透传。
+
+丢书赔偿**尚未实现**：`tblBorrowRecord.lostReportedAt` 已预留，单册可复用 `WITHDRAWN` 状态，
+接入时按书价加手续费计算赔偿。
+
 `LibraryService.circulationLock` 负责同一服务器实例内的串行校验。正式 Access 版本由
 `AccessLibraryStore` 在事务开始时绑定一个 JDBC Connection，Book、BookCopy、BorrowRecord 与
 Reservation 的 Access Repository 在一次业务中复用该连接；任一步失败都会回滚整个事务。
@@ -91,7 +119,13 @@ InMemory 版本仍通过第二步失败时补偿第一步维持测试状态一�
 ## 测试覆盖
 
 - Service：关键词和分类校验、馆藏地汇总、停用书目过滤；
+- 检索：索书号与条码命中所属书目、大小写不敏感、逐页取完与全量一致且不重不漏、
+  末页余数、越界与极大页码返回空页、非法页码与页大小被拒、分类过滤先于分页；
 - 借还：条码定位、30 天借期、一次续借、预约阻止续借、五本上限、同书目重复、逾期停借、他人归还拒绝；
+- 费用：逾期 0/1/15/封顶天数的费率、未归还不计费、缴费幂等、余额不足、
+  扣款后本地写入失败补偿退款、未缴费用阻止借书与预约且结清后恢复；
+- 丢书：赔偿为书价加手续费、单册转已注销、记录关闭并标记、既逾期又丢失时只算赔偿、
+  重复申报与申报已归还记录被拒、他人不能代为申报；
 - 状态机：`AVAILABLE -> LOANED -> WAITING_SHELVING -> AVAILABLE`，最后一步由管理员确认归架；
 - 一致性：同一条码并发只有一次借阅成功，任一写入失败不留下半完成状态；
 - 预约：立即保留、无库存排队、稳定 FIFO、三条上限、逾期停约、同书防重复、24 小时过期、

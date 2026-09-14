@@ -21,6 +21,7 @@ public final class BookDTO implements Serializable {
     private final String language;
     private final String status;
     private final List<BookLocationDTO> locations;
+    private final int priceFen;
 
     /** Creates a V2 catalog summary whose inventory is grouped by location. */
     public BookDTO(
@@ -34,7 +35,8 @@ public final class BookDTO implements Serializable {
             Integer publicationYear,
             String language,
             String status,
-            List<BookLocationDTO> locations) {
+            List<BookLocationDTO> locations,
+            int priceFen) {
         this.bookId = bookId;
         this.isbn = isbn;
         this.title = title;
@@ -46,6 +48,7 @@ public final class BookDTO implements Serializable {
         this.language = language;
         this.status = status;
         this.locations = List.copyOf(locations);
+        this.priceFen = priceFen;
     }
 
     /** @return stable library book identifier */
@@ -93,5 +96,31 @@ public final class BookDTO implements Serializable {
     /** @return copies currently available to borrow */
     public int getAvailableCount() {
         return locations.stream().mapToInt(BookLocationDTO::getAvailableCount).sum();
+    }
+
+    /** @return list price in fen; the base amount for lost-book compensation */
+    public int getPriceFen() { return priceFen; }
+
+    /**
+     * Book-level keyword match over title, author, ISBN, category, publisher, language and
+     * publication year. Both repository implementations delegate here so the searchable fields
+     * cannot drift apart; copy-level fields such as the shelf mark are matched by the service.
+     *
+     * @param keyword already normalised to lower case
+     * @return whether this catalog record matches
+     */
+    public boolean matchesKeyword(String keyword) {
+        return containsIgnoreCase(title, keyword)
+                || containsIgnoreCase(author, keyword)
+                || containsIgnoreCase(isbn, keyword)
+                || containsIgnoreCase(categoryName, keyword)
+                || containsIgnoreCase(publisher, keyword)
+                || containsIgnoreCase(language, keyword)
+                || (publicationYear != null
+                        && String.valueOf(publicationYear).contains(keyword));
+    }
+
+    private static boolean containsIgnoreCase(String value, String keyword) {
+        return value != null && value.toLowerCase(java.util.Locale.ROOT).contains(keyword);
     }
 }

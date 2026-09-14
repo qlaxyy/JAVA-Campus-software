@@ -33,6 +33,20 @@ public final class LibraryActions {
     public static final String RENEW_BORROW =
             ActionNames.of(ModuleNames.LIBRARY, "RENEW_BORROW");
 
+    /**
+     * Settles the outstanding fee of one borrow record owned by the authenticated user,
+     * charging the campus card. Repeating the same record is a no-op once settled.
+     */
+    public static final String PAY_FEE =
+            ActionNames.of(ModuleNames.LIBRARY, "PAY_FEE");
+
+    /**
+     * Reports one active borrow as lost. The physical copy is withdrawn and lost-book
+     * compensation becomes payable in the same transaction.
+     */
+    public static final String REPORT_LOST =
+            ActionNames.of(ModuleNames.LIBRARY, "REPORT_LOST");
+
     /** Creates a reservation for the authenticated user. */
     public static final String CREATE_RESERVATION =
             ActionNames.of(ModuleNames.LIBRARY, "CREATE_RESERVATION");
@@ -78,6 +92,18 @@ public final class LibraryActions {
     /** Queries all-library current, history or overdue borrow records. */
     public static final String ADMIN_QUERY_BORROWS =
             ActionNames.of(ModuleNames.LIBRARY, "ADMIN_QUERY_BORROWS");
+    /** Queries the reservation queue across all readers; library administrators only. */
+    public static final String ADMIN_QUERY_RESERVATIONS =
+            ActionNames.of(ModuleNames.LIBRARY, "ADMIN_QUERY_RESERVATIONS");
+    /** Reads the whole-library statistics snapshot; library administrators only. */
+    public static final String ADMIN_STATISTICS =
+            ActionNames.of(ModuleNames.LIBRARY, "ADMIN_STATISTICS");
+    /** Lists the holding-location dictionary with copy counts; library administrators only. */
+    public static final String ADMIN_LIST_LOCATIONS =
+            ActionNames.of(ModuleNames.LIBRARY, "ADMIN_LIST_LOCATIONS");
+    /** Adds one holding location to the dictionary; library administrators only. */
+    public static final String ADMIN_ADD_LOCATION =
+            ActionNames.of(ModuleNames.LIBRARY, "ADMIN_ADD_LOCATION");
 
     private LibraryActions() {
     }

@@ -3,7 +3,10 @@ package edu.seu.vcampus.server.module.library;
 import edu.seu.vcampus.common.library.AddBookCopyRequest;
 import edu.seu.vcampus.common.library.AddBookCategoryRequest;
 import edu.seu.vcampus.common.library.AddBookRequest;
+import edu.seu.vcampus.common.library.AddLocationRequest;
 import edu.seu.vcampus.common.library.AdminBorrowQueryRequest;
+import edu.seu.vcampus.common.library.AdminReservationDTO;
+import edu.seu.vcampus.common.library.AdminReservationQueryRequest;
 import edu.seu.vcampus.common.library.BookCopyIdRequest;
 import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BookSearchResult;
@@ -74,6 +77,7 @@ public final class LibraryServerModule implements ServerModule {
         BookCategoryRepository categories = new AccessBookCategoryRepository(store);
         BookCopyRepository copies = new AccessBookCopyRepository(store);
         ReservationRepository reservations = new AccessReservationRepository(store);
+        BookLocationRepository locations = new AccessBookLocationRepository(store);
         AccessLibraryDemonstrationData.seedIfEligible(
                 store, copies, records, reservations, clock);
         LibraryService service = new LibraryService(
@@ -85,7 +89,9 @@ public final class LibraryServerModule implements ServerModule {
                 copies,
                 reservations,
                 store,
-                () -> UUID.randomUUID().toString());
+                () -> UUID.randomUUID().toString(),
+                campusCards,
+                locations);
         return new LibraryServerModule(service, campusCards);
     }
 
@@ -132,6 +138,10 @@ public final class LibraryServerModule implements ServerModule {
                 request -> getBorrowRecords(request, context));
         router.register(LibraryActions.RENEW_BORROW,
                 request -> renewBorrow(request, context));
+        router.register(LibraryActions.PAY_FEE,
+                request -> payFee(request, context));
+        router.register(LibraryActions.REPORT_LOST,
+                request -> reportLost(request, context));
         router.register(LibraryActions.CREATE_RESERVATION,
                 request -> createReservation(request, context));
         router.register(LibraryActions.GET_MY_RESERVATIONS,
@@ -167,6 +177,15 @@ public final class LibraryServerModule implements ServerModule {
         router.register(LibraryActions.ADMIN_QUERY_BORROWS, request -> administer(
                 request, context, AdminBorrowQueryRequest.class,
                 (actor, data) -> new ArrayList<>(service.queryBorrows(actor, data))));
+        router.register(LibraryActions.ADMIN_QUERY_RESERVATIONS, request -> administer(
+                request, context, AdminReservationQueryRequest.class,
+                (actor, data) -> new ArrayList<>(service.queryReservations(actor, data))));
+        router.register(LibraryActions.ADMIN_STATISTICS, request -> administer(
+                request, context, service::statistics));
+        router.register(LibraryActions.ADMIN_LIST_LOCATIONS, request -> administer(
+                request, context, actor -> new ArrayList<>(service.listLocations(actor))));
+        router.register(LibraryActions.ADMIN_ADD_LOCATION, request -> administer(
+                request, context, AddLocationRequest.class, service::addLocation));
     }
 
     private Response searchBooks(Request request, ServerContext context) {
@@ -273,6 +292,48 @@ public final class LibraryServerModule implements ServerModule {
         }
     }
 
+    private Response payFee(Request request, ServerContext context) {
+        Optional<SessionInfo> session = session(request, context);
+        if (session.isEmpty()) {
+            return authenticationRequired(request);
+        }
+        if (!(request.getData() instanceof BorrowRecordIdRequest data)) {
+            return invalidRequest(request, "缴费请求格式不正确");
+        }
+        try {
+            BorrowRecordDTO settled = service.payFee(session.orElseThrow(), data);
+            return Response.success(request, "费用已结清，共 "
+                    + formatYuan(settled.getFeeFen()) + " 元", settled);
+        } catch (LibraryBusinessException exception) {
+            return businessFailure(request, exception);
+        } catch (IllegalArgumentException exception) {
+            return invalidArgument(request, exception);
+        }
+    }
+
+    private Response reportLost(Request request, ServerContext context) {
+        Optional<SessionInfo> session = session(request, context);
+        if (session.isEmpty()) {
+            return authenticationRequired(request);
+        }
+        if (!(request.getData() instanceof BorrowRecordIdRequest data)) {
+            return invalidRequest(request, "丢失申报请求格式不正确");
+        }
+        try {
+            BorrowRecordDTO lost = service.reportLost(session.orElseThrow(), data);
+            return Response.success(request, "已登记丢失，应赔 " + formatYuan(lost.getFeeFen())
+                    + " 元，请在“我的图书馆”结清", lost);
+        } catch (LibraryBusinessException exception) {
+            return businessFailure(request, exception);
+        } catch (IllegalArgumentException exception) {
+            return invalidArgument(request, exception);
+        }
+    }
+
+    private static String formatYuan(int fen) {
+        return java.math.BigDecimal.valueOf(fen, 2).toPlainString();
+    }
+
     private Response createReservation(Request request, ServerContext context) {
         Optional<SessionInfo> session = session(request, context);
         if (session.isEmpty()) {
@@ -337,19 +398,47 @@ public final class LibraryServerModule implements ServerModule {
     private <T> Response administer(Request request, ServerContext context, Class<T> type,
             BiFunction<SessionInfo, T, ? extends Serializable> action) {
         Optional<SessionInfo> actor = session(request, context);
-        if (actor.isEmpty()) {
-            return authenticationRequired(request);
-        }
-        if (!actor.orElseThrow().canAdminister(ModuleNames.LIBRARY)) {
-            return Response.failure(request.getRequestId(), ErrorCodes.AUTH_FORBIDDEN,
-                    "需要图书馆管理权限");
+        Optional<Response> rejected = rejectNonAdministrator(request, actor);
+        if (rejected.isPresent()) {
+            return rejected.orElseThrow();
         }
         if (!type.isInstance(request.getData())) {
             return invalidRequest(request, "图书馆管理请求格式不正确");
         }
+        return runAdministration(request, actor.orElseThrow(),
+                caller -> action.apply(caller, type.cast(request.getData())));
+    }
+
+    /** 无请求体的管理员动作：只校验身份与管理权，请求 data 必须为空。 */
+    private Response administer(Request request, ServerContext context,
+            java.util.function.Function<SessionInfo, ? extends Serializable> action) {
+        Optional<SessionInfo> actor = session(request, context);
+        Optional<Response> rejected = rejectNonAdministrator(request, actor);
+        if (rejected.isPresent()) {
+            return rejected.orElseThrow();
+        }
+        if (request.getData() != null) {
+            return invalidRequest(request, "图书馆管理请求格式不正确");
+        }
+        return runAdministration(request, actor.orElseThrow(), action);
+    }
+
+    private Optional<Response> rejectNonAdministrator(
+            Request request, Optional<SessionInfo> actor) {
+        if (actor.isEmpty()) {
+            return Optional.of(authenticationRequired(request));
+        }
+        if (!actor.orElseThrow().canAdminister(ModuleNames.LIBRARY)) {
+            return Optional.of(Response.failure(request.getRequestId(),
+                    ErrorCodes.AUTH_FORBIDDEN, "需要图书馆管理权限"));
+        }
+        return Optional.empty();
+    }
+
+    private Response runAdministration(Request request, SessionInfo actor,
+            java.util.function.Function<SessionInfo, ? extends Serializable> action) {
         try {
-            return Response.success(request, "图书馆管理操作成功",
-                    action.apply(actor.orElseThrow(), type.cast(request.getData())));
+            return Response.success(request, "图书馆管理操作成功", action.apply(actor));
         } catch (LibraryBusinessException exception) {
             return businessFailure(request, exception);
         } catch (IllegalArgumentException exception) {

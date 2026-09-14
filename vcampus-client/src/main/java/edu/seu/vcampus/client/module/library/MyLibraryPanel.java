@@ -11,6 +11,7 @@ import edu.seu.vcampus.common.protocol.Response;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
@@ -31,7 +32,7 @@ import java.util.concurrent.ExecutionException;
 public final class MyLibraryPanel extends JPanel {
 
     private static final String[] BORROW_COLUMNS = {
-        "书名", "馆藏条码", "借阅时间", "到期时间", "续借次数", "归还时间", "状态"
+        "书名", "馆藏条码", "借阅时间", "到期时间", "续借次数", "归还时间", "状态", "待缴费用"
     };
     private static final String[] RESERVATION_COLUMNS = {
         "书名", "取书馆藏地", "预约状态", "排队位次", "馆藏条码", "取书截止时间"
@@ -51,10 +52,14 @@ public final class MyLibraryPanel extends JPanel {
     private final JButton refreshButton = new JButton("刷新全部记录");
     private final JButton renewBorrow = new JButton("续借选中图书");
     private final JButton cancelReservation = new JButton("取消选中预约");
+    private final JButton reportLost = new JButton("申报丢失");
+    private final JButton payFee = new JButton("缴纳选中费用");
+    private final JLabel feeHint = new JLabel("选择有“待缴”费用的历史借阅后结清");
     private final JLabel reservationHint = new JLabel("只有“排队中”和“待取书”预约可以取消");
     private final JLabel statusLabel = new JLabel("打开此页后加载本人的借阅与预约记录");
     private final JLabel renewHint = new JLabel("每次借阅最多续借 1 次；逾期或已有预约时不能续借");
     private List<BorrowRecordDTO> currentBorrows = List.of();
+    private List<BorrowRecordDTO> historyBorrows = List.of();
     private List<ReservationDTO> reservations = List.of();
     private boolean working;
 
@@ -89,7 +94,7 @@ public final class MyLibraryPanel extends JPanel {
         records.setName("library.recordTabs");
         LibraryUiTheme.styleTabbedPane(records);
         records.addTab("当前借阅", createCurrentBorrowArea());
-        records.addTab("历史借阅", LibraryUiTheme.tableScrollPane(historyTable));
+        records.addTab("历史借阅", createHistoryArea());
         records.addTab("我的预约", createReservationArea());
         add(overview, BorderLayout.NORTH);
         add(records, BorderLayout.CENTER);
@@ -100,6 +105,8 @@ public final class MyLibraryPanel extends JPanel {
         refreshButton.addActionListener(event -> refresh());
         renewBorrow.addActionListener(event -> renewSelectedBorrow());
         cancelReservation.addActionListener(event -> cancelSelectedReservation());
+        payFee.addActionListener(event -> paySelectedFee());
+        reportLost.addActionListener(event -> reportSelectedLost());
         reservationTable.getSelectionModel().addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
                 updateCancelButton();
@@ -108,13 +115,20 @@ public final class MyLibraryPanel extends JPanel {
         currentTable.getSelectionModel().addListSelectionListener(event -> {
             if (!event.getValueIsAdjusting()) {
                 updateRenewButton();
+                updateReportLostButton();
             }
         });
-        LibraryUiTheme.setColumnWidths(currentTable, 210, 125, 145, 145, 80, 145, 105);
-        LibraryUiTheme.setColumnWidths(historyTable, 210, 125, 145, 145, 80, 145, 105);
+        historyTable.getSelectionModel().addListSelectionListener(event -> {
+            if (!event.getValueIsAdjusting()) {
+                updatePayButton();
+            }
+        });
+        LibraryUiTheme.setColumnWidths(currentTable, 210, 125, 145, 145, 80, 145, 105, 110);
+        LibraryUiTheme.setColumnWidths(historyTable, 210, 125, 145, 145, 80, 145, 105, 110);
         LibraryUiTheme.setColumnWidths(reservationTable, 210, 230, 100, 90, 125, 145);
         updateCancelButton();
         updateRenewButton();
+        updatePayButton();
     }
 
     private JPanel createCurrentBorrowArea() {
@@ -126,7 +140,25 @@ public final class MyLibraryPanel extends JPanel {
         actions.setBorder(LibraryUiTheme.cardBorder(7, 10));
         renewHint.setForeground(LibraryUiTheme.MUTED);
         actions.add(renewHint, BorderLayout.CENTER);
-        actions.add(renewBorrow, BorderLayout.EAST);
+        JPanel buttons = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 8, 0));
+        buttons.setOpaque(false);
+        buttons.add(reportLost);
+        buttons.add(renewBorrow);
+        actions.add(buttons, BorderLayout.EAST);
+        panel.add(actions, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    private JPanel createHistoryArea() {
+        JPanel panel = new JPanel(new BorderLayout(8, 8));
+        panel.setBackground(LibraryUiTheme.PAGE);
+        panel.add(LibraryUiTheme.tableScrollPane(historyTable), BorderLayout.CENTER);
+        JPanel actions = new JPanel(new BorderLayout(8, 0));
+        LibraryUiTheme.styleCard(actions);
+        actions.setBorder(LibraryUiTheme.cardBorder(7, 10));
+        feeHint.setForeground(LibraryUiTheme.MUTED);
+        actions.add(feeHint, BorderLayout.CENTER);
+        actions.add(payFee, BorderLayout.EAST);
         panel.add(actions, BorderLayout.SOUTH);
         return panel;
     }
@@ -196,8 +228,9 @@ public final class MyLibraryPanel extends JPanel {
         List<BorrowRecordDTO> history = borrows.stream()
                 .filter(record -> "RETURNED".equals(record.getStatus())).toList();
         currentBorrows = List.copyOf(current);
+        historyBorrows = List.copyOf(history);
         currentBorrows.forEach(record -> currentModel.addRow(borrowRow(record)));
-        history.forEach(record -> historyModel.addRow(borrowRow(record)));
+        historyBorrows.forEach(record -> historyModel.addRow(borrowRow(record)));
         reservations = List.copyOf(loadedReservations);
         reservations.forEach(reservation -> reservationModel.addRow(reservationRow(reservation)));
 
@@ -255,6 +288,120 @@ public final class MyLibraryPanel extends JPanel {
         if (viewRow < 0) return null;
         int modelRow = currentTable.convertRowIndexToModel(viewRow);
         return modelRow >= currentBorrows.size() ? null : currentBorrows.get(modelRow);
+    }
+
+    private BorrowRecordDTO selectedHistoryBorrow() {
+        int viewRow = historyTable.getSelectedRow();
+        if (viewRow < 0) return null;
+        int modelRow = historyTable.convertRowIndexToModel(viewRow);
+        return modelRow >= historyBorrows.size() ? null : historyBorrows.get(modelRow);
+    }
+
+    private void updateReportLostButton() {
+        reportLost.setEnabled(!working && selectedCurrentBorrow() != null);
+    }
+
+    private void reportSelectedLost() {
+        BorrowRecordDTO record = selectedCurrentBorrow();
+        if (working || record == null) {
+            return;
+        }
+        int choice = JOptionPane.showConfirmDialog(this,
+                "确定申报《" + record.getBookTitle() + "》（条码 " + record.getBarcode()
+                        + "）已丢失吗？\n该单册将被注销，并按书价加 5 元手续费产生赔偿，"
+                        + "需结清后才能继续借书。",
+                "申报丢失", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (choice != JOptionPane.OK_OPTION) {
+            return;
+        }
+        setWorking(true);
+        statusLabel.setText("正在登记《" + record.getBookTitle() + "》的丢失……");
+        new SwingWorker<Response, Void>() {
+            @Override
+            protected Response doInBackground() throws Exception {
+                return context.send(LibraryActions.REPORT_LOST,
+                        new BorrowRecordIdRequest(record.getRecordId()));
+            }
+
+            @Override
+            protected void done() {
+                boolean reload = false;
+                try {
+                    Response response = get();
+                    if (response == null || !response.isSuccess()) {
+                        statusLabel.setText("申报失败：" + (response == null
+                                ? "服务器未返回结果" : LibraryMessages.failure(response)));
+                        return;
+                    }
+                    statusLabel.setText(response.getMessage());
+                    reload = true;
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    statusLabel.setText("申报结果未确认，请刷新后核对，勿重复提交");
+                } catch (ExecutionException exception) {
+                    statusLabel.setText("申报结果未确认，请刷新后核对，勿重复提交");
+                } finally {
+                    setWorking(false);
+                    if (reload) SwingUtilities.invokeLater(MyLibraryPanel.this::refresh);
+                }
+            }
+        }.execute();
+    }
+
+    private void updatePayButton() {
+        BorrowRecordDTO selected = selectedHistoryBorrow();
+        boolean payable = !working && selected != null
+                && selected.getFeeFen() > 0 && !selected.isFeeSettled();
+        payFee.setEnabled(payable);
+        if (selected == null) {
+            feeHint.setText("选择有“待缴”费用的历史借阅后结清");
+        } else if (selected.getFeeFen() <= 0) {
+            feeHint.setText("该记录没有产生费用");
+        } else if (selected.isFeeSettled()) {
+            feeHint.setText("该记录的费用已结清");
+        } else {
+            feeHint.setText("将从校园卡扣款 " + yuan(selected.getFeeFen())
+                    + " 元；余额不足时会提示充值");
+        }
+    }
+
+    private void paySelectedFee() {
+        BorrowRecordDTO record = selectedHistoryBorrow();
+        if (working || record == null || record.getFeeFen() <= 0 || record.isFeeSettled()) {
+            return;
+        }
+        setWorking(true);
+        statusLabel.setText("正在缴纳《" + record.getBookTitle() + "》的费用……");
+        new SwingWorker<Response, Void>() {
+            @Override
+            protected Response doInBackground() throws Exception {
+                return context.send(LibraryActions.PAY_FEE,
+                        new BorrowRecordIdRequest(record.getRecordId()));
+            }
+
+            @Override
+            protected void done() {
+                boolean reload = false;
+                try {
+                    Response response = get();
+                    if (response == null || !response.isSuccess()) {
+                        statusLabel.setText("缴费失败：" + (response == null
+                                ? "服务器未返回结果" : LibraryMessages.failure(response)));
+                        return;
+                    }
+                    statusLabel.setText("费用已结清：" + response.getMessage());
+                    reload = true;
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    statusLabel.setText("缴费结果未确认，请刷新后核对，勿重复提交");
+                } catch (ExecutionException exception) {
+                    statusLabel.setText("缴费结果未确认，请刷新后核对，勿重复提交");
+                } finally {
+                    setWorking(false);
+                    if (reload) SwingUtilities.invokeLater(MyLibraryPanel.this::refresh);
+                }
+            }
+        }.execute();
     }
 
     private void cancelSelectedReservation() {
@@ -330,6 +477,8 @@ public final class MyLibraryPanel extends JPanel {
         reservationTable.setEnabled(!value);
         updateCancelButton();
         updateRenewButton();
+        updatePayButton();
+        updateReportLostButton();
     }
 
     private void updateRenewButton() {
@@ -377,7 +526,21 @@ public final class MyLibraryPanel extends JPanel {
                 format(record.getBorrowTime()), format(record.getDueTime()),
                 record.getRenewalCount(), format(record.getReturnTime()),
                 record.isOverdue() ? "已逾期" :
-                        ("BORROWED".equals(record.getStatus()) ? "借阅中" : "已归还")};
+                        ("BORROWED".equals(record.getStatus()) ? "借阅中" : "已归还"),
+                feeText(record)};
+    }
+
+    /** 待缴费用列：无费用显示破折号，已结清与待缴分别标注，金额以元为单位保留两位小数。 */
+    private static String feeText(BorrowRecordDTO record) {
+        if (record.getFeeFen() <= 0) {
+            return "—";
+        }
+        String yuan = yuan(record.getFeeFen());
+        return record.isFeeSettled() ? "已结清 " + yuan + " 元" : "待缴 " + yuan + " 元";
+    }
+
+    private static String yuan(int fen) {
+        return java.math.BigDecimal.valueOf(fen, 2).toPlainString();
     }
 
     private static Object[] reservationRow(ReservationDTO reservation) {

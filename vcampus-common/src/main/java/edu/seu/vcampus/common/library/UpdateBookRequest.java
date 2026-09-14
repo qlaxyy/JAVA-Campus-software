@@ -16,6 +16,7 @@ public final class UpdateBookRequest implements Serializable {
     private final String publisher;
     private final Integer publicationYear;
     private final String language;
+    private final int priceFen;
 
     /**
      * Creates the transfer object.
@@ -24,9 +25,14 @@ public final class UpdateBookRequest implements Serializable {
      * @param title book title
      * @param author author name
      * @param categoryId existing category identifier
+     * @param publisher publisher, optional
+     * @param publicationYear publication year, optional
+     * @param language language, optional
+     * @param priceFen list price in fen, used to compute lost-book compensation
      */
     public UpdateBookRequest(String bookId, String isbn, String title, String author,
-            String categoryId, String publisher, Integer publicationYear, String language) {
+            String categoryId, String publisher, Integer publicationYear, String language,
+            int priceFen) {
         this.bookId = bookId;
         this.isbn = isbn;
         this.title = title;
@@ -35,6 +41,7 @@ public final class UpdateBookRequest implements Serializable {
         this.publisher = publisher;
         this.publicationYear = publicationYear;
         this.language = language;
+        this.priceFen = priceFen;
     }
 
     /** @return existing book identifier */
@@ -57,4 +64,7 @@ public final class UpdateBookRequest implements Serializable {
     public Integer getPublicationYear() { return publicationYear; }
 
     public String getLanguage() { return language; }
+
+    /** @return list price in fen */
+    public int getPriceFen() { return priceFen; }
 }

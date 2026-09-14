@@ -15,6 +15,7 @@ public final class AddBookRequest implements Serializable {
     private final String publisher;
     private final Integer publicationYear;
     private final String language;
+    private final int priceFen;
 
     /**
      * Creates the transfer object.
@@ -25,9 +26,10 @@ public final class AddBookRequest implements Serializable {
      * @param publisher publisher, optional
      * @param publicationYear publication year, optional
      * @param language language, optional
+     * @param priceFen list price in fen, used to compute lost-book compensation
      */
     public AddBookRequest(String isbn, String title, String author, String categoryId,
-            String publisher, Integer publicationYear, String language) {
+            String publisher, Integer publicationYear, String language, int priceFen) {
         this.isbn = isbn;
         this.title = title;
         this.author = author;
@@ -35,6 +37,7 @@ public final class AddBookRequest implements Serializable {
         this.publisher = publisher;
         this.publicationYear = publicationYear;
         this.language = language;
+        this.priceFen = priceFen;
     }
 
     /** @return ISBN-10 or ISBN-13 */
@@ -54,4 +57,7 @@ public final class AddBookRequest implements Serializable {
     public Integer getPublicationYear() { return publicationYear; }
 
     public String getLanguage() { return language; }
+
+    /** @return list price in fen */
+    public int getPriceFen() { return priceFen; }
 }

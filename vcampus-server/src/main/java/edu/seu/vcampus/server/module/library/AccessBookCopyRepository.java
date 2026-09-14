@@ -20,6 +20,21 @@ final class AccessBookCopyRepository implements BookCopyRepository {
     }
 
     @Override
+    public List<BookCopy> findAll() {
+        return store.read("Cannot list physical book copies.", connection -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    SELECT_COPY + " ORDER BY copyId");
+                 ResultSet result = statement.executeQuery()) {
+                List<BookCopy> copies = new ArrayList<>();
+                while (result.next()) {
+                    copies.add(readCopy(result));
+                }
+                return copies;
+            }
+        });
+    }
+
+    @Override
     public List<BookCopy> findByBookId(String bookId) {
         return store.read("Cannot list physical book copies.", connection -> {
             try (PreparedStatement statement = connection.prepareStatement(

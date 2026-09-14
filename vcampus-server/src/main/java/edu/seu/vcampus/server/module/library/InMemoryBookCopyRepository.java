@@ -11,8 +11,8 @@ import java.util.Optional;
 /** In-memory physical-copy repository used before the Access implementation. */
 final class InMemoryBookCopyRepository implements BookCopyRepository {
 
-    private static final String JIULONGHU = "九龙湖校区—中文图书阅览室3";
-    private static final String SIPAILOU = "四牌楼校区—中文书库二楼";
+    static final String JIULONGHU = "九龙湖校区—中文图书阅览室3";
+    static final String SIPAILOU = "四牌楼校区—中文书库二楼";
 
     private final Map<String, BookCopy> copies = new LinkedHashMap<>();
 
@@ -27,6 +27,11 @@ final class InMemoryBookCopyRepository implements BookCopyRepository {
     @Override
     public synchronized List<BookCopy> findByBookId(String bookId) {
         return copies.values().stream().filter(copy -> copy.bookId().equals(bookId)).toList();
+    }
+
+    @Override
+    public synchronized List<BookCopy> findAll() {
+        return List.copyOf(copies.values());
     }
 
     @Override

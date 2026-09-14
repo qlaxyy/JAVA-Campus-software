@@ -8,6 +8,9 @@ interface BookCopyRepository {
 
     List<BookCopy> findByBookId(String bookId);
 
+    /** Lists every copy; used by keyword search to match shelf marks and barcodes. */
+    List<BookCopy> findAll();
+
     Optional<BookCopy> findById(String copyId);
 
     Optional<BookCopy> findByBarcode(String barcode);

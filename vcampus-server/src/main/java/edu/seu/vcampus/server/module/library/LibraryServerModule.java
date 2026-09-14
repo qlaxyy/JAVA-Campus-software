@@ -4,6 +4,8 @@ import edu.seu.vcampus.common.library.AddBookCopyRequest;
 import edu.seu.vcampus.common.library.AddBookCategoryRequest;
 import edu.seu.vcampus.common.library.AddBookRequest;
 import edu.seu.vcampus.common.library.AdminBorrowQueryRequest;
+import edu.seu.vcampus.common.library.AdminReservationDTO;
+import edu.seu.vcampus.common.library.AdminReservationQueryRequest;
 import edu.seu.vcampus.common.library.BookCopyIdRequest;
 import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BookSearchResult;
@@ -172,6 +174,9 @@ public final class LibraryServerModule implements ServerModule {
         router.register(LibraryActions.ADMIN_QUERY_BORROWS, request -> administer(
                 request, context, AdminBorrowQueryRequest.class,
                 (actor, data) -> new ArrayList<>(service.queryBorrows(actor, data))));
+        router.register(LibraryActions.ADMIN_QUERY_RESERVATIONS, request -> administer(
+                request, context, AdminReservationQueryRequest.class,
+                (actor, data) -> new ArrayList<>(service.queryReservations(actor, data))));
     }
 
     private Response searchBooks(Request request, ServerContext context) {

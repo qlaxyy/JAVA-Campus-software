@@ -15,7 +15,11 @@
 2. **实体单册**：为选中的书目登记唯一馆藏条码，维护馆藏地和索书号，确认归还单册归架，软注销单册，
    或恢复误注销的单册。
    登记后的 barcode、bookId 和 status 不能通过通用编辑修改。
-3. **借阅查询**：查询全馆当前借阅、借阅历史或逾期未还，展示稳定 `userId`、书名、馆藏条码和时间。
+3. **借阅查询**：查询全馆当前借阅、借阅历史或逾期未还，可按稳定 `userId` 缩小到单个读者，
+   展示 `userId`、书名、馆藏条码和时间。
+4. **预约查询**：只读地查看全馆预约队列，按"排队中 / 待取书 / 全部"筛选，
+   展示 `userId`、馆藏地、排队位次、分配条码与取书截止时间。
+   管理员不能重排或强制取消预约——队列的结束方式只有读者取消、到期未取与取书借出三种。
 
 已知不合法操作直接禁用：`AVAILABLE` 不能再次归架，`RESERVED/LOANED/WITHDRAWN` 不能注销，
 预约待取单册不能编辑，只有 `WITHDRAWN` 可以恢复，且 `WITHDRAWN` 不能直接编辑；条码登记后不可编辑。
@@ -37,6 +41,7 @@
 | `WITHDRAW_BOOK_COPY` | `BookCopyIdRequest` | `BookCopyDTO` |
 | `RESTORE_BOOK_COPY` | `BookCopyIdRequest` | `BookCopyDTO` |
 | `ADMIN_QUERY_BORROWS` | `AdminBorrowQueryRequest` | `List<AdminBorrowRecordDTO>` |
+| `ADMIN_QUERY_RESERVATIONS` | `AdminReservationQueryRequest` | `List<AdminReservationDTO>` |
 
 ## 关键业务规则
 

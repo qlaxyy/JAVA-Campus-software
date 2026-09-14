@@ -92,6 +92,9 @@ public final class LibraryActions {
     /** Queries all-library current, history or overdue borrow records. */
     public static final String ADMIN_QUERY_BORROWS =
             ActionNames.of(ModuleNames.LIBRARY, "ADMIN_QUERY_BORROWS");
+    /** Queries the reservation queue across all readers; library administrators only. */
+    public static final String ADMIN_QUERY_RESERVATIONS =
+            ActionNames.of(ModuleNames.LIBRARY, "ADMIN_QUERY_RESERVATIONS");
 
     private LibraryActions() {
     }

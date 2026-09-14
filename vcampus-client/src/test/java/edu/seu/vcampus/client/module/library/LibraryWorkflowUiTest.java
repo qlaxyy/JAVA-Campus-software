@@ -153,7 +153,8 @@ class LibraryWorkflowUiTest {
             onEdt(() -> view.set(new LibraryClientModule().createView(context)));
             List<JTable> tables = descendants(view.get()).stream()
                     .filter(JTable.class::isInstance).map(JTable.class::cast).toList();
-            assertEquals(7, tables.size());
+            // 馆藏查询 1、我的图书馆 3、管理员工作台 4（书目 / 单册 / 借阅 / 预约）
+            assertEquals(8, tables.size());
             for (JTable table : tables) {
                 assertEquals(ListSelectionModel.SINGLE_SELECTION, table.getSelectionModel().getSelectionMode());
                 assertFalse(table.getTableHeader().getReorderingAllowed());

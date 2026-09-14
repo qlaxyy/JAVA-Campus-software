@@ -14,6 +14,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -21,6 +22,7 @@ class LibraryAdminServiceTest {
 
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-09-06T08:00:00Z"), ZoneOffset.UTC);
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 6, 8, 0);
+    private static final String JIULONGHU = "九龙湖校区—中文图书阅览室3";
     private static final SessionInfo ADMIN = new SessionInfo("admin", "A-1", "libraryadmin", "管理员",
             Role.USER, Set.of(AdminScope.LIBRARY));
     private static final SessionInfo READER = new SessionInfo("reader", "U-1", "reader", "读者", Role.USER);
@@ -139,6 +141,67 @@ class LibraryAdminServiceTest {
                 new AdminBorrowQueryRequest(AdminBorrowQueryRequest.CURRENT)));
         assertThrows(IllegalArgumentException.class, () -> service.queryBorrows(ADMIN,
                 new AdminBorrowQueryRequest("UPCOMING")));
+    }
+
+    @Test
+    void administratorCanNarrowBorrowsToASingleReader() {
+        BookCopy copy = copies.findById("CP-B001-001").orElseThrow();
+        copies.update(copy.withStatus(BookCopyStatus.LOANED));
+        records.save(new BorrowRecord("R-1", "U-1", copy.copyId(),
+                NOW.minusDays(5), NOW.plusDays(25), BorrowStatus.BORROWED));
+        records.save(new BorrowRecord("R-2", "U-2", "CP-B002-001",
+                NOW.minusDays(5), NOW.plusDays(25), BorrowStatus.BORROWED));
+
+        assertEquals(List.of("R-1", "R-2"), currentRecordIds(null), "留空表示查看全部读者");
+        assertEquals(List.of("R-1"), currentRecordIds("U-1"));
+        assertEquals(List.of("R-2"), currentRecordIds("U-2"));
+        assertEquals(List.of(), currentRecordIds("U-NOBODY"), "不存在的读者返回空列表");
+    }
+
+    @Test
+    void administratorCanSeeTheReservationQueueAcrossReaders() {
+        // B003 在九龙湖只有两册，先让两位读者借走，第三位读者预约就只能排队
+        service.borrowCopy("U-1", new CopyBorrowRequest("SEU-B003-001"));
+        service.borrowCopy("U-2", new CopyBorrowRequest("SEU-B003-002"));
+        ReservationDTO queued = service.createReservation("U-3",
+                new CreateReservationRequest("B003", JIULONGHU));
+        assertEquals("WAITING", queued.getStatus());
+
+        // B001 在九龙湖还有可借册，预约立即保留
+        ReservationDTO held = service.createReservation("U-4",
+                new CreateReservationRequest("B001", JIULONGHU));
+        assertEquals("READY_FOR_PICKUP", held.getStatus());
+
+        List<String> waiting = reservationIdsFor(AdminReservationQueryRequest.WAITING);
+        List<String> ready = reservationIdsFor(AdminReservationQueryRequest.READY);
+        List<String> all = reservationIdsFor(AdminReservationQueryRequest.ALL);
+
+        assertEquals(1, waiting.size());
+        assertEquals(1, ready.size());
+        assertEquals(2, all.size(), "全部范围应同时包含排队中与待取书");
+        assertTrue(all.containsAll(waiting) && all.containsAll(ready));
+
+        List<AdminReservationDTO> adminView = service.queryReservations(
+                ADMIN, new AdminReservationQueryRequest(AdminReservationQueryRequest.ALL));
+        assertEquals(Set.of("U-3", "U-4"),
+                adminView.stream().map(AdminReservationDTO::getUserId).collect(Collectors.toSet()),
+                "管理员视图必须带上预约属于哪位读者");
+
+        failure(ErrorCodes.AUTH_FORBIDDEN, () -> service.queryReservations(READER,
+                new AdminReservationQueryRequest(AdminReservationQueryRequest.ALL)));
+        assertThrows(IllegalArgumentException.class, () -> service.queryReservations(
+                ADMIN, new AdminReservationQueryRequest("UPCOMING")));
+    }
+
+    private List<String> currentRecordIds(String userId) {
+        return service.queryBorrows(ADMIN,
+                        new AdminBorrowQueryRequest(AdminBorrowQueryRequest.CURRENT, userId))
+                .stream().map(AdminBorrowRecordDTO::getRecordId).toList();
+    }
+
+    private List<String> reservationIdsFor(String scope) {
+        return service.queryReservations(ADMIN, new AdminReservationQueryRequest(scope))
+                .stream().map(AdminReservationDTO::getReservationId).toList();
     }
 
     private static void failure(String code, Runnable action) {

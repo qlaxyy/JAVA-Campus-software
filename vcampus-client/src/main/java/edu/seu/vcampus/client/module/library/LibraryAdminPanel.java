@@ -6,6 +6,8 @@ import edu.seu.vcampus.common.library.AddBookCategoryRequest;
 import edu.seu.vcampus.common.library.AddBookRequest;
 import edu.seu.vcampus.common.library.AdminBorrowQueryRequest;
 import edu.seu.vcampus.common.library.AdminBorrowRecordDTO;
+import edu.seu.vcampus.common.library.AdminReservationDTO;
+import edu.seu.vcampus.common.library.AdminReservationQueryRequest;
 import edu.seu.vcampus.common.library.BookCategoryDTO;
 import edu.seu.vcampus.common.library.BookCopyDTO;
 import edu.seu.vcampus.common.library.BookCopyIdRequest;
@@ -83,11 +85,20 @@ public final class LibraryAdminPanel extends JPanel {
     private final JButton refreshCopies = new JButton("刷新单册");
 
     private final JComboBox<String> borrowScope = new JComboBox<>(new String[]{"当前借阅", "借阅历史", "逾期未还"});
+    private final JTextField borrowUser = new JTextField(18);
     private final JButton refreshBorrows = new JButton("刷新借阅记录");
     private final DefaultTableModel borrowModel = readOnlyModel(new String[]{
             "用户编号", "书名", "馆藏条码", "借出时间", "应还时间", "续借", "归还时间", "状态"
     });
     private final JTable borrowTable = new JTable(borrowModel);
+
+    private final JComboBox<String> reservationScope =
+            new JComboBox<>(new String[]{"排队中", "待取书", "全部"});
+    private final JButton refreshReservations = new JButton("刷新预约记录");
+    private final DefaultTableModel reservationModel = readOnlyModel(new String[]{
+            "用户编号", "书名", "取书馆藏地", "预约状态", "排队位次", "馆藏条码", "取书截止时间"
+    });
+    private final JTable reservationTable = new JTable(reservationModel);
 
     private final JLabel outcome = new JLabel("管理员操作均由服务器再次校验权限");
     private final JLabel status = new JLabel("正在等待加载数据");
@@ -112,6 +123,7 @@ public final class LibraryAdminPanel extends JPanel {
         areas.addTab("书目维护", createCatalogArea());
         areas.addTab("实体单册", createCopyArea());
         areas.addTab("借阅查询", createBorrowArea());
+        areas.addTab("预约查询", createReservationQueueArea());
         add(areas, BorderLayout.CENTER);
 
         outcome.setName("library.admin.outcome");
@@ -268,12 +280,92 @@ public final class LibraryAdminPanel extends JPanel {
         header.setBorder(LibraryUiTheme.cardBorder(10, 12));
         header.add(new JLabel("查询范围"));
         header.add(borrowScope);
+        borrowUser.setName("library.admin.borrowUser");
+        borrowUser.setToolTipText("按读者编号筛选，留空表示查看全部读者");
+        header.add(new JLabel("读者编号"));
+        header.add(borrowUser);
         header.add(refreshBorrows);
         panel.add(header, BorderLayout.NORTH);
         panel.add(LibraryUiTheme.tableScrollPane(borrowTable), BorderLayout.CENTER);
         LibraryUiTheme.setColumnWidths(borrowTable,
                 125, 190, 130, 135, 135, 60, 135, 90);
         return panel;
+    }
+
+    /** 预约队列只读视图：管理员可见全馆排队与待取情况，但不能重排或强制取消。 */
+    private JPanel createReservationQueueArea() {
+        reservationScope.setName("library.admin.reservationScope");
+        configureTable(reservationTable, "library.admin.reservations");
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        LibraryUiTheme.installPage(panel);
+        JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        LibraryUiTheme.styleCard(header);
+        header.setBorder(LibraryUiTheme.cardBorder(10, 12));
+        header.add(new JLabel("查询范围"));
+        header.add(reservationScope);
+        header.add(refreshReservations);
+        JLabel hint = LibraryUiTheme.createMutedLabel(
+                "预约队列只读；取消与顺延由读者操作或系统到期清理触发");
+        header.add(hint);
+        panel.add(header, BorderLayout.NORTH);
+        panel.add(LibraryUiTheme.tableScrollPane(reservationTable), BorderLayout.CENTER);
+        LibraryUiTheme.setColumnWidths(reservationTable,
+                125, 190, 210, 95, 75, 125, 145);
+        return panel;
+    }
+
+    private void loadReservations() {
+        if (working) { return; }
+        String scope = switch (reservationScope.getSelectedIndex()) {
+            case 0 -> AdminReservationQueryRequest.WAITING;
+            case 1 -> AdminReservationQueryRequest.READY;
+            default -> AdminReservationQueryRequest.ALL;
+        };
+        setWorking(true);
+        status.setText("正在加载预约队列……");
+        new SwingWorker<Response, Void>() {
+            protected Response doInBackground() throws Exception {
+                return context.send(LibraryActions.ADMIN_QUERY_RESERVATIONS,
+                        new AdminReservationQueryRequest(scope));
+            }
+            protected void done() {
+                try {
+                    List<AdminReservationDTO> records =
+                            requireList(get(), AdminReservationDTO.class);
+                    reservationModel.setRowCount(0);
+                    for (AdminReservationDTO record : records) {
+                        reservationModel.addRow(new Object[]{record.getUserId(),
+                                record.getBookTitle(), record.getPickupLocation(),
+                                displayReservationStatus(record.getStatus()),
+                                record.getQueuePosition() == null
+                                        ? "—" : "第 " + record.getQueuePosition() + " 位",
+                                record.getAssignedBarcode() == null || record.getAssignedBarcode().isBlank()
+                                        ? "—" : record.getAssignedBarcode(),
+                                format(record.getExpiresAt())});
+                    }
+                    status.setText("共 " + records.size() + " 条"
+                            + reservationScope.getSelectedItem() + "预约");
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    status.setText("预约查询已中断");
+                } catch (ExecutionException | IllegalArgumentException exception) {
+                    status.setText("预约查询失败，请稍后重试");
+                } finally {
+                    setWorking(false);
+                }
+            }
+        }.execute();
+    }
+
+    private static String displayReservationStatus(String status) {
+        return switch (status) {
+            case "WAITING" -> "排队中";
+            case "READY_FOR_PICKUP" -> "待取书";
+            case "FULFILLED" -> "已借阅";
+            case "CANCELED" -> "已取消";
+            case "EXPIRED" -> "已过期";
+            default -> status;
+        };
     }
 
     private void applyVisualTheme() {
@@ -325,12 +417,18 @@ public final class LibraryAdminPanel extends JPanel {
         borrowScope.addActionListener(event -> {
             if (!working && areas.getSelectedIndex() == 2) { loadBorrows(); }
         });
+        refreshReservations.addActionListener(event -> loadReservations());
+        reservationScope.addActionListener(event -> {
+            if (!working && areas.getSelectedIndex() == 3) { loadReservations(); }
+        });
         areas.addChangeListener(event -> {
             if (working) { return; }
             if (areas.getSelectedIndex() == 1 && selectedBookId != null) {
                 loadCopies();
             } else if (areas.getSelectedIndex() == 2) {
                 loadBorrows();
+            } else if (areas.getSelectedIndex() == 3) {
+                loadReservations();
             }
         });
     }
@@ -585,7 +683,8 @@ public final class LibraryAdminPanel extends JPanel {
         status.setText("正在加载借阅记录……");
         new SwingWorker<Response, Void>() {
             protected Response doInBackground() throws Exception {
-                return context.send(LibraryActions.ADMIN_QUERY_BORROWS, new AdminBorrowQueryRequest(scope));
+                return context.send(LibraryActions.ADMIN_QUERY_BORROWS,
+                        new AdminBorrowQueryRequest(scope, borrowUser.getText().strip()));
             }
             protected void done() {
                 try {

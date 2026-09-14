@@ -5,6 +5,8 @@ import edu.seu.vcampus.common.library.AddBookCategoryRequest;
 import edu.seu.vcampus.common.library.AddBookRequest;
 import edu.seu.vcampus.common.library.AdminBorrowQueryRequest;
 import edu.seu.vcampus.common.library.AdminBorrowRecordDTO;
+import edu.seu.vcampus.common.library.AdminReservationDTO;
+import edu.seu.vcampus.common.library.AdminReservationQueryRequest;
 import edu.seu.vcampus.common.library.BookCategoryDTO;
 import edu.seu.vcampus.common.library.BookCopyDTO;
 import edu.seu.vcampus.common.library.BookCopyIdRequest;
@@ -934,9 +936,13 @@ final class LibraryService {
                 || AdminBorrowQueryRequest.OVERDUE.equals(scope))) {
             throw new IllegalArgumentException("查询范围只能是 CURRENT、HISTORY 或 OVERDUE");
         }
+        // 可选的读者过滤：为空表示不限定读者
+        String userId = request.getUserId() == null || request.getUserId().isBlank()
+                ? null : boundedText(request.getUserId(), "读者编号", 36);
         synchronized (circulationLock) {
             LocalDateTime now = LocalDateTime.now(clock);
             return borrowRecordRepository.findAll().stream()
+                    .filter(record -> userId == null || record.userId().equals(userId))
                     .filter(record -> switch (scope) {
                         case AdminBorrowQueryRequest.CURRENT ->
                                 record.status() == BorrowStatus.BORROWED;
@@ -1116,20 +1122,76 @@ final class LibraryService {
                 .findFirst();
     }
 
+    /**
+     * Lists reservations across every reader for the administrator workbench.
+     *
+     * <p>Read-only: administrators can see the queue but cannot reorder or force-cancel it, so the
+     * reader-facing cancellation rules stay the single way a reservation ends.
+     */
+    List<AdminReservationDTO> queryReservations(
+            SessionInfo actor, AdminReservationQueryRequest request) {
+        requireAdministrator(actor);
+        Objects.requireNonNull(request, "request must not be null");
+        String scope = boundedText(request.getScope(), "查询范围", 20)
+                .toUpperCase(java.util.Locale.ROOT);
+        if (!(AdminReservationQueryRequest.WAITING.equals(scope)
+                || AdminReservationQueryRequest.READY.equals(scope)
+                || AdminReservationQueryRequest.ALL.equals(scope))) {
+            throw new IllegalArgumentException("查询范围只能是 WAITING、READY 或 ALL");
+        }
+        synchronized (circulationLock) {
+            cleanExpiredReservations();
+            return reservationRepository.findAll().stream()
+                    .filter(reservation -> switch (scope) {
+                        case AdminReservationQueryRequest.WAITING ->
+                                reservation.status() == ReservationStatus.WAITING;
+                        case AdminReservationQueryRequest.READY ->
+                                reservation.status() == ReservationStatus.READY_FOR_PICKUP;
+                        default -> true;
+                    })
+                    // 进行中的排在前面，同组内按建立时间倒序
+                    .sorted(Comparator
+                            .comparingInt((Reservation reservation) ->
+                                    reservation.isActive() ? 0 : 1)
+                            .thenComparing(Reservation::createdAt, Comparator.reverseOrder())
+                            .thenComparing(Reservation::reservationId))
+                    .map(this::toAdminReservationDTO)
+                    .toList();
+        }
+    }
+
+    private AdminReservationDTO toAdminReservationDTO(Reservation reservation) {
+        BookDTO book = requireAnyBook(reservation.bookId());
+        return new AdminReservationDTO(reservation.reservationId(), reservation.userId(),
+                book.getBookId(), book.getTitle(), reservation.pickupLocation(),
+                assignedBarcodeOf(reservation), reservation.createdAt(), reservation.readyAt(),
+                reservation.expiresAt(), reservation.closedAt(),
+                reservation.status().name(), queuePositionOf(reservation));
+    }
+
+    private String assignedBarcodeOf(Reservation reservation) {
+        return reservation.assignedCopyId() == null ? null
+                : requireCopy(reservation.assignedCopyId()).barcode();
+    }
+
+    /** 1-based position within the same book and location queue while waiting, otherwise null. */
+    private Integer queuePositionOf(Reservation reservation) {
+        if (reservation.status() != ReservationStatus.WAITING) {
+            return null;
+        }
+        List<Reservation> queue = waitingReservations(
+                reservation.bookId(), reservation.pickupLocation());
+        int index = java.util.stream.IntStream.range(0, queue.size())
+                .filter(value -> queue.get(value).reservationId()
+                        .equals(reservation.reservationId()))
+                .findFirst().orElse(-1);
+        return index < 0 ? null : index + 1;
+    }
+
     private ReservationDTO toReservationDTO(Reservation reservation) {
         BookDTO book = requireAnyBook(reservation.bookId());
-        String barcode = reservation.assignedCopyId() == null ? null
-                : requireCopy(reservation.assignedCopyId()).barcode();
-        Integer queuePosition = null;
-        if (reservation.status() == ReservationStatus.WAITING) {
-            List<Reservation> queue = waitingReservations(
-                    reservation.bookId(), reservation.pickupLocation());
-            int index = java.util.stream.IntStream.range(0, queue.size())
-                    .filter(value -> queue.get(value).reservationId()
-                            .equals(reservation.reservationId()))
-                    .findFirst().orElse(-1);
-            queuePosition = index < 0 ? null : index + 1;
-        }
+        String barcode = assignedBarcodeOf(reservation);
+        Integer queuePosition = queuePositionOf(reservation);
         return new ReservationDTO(reservation.reservationId(), book.getBookId(),
                 book.getIsbn(), book.getTitle(), book.getAuthor(),
                 reservation.pickupLocation(), barcode, reservation.createdAt(),

@@ -34,6 +34,7 @@ class LibraryServerModuleTest {
         assertEquals(Set.of(LibraryActions.SEARCH_BOOKS, LibraryActions.GET_BORROW_RECORDS,
                 LibraryActions.BORROW_COPY, LibraryActions.RETURN_COPY,
                 LibraryActions.INSPECT_COPY, LibraryActions.LIST_CATEGORIES,
+                LibraryActions.RENEW_BORROW, LibraryActions.ADD_BOOK_CATEGORY,
                 LibraryActions.ADMIN_SEARCH_BOOKS, LibraryActions.ADD_BOOK, LibraryActions.UPDATE_BOOK,
                 LibraryActions.SET_BOOK_STATUS, LibraryActions.ADD_BOOK_COPY, LibraryActions.LIST_BOOK_COPIES,
                 LibraryActions.UPDATE_BOOK_COPY, LibraryActions.SHELVE_BOOK_COPY,
@@ -69,6 +70,11 @@ class LibraryServerModuleTest {
                 LibraryActions.GET_MY_RESERVATIONS, READER.getToken(),
                 "forged-user-id").getCode());
         assertTrue(dispatch(router, LibraryActions.LIST_CATEGORIES, READER.getToken(), null).isSuccess());
+        assertEquals(ErrorCodes.AUTH_FORBIDDEN, dispatch(router,
+                LibraryActions.ADD_BOOK_CATEGORY, READER.getToken(),
+                new AddBookCategoryRequest("艺术")).getCode());
+        assertTrue(dispatch(router, LibraryActions.ADD_BOOK_CATEGORY, ADMIN.getToken(),
+                new AddBookCategoryRequest("艺术")).isSuccess());
 
         AddBookRequest add = new AddBookRequest("9787111000000", "测试", "作者", "C001", "", null, "");
         assertEquals(ErrorCodes.AUTH_FORBIDDEN,
@@ -116,6 +122,14 @@ class LibraryServerModuleTest {
         BorrowRecordDTO record = assertInstanceOf(BorrowRecordDTO.class,
                 assertInstanceOf(java.util.List.class, records.getData()).getFirst());
         assertEquals("SEU-B001-001", record.getBarcode());
+        Response renewed = dispatch(router, LibraryActions.RENEW_BORROW,
+                READER.getToken(), new BorrowRecordIdRequest(record.getRecordId()));
+        assertTrue(renewed.isSuccess());
+        assertEquals(1, assertInstanceOf(BorrowRecordDTO.class,
+                renewed.getData()).getRenewalCount());
+        assertEquals(ErrorCodes.COMMON_INVALID_REQUEST,
+                dispatch(router, LibraryActions.RENEW_BORROW,
+                        READER.getToken(), new CopyReturnRequest("SEU-B001-001")).getCode());
 
         Response created = dispatch(router, LibraryActions.CREATE_RESERVATION,
                 READER.getToken(), new CreateReservationRequest(

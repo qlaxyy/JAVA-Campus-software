@@ -30,6 +30,10 @@ final class LibraryMessages {
             case ErrorCodes.LIBRARY_RESERVATION_NOT_CANCELLABLE -> "该预约已经结束，不能取消";
             case ErrorCodes.LIBRARY_INVALID_PICKUP_LOCATION -> "所选馆藏地没有该书目的有效馆藏";
             case ErrorCodes.LIBRARY_COPY_RESERVED_FOR_OTHER -> "该单册已为其他读者预约保留";
+            case ErrorCodes.LIBRARY_RENEWAL_NOT_ALLOWED -> "当前借阅记录不满足续借条件，请刷新后查看原因";
+            case ErrorCodes.LIBRARY_RENEWAL_LIMIT_REACHED -> "每次借阅最多续借 1 次";
+            case ErrorCodes.LIBRARY_RENEWAL_BLOCKED_BY_RESERVATION -> "已有其他读者预约该书目，暂不能续借";
+            case ErrorCodes.LIBRARY_DUPLICATE_CATEGORY -> "该图书分类已存在，请勿重复添加";
             case ErrorCodes.LIBRARY_INVALID_STOCK, ErrorCodes.LIBRARY_DUPLICATE_ISBN,
                     ErrorCodes.LIBRARY_CATEGORY_NOT_FOUND -> response.getMessage();
             case ErrorCodes.COMMON_INVALID_REQUEST, ErrorCodes.COMMON_INVALID_ARGUMENT ->

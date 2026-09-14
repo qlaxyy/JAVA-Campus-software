@@ -3,6 +3,8 @@ package edu.seu.vcampus.server.module.library;
 import edu.seu.vcampus.common.library.AddBookCopyRequest;
 import edu.seu.vcampus.common.library.BookCopyIdRequest;
 import edu.seu.vcampus.common.library.BookSearchRequest;
+import edu.seu.vcampus.common.library.BorrowRecordDTO;
+import edu.seu.vcampus.common.library.BorrowRecordIdRequest;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
 import edu.seu.vcampus.common.library.CopyInspectionDTO;
 import edu.seu.vcampus.common.library.CopyInspectionRequest;
@@ -18,11 +20,9 @@ import edu.seu.vcampus.common.user.Role;
 import edu.seu.vcampus.common.user.SessionInfo;
 import org.junit.jupiter.api.Test;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayDeque;
 import java.util.List;
@@ -235,6 +235,41 @@ class LibraryReservationServiceTest {
     }
 
     @Test
+    void activeLoanCanBeRenewedOnceFromItsExistingDueDate() {
+        service.borrowCopy("U-RENEW", new CopyBorrowRequest("SEU-B001-001"));
+        BorrowRecordDTO original = service.getBorrowRecords("U-RENEW").getFirst();
+
+        BorrowRecordDTO renewed = service.renewBorrow("U-RENEW",
+                new BorrowRecordIdRequest(original.getRecordId()));
+
+        assertEquals(original.getDueTime().plusDays(30), renewed.getDueTime());
+        assertEquals(1, renewed.getRenewalCount());
+        failure(ErrorCodes.LIBRARY_RENEWAL_LIMIT_REACHED,
+                () -> service.renewBorrow("U-RENEW",
+                        new BorrowRecordIdRequest(original.getRecordId())));
+        failure(ErrorCodes.LIBRARY_BORROW_RECORD_NOT_FOUND,
+                () -> service.renewBorrow("U-OTHER",
+                        new BorrowRecordIdRequest(original.getRecordId())));
+    }
+
+    @Test
+    void overdueLoanAndTitleWithActiveReservationCannotBeRenewed() {
+        service.borrowCopy("U-OVERDUE-RENEW", new CopyBorrowRequest("SEU-B001-001"));
+        BorrowRecordDTO overdue = service.getBorrowRecords("U-OVERDUE-RENEW").getFirst();
+        clock.advance(Duration.ofDays(31));
+        failure(ErrorCodes.LIBRARY_RENEWAL_NOT_ALLOWED,
+                () -> service.renewBorrow("U-OVERDUE-RENEW",
+                        new BorrowRecordIdRequest(overdue.getRecordId())));
+
+        service.borrowCopy("U-QUEUE-OWNER", new CopyBorrowRequest("SEU-B002-001"));
+        BorrowRecordDTO queuedTitle = service.getBorrowRecords("U-QUEUE-OWNER").getFirst();
+        reserve("U-WAITING-READER", "B002", JIULONGHU);
+        failure(ErrorCodes.LIBRARY_RENEWAL_BLOCKED_BY_RESERVATION,
+                () -> service.renewBorrow("U-QUEUE-OWNER",
+                        new BorrowRecordIdRequest(queuedTitle.getRecordId())));
+    }
+
+    @Test
     void borrowingAnotherAvailableCopyFulfillsAndReleasesExistingHold() {
         ReservationDTO ready = reserve("U-OWNER", "B001", JIULONGHU);
         loanAllAt("B001", JIULONGHU);
@@ -405,30 +440,5 @@ class LibraryReservationServiceTest {
 
         @Override
         public void update(Reservation reservation) { delegate.update(reservation); }
-    }
-
-    private static final class MutableClock extends Clock {
-        private volatile Instant current;
-        private final ZoneId zone;
-
-        private MutableClock(Instant current, ZoneId zone) {
-            this.current = current;
-            this.zone = zone;
-        }
-
-        void advance(Duration duration) {
-            current = current.plus(duration);
-        }
-
-        @Override
-        public ZoneId getZone() { return zone; }
-
-        @Override
-        public Clock withZone(ZoneId newZone) {
-            return new MutableClock(current, newZone);
-        }
-
-        @Override
-        public Instant instant() { return current; }
     }
 }

@@ -1,6 +1,8 @@
 package edu.seu.vcampus.server.module.library;
 
 import edu.seu.vcampus.common.library.BookDTO;
+import edu.seu.vcampus.common.library.BookCategoryDTO;
+import edu.seu.vcampus.common.library.BorrowRecordIdRequest;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
 import edu.seu.vcampus.common.library.CopyReturnRequest;
 import edu.seu.vcampus.common.library.CreateReservationRequest;
@@ -46,11 +48,12 @@ class AccessLibraryRepositoryTest {
                 book.getCategoryId(), book.getCategoryName(), book.getPublisher(),
                 book.getPublicationYear(), book.getLanguage(), book.getStatus(), List.of()));
         first.copies().update(copy.withLocation("九龙湖校区—测试馆藏地", "TP312/TEST"));
+        first.categories().save(new BookCategoryDTO("C-ART", "艺术设计"));
 
         Repositories restarted = repositories(databasePath);
         assertTrue(Files.exists(databasePath));
         assertEquals(5, restarted.books().searchAll("").size());
-        assertEquals(3, restarted.categories().findAll().size());
+        assertEquals(4, restarted.categories().findAll().size());
         assertEquals("持久化后的书名",
                 restarted.books().findById("B001").orElseThrow().getTitle());
         BookCopy persisted = restarted.copies()
@@ -84,6 +87,20 @@ class AccessLibraryRepositoryTest {
         assertEquals(BorrowStatus.RETURNED, returned.status());
         assertEquals(LocalDateTime.of(2026, 9, 6, 2, 0), returned.returnTime());
         assertTrue(afterReturn.records().findBorrowedByUserId("U-PERSIST-001").isEmpty());
+    }
+
+    @Test
+    void renewedDueDateAndCountSurviveRepositoryRestart() {
+        Path databasePath = temporaryDirectory.resolve("renewal.accdb");
+        Repositories first = repositories(databasePath);
+        LibraryService service = service(first, "R-RENEW");
+        service.borrowCopy("U-RENEW", new CopyBorrowRequest("SEU-B001-001"));
+        service.renewBorrow("U-RENEW", new BorrowRecordIdRequest("R-RENEW"));
+
+        BorrowRecord renewed = repositories(databasePath).records()
+                .findById("R-RENEW").orElseThrow();
+        assertEquals(1, renewed.renewalCount());
+        assertEquals(LocalDateTime.of(2026, 11, 5, 2, 0), renewed.dueTime());
     }
 
     @Test
@@ -180,7 +197,7 @@ class AccessLibraryRepositoryTest {
                 repositories.store(), repositories.copies(), repositories.records(),
                 repositories.reservations(), CLOCK);
 
-        assertEquals(2, repositories.records().findAll().size());
+        assertEquals(3, repositories.records().findAll().size());
         BorrowRecord current = repositories.records()
                 .findById(AccessLibraryDemonstrationData.CURRENT_RECORD_ID)
                 .orElseThrow();
@@ -204,6 +221,14 @@ class AccessLibraryRepositoryTest {
                 ready.readyAt(), ready.expiresAt()).toHours());
         assertEquals(BookCopyStatus.RESERVED, repositories.copies()
                 .findById(ready.assignedCopyId()).orElseThrow().status());
+
+        BorrowRecord overdue = repositories.records()
+                .findById(AccessLibraryDemonstrationData.OVERDUE_RECORD_ID)
+                .orElseThrow();
+        assertEquals(AccessLibraryDemonstrationData.OVERDUE_USER_ID, overdue.userId());
+        assertTrue(overdue.isOverdueAt(LocalDateTime.of(2026, 9, 6, 2, 0)));
+        assertEquals(BookCopyStatus.LOANED, repositories.copies()
+                .findById(overdue.copyId()).orElseThrow().status());
     }
 
     @Test

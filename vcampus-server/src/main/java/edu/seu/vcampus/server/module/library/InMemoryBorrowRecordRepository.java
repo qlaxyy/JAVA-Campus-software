@@ -63,9 +63,17 @@ final class InMemoryBorrowRecordRepository implements BorrowRecordRepository {
         if (!original.userId().equals(record.userId())
                 || !original.copyId().equals(record.copyId())
                 || !original.borrowTime().equals(record.borrowTime())
-                || !original.dueTime().equals(record.dueTime())
-                || original.status() != BorrowStatus.BORROWED
-                || record.status() != BorrowStatus.RETURNED) {
+                || original.status() != BorrowStatus.BORROWED) {
+            throw new IllegalArgumentException("Invalid borrow-record state transition.");
+        }
+        boolean returned = record.status() == BorrowStatus.RETURNED
+                && original.dueTime().equals(record.dueTime())
+                && original.renewalCount() == record.renewalCount();
+        boolean renewed = record.status() == BorrowStatus.BORROWED
+                && record.returnTime() == null
+                && record.dueTime().isAfter(original.dueTime())
+                && record.renewalCount() == original.renewalCount() + 1;
+        if (!(returned || renewed)) {
             throw new IllegalArgumentException("Invalid borrow-record state transition.");
         }
         records.put(record.recordId(), record);

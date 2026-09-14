@@ -209,6 +209,7 @@ final class InMemoryCoursePlanRepository
             "操作系统",
             3.5,
             "必修",
+            "计算机科学与工程学院",
             false,
             List.of(offering)
         );
@@ -253,6 +254,7 @@ final class InMemoryCoursePlanRepository
             "数据库原理",
             3.0,
             "必修",
+            "计算机科学与工程学院",
             false,
             List.of()
         );
@@ -298,6 +300,7 @@ final class InMemoryCoursePlanRepository
             "计算机网络",
             3.0,
             "必修",
+            "计算机科学与工程学院",
             false,
             List.of(offering)
         );

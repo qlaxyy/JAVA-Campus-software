@@ -1,5 +1,6 @@
 package edu.seu.vcampus.server.module.shop;
 
+import edu.seu.vcampus.common.shop.ListProductsRequest;
 import edu.seu.vcampus.common.shop.ShoppingCartView;
 import edu.seu.vcampus.common.user.Role;
 import edu.seu.vcampus.common.user.SessionInfo;
@@ -7,9 +8,14 @@ import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AccessShopPersistenceTest {
     @TempDir Path directory;
@@ -34,5 +40,21 @@ class AccessShopPersistenceTest {
         assertEquals(10_500, restartedCards.view(student).getBalanceFen());
         assertEquals(1, cart.getItems().size());
         assertEquals(2, cart.getItems().get(0).getQuantity());
+    }
+
+    @Test
+    void seedPhotosRoundTripAsDecodableJpeg() throws Exception {
+        Path path = directory.resolve("shop-photos.accdb");
+        AccessShopCatalog catalog = new AccessShopCatalog(new AccessDatabase(path));
+        var water = catalog.listOnSale(ListProductsRequest.allOnSale()).stream()
+                .filter(item -> item.getProductId() == 8L)
+                .findFirst()
+                .orElseThrow();
+        byte[] cover = water.getCoverPhoto();
+        BufferedImage image = ImageIO.read(new ByteArrayInputStream(cover));
+        assertNotNull(image);
+        assertTrue(image.getWidth() >= 200);
+        assertEquals((byte) 0xFF, cover[0]);
+        assertEquals((byte) 0xD8, cover[1]);
     }
 }

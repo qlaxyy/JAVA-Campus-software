@@ -10,6 +10,9 @@ import edu.seu.vcampus.common.shop.ShopCategoryDto;
 import edu.seu.vcampus.common.shop.ShopListingRecordDto;
 import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
@@ -19,10 +22,13 @@ import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /** Access-backed shop catalog, including product photos and listing history. */
 final class AccessShopCatalog implements ShopCatalogRepository {
@@ -40,6 +46,8 @@ final class AccessShopCatalog implements ShopCatalogRepository {
         this.database = Objects.requireNonNull(database, "database must not be null");
         initializeSchema();
         seedIfEmpty();
+        refreshOfficialDemoSeed();
+        retireRemovedOfficialDemoProducts();
     }
 
     @Override
@@ -260,13 +268,16 @@ final class AccessShopCatalog implements ShopCatalogRepository {
             statement.setLong(1, productId);
             try (ResultSet photoRows = statement.executeQuery()) {
                 while (photoRows.next()) {
-                    photos.add(photoRows.getBytes("photoData"));
+                    byte[] payload = imagePayload(readPhoto(photoRows));
+                    if (payload.length > 0) {
+                        photos.add(payload);
+                    }
                 }
             }
         }
         if (photos.isEmpty()) {
             photos = ShopDemoPhotos.forProduct(
-                    result.getString("categoryName"), result.getString("productName"));
+                    productId, result.getString("categoryName"), result.getString("productName"));
         }
         return new ProductSummaryDto(
                 productId, result.getLong("categoryId"), result.getString("categoryName"),
@@ -357,6 +368,165 @@ final class AccessShopCatalog implements ShopCatalogRepository {
         }
     }
 
+    /**
+     * Upserts official demo SKUs so existing Access files pick up new titles,
+     * copy and photos without a full rebuild. Existing stock is left unchanged.
+     */
+    private void refreshOfficialDemoSeed() {
+        try (Connection connection = database.openConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                for (ProductSummaryDto product : InMemoryShopCatalog.seedProducts()) {
+                    if (productExists(connection, product.getProductId())) {
+                        updateOfficialDemoProduct(connection, product);
+                        deletePhotos(connection, product.getProductId());
+                        insertPhotos(connection, product);
+                    } else {
+                        insertProduct(connection, product);
+                        insertPhotos(connection, product);
+                        if (product.getSaleStatus() == ProductSaleStatus.ON_SALE) {
+                            insertListing(connection, product, "上架",
+                                    "上架 " + product.getName() + "，单价 "
+                                            + formatYuan(product.getPriceFen()) + "，库存 "
+                                            + product.getStockQty() + " 件",
+                                    "校园商店", "2026-08-20 09:00:00");
+                        }
+                    }
+                }
+                connection.commit();
+            } catch (SQLException | RuntimeException exception) {
+                rollback(connection, exception);
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            throw failure("Cannot refresh official shop demo seed.", exception);
+        }
+    }
+
+    /**
+     * Drops retired official demo SKUs (ids 1–15 no longer in the seed list)
+     * so existing Access files do not keep leftover catalog cards.
+     */
+    private void retireRemovedOfficialDemoProducts() {
+        Set<Long> keep = new HashSet<>();
+        for (ProductSummaryDto product : InMemoryShopCatalog.seedProducts()) {
+            keep.add(product.getProductId());
+        }
+        try (Connection connection = database.openConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                for (long productId = 1L; productId <= 15L; productId++) {
+                    if (keep.contains(productId) || !productExists(connection, productId)) {
+                        continue;
+                    }
+                    deleteRetiredProduct(connection, productId);
+                }
+                connection.commit();
+            } catch (SQLException | RuntimeException exception) {
+                rollback(connection, exception);
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            throw failure("Cannot retire removed shop demo products.", exception);
+        }
+    }
+
+    private void deleteRetiredProduct(Connection connection, long productId) throws SQLException {
+        if (tableExists(connection, "tblShopCartItem")) {
+            try (PreparedStatement cart = connection.prepareStatement(
+                    "DELETE FROM tblShopCartItem WHERE productId = ?")) {
+                cart.setLong(1, productId);
+                cart.executeUpdate();
+            }
+        }
+        try (PreparedStatement listings = connection.prepareStatement(
+                "DELETE FROM tblShopListingRecord WHERE productId = ?")) {
+            listings.setLong(1, productId);
+            listings.executeUpdate();
+        }
+        deletePhotos(connection, productId);
+        try (PreparedStatement product = connection.prepareStatement(
+                "DELETE FROM tblShopProduct WHERE productId = ?")) {
+            product.setLong(1, productId);
+            product.executeUpdate();
+        }
+    }
+
+    private static boolean productExists(Connection connection, long productId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT 1 FROM tblShopProduct WHERE productId = ?")) {
+            statement.setLong(1, productId);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next();
+            }
+        }
+    }
+
+    private static void updateOfficialDemoProduct(Connection connection, ProductSummaryDto product)
+            throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE tblShopProduct SET categoryId = ?, productName = ?, description = ?, "
+                        + "sellerNameSnapshot = ?, priceFen = ?, saleStatus = ? "
+                        + "WHERE productId = ?")) {
+            statement.setLong(1, product.getCategoryId());
+            statement.setString(2, product.getName());
+            statement.setString(3, product.getDescription());
+            statement.setString(4, product.getSellerName());
+            statement.setInt(5, product.getPriceFen());
+            statement.setString(6, product.getSaleStatus().name());
+            statement.setLong(7, product.getProductId());
+            statement.executeUpdate();
+        }
+    }
+
+    private static void deletePhotos(Connection connection, long productId) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "DELETE FROM tblShopProductPhoto WHERE productId = ?")) {
+            statement.setLong(1, productId);
+            statement.executeUpdate();
+        }
+    }
+
+    private static byte[] readPhoto(ResultSet rows) throws SQLException {
+        try (InputStream stream = rows.getBinaryStream("photoData")) {
+            if (stream != null) {
+                return stream.readAllBytes();
+            }
+        } catch (IOException exception) {
+            throw new SQLException("Cannot read shop photo bytes.", exception);
+        }
+        byte[] stored = rows.getBytes("photoData");
+        return stored == null ? new byte[0] : stored;
+    }
+
+    private static byte[] imagePayload(byte[] stored) {
+        if (stored == null || stored.length < 8) {
+            return new byte[0];
+        }
+        int jpeg = indexOf(stored, new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF});
+        if (jpeg >= 0) {
+            return Arrays.copyOfRange(stored, jpeg, stored.length);
+        }
+        int png = indexOf(stored, new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A});
+        if (png >= 0) {
+            return Arrays.copyOfRange(stored, png, stored.length);
+        }
+        return stored;
+    }
+
+    private static int indexOf(byte[] haystack, byte[] needle) {
+        outer:
+        for (int index = 0; index <= haystack.length - needle.length; index++) {
+            for (int offset = 0; offset < needle.length; offset++) {
+                if (haystack[index + offset] != needle[offset]) {
+                    continue outer;
+                }
+            }
+            return index;
+        }
+        return -1;
+    }
+
     private static void insertProduct(Connection connection, ProductSummaryDto product)
             throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
@@ -382,9 +552,10 @@ final class AccessShopCatalog implements ShopCatalogRepository {
                         + "VALUES (?, ?, ?)")) {
             List<byte[]> photos = product.getPhotos();
             for (int index = 0; index < photos.size(); index++) {
+                byte[] photo = photos.get(index);
                 statement.setLong(1, product.getProductId());
                 statement.setInt(2, index);
-                statement.setBytes(3, photos.get(index));
+                statement.setBinaryStream(3, new ByteArrayInputStream(photo), photo.length);
                 statement.addBatch();
             }
             statement.executeBatch();

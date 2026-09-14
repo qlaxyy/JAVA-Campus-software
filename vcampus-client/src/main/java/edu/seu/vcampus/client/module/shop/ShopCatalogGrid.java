@@ -10,7 +10,7 @@ final class ShopCatalogGrid {
     static final int GAP = 14;
     static final int MIN_CELL = 176;
     static final int MAX_CELL = 260;
-    static final int NAME_BAND = 48;
+    static final int NAME_BAND = 56;
     static final int PRICE_BAND = 34;
 
     record Plan(int columns, int rows, int cellSize, int pageSize) {

@@ -30,9 +30,10 @@ class ShopListProductsIntegrationTest {
 
             assertTrue(response.isSuccess());
             ListProductsResponse payload = assertInstanceOf(ListProductsResponse.class, response.getData());
-            assertEquals(8, payload.getProducts().size());
+            assertEquals(11, payload.getProducts().size());
             assertTrue(payload.getProducts().stream().noneMatch(item -> item.getName().contains("停售")));
-            assertTrue(payload.getProducts().stream().anyMatch(item -> "中性笔 0.5mm".equals(item.getName())));
+            assertTrue(payload.getProducts().stream().anyMatch(item ->
+                    item.getName().contains("中性笔") && item.getName().contains("0.5mm")));
             assertTrue(payload.getProducts().getFirst().getPhotos().size() >= 1);
             assertFalse(payload.getProducts().getFirst().getDescription().isBlank());
         }
@@ -54,7 +55,7 @@ class ShopListProductsIntegrationTest {
             ListProductsResponse payload = assertInstanceOf(ListProductsResponse.class, response.getData());
             assertEquals(1, payload.getProducts().size());
             ProductSummaryDto product = payload.getProducts().getFirst();
-            assertEquals("中性笔 0.5mm", product.getName());
+            assertEquals("晨光中性笔 0.5mm 黑色按动", product.getName());
             assertEquals(350, product.getPriceFen());
         }
     }

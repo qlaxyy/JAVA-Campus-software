@@ -51,7 +51,7 @@ class ShopPublishProductIntegrationTest {
             assertTrue(student.login("20260006", "123456".toCharArray()).isSuccess());
             Response listed = student.send(ShopActions.LIST_PRODUCTS, ListProductsRequest.allOnSale());
             ListProductsResponse payload = assertInstanceOf(ListProductsResponse.class, listed.getData());
-            assertEquals(9, payload.getProducts().size());
+            assertEquals(12, payload.getProducts().size());
             assertTrue(payload.getProducts().stream().anyMatch(item -> "二手计算器".equals(item.getName())));
         }
     }
@@ -89,8 +89,8 @@ class ShopPublishProductIntegrationTest {
                     ShopActions.UPDATE_PRODUCT,
                     new edu.seu.vcampus.common.shop.UpdateProductRequest(
                             8L,
-                            "矿泉水 550ml",
-                            "冰柜常温都有。上课带走方便，瓶身轻。",
+                            "农夫山泉饮用天然水 550ml",
+                            "品牌：农夫山泉\n冰柜常温都有。",
                             250,
                             5));
             assertTrue(updated.isSuccess());
@@ -115,7 +115,7 @@ class ShopPublishProductIntegrationTest {
             Response response = student.send(
                     ShopActions.UPDATE_PRODUCT,
                     new edu.seu.vcampus.common.shop.UpdateProductRequest(
-                            8L, "矿泉水 550ml", "描述", 200, 0));
+                            8L, "农夫山泉饮用天然水 550ml", "描述", 200, 0));
             assertFalse(response.isSuccess());
             assertEquals(ErrorCodes.AUTH_FORBIDDEN, response.getCode());
         }

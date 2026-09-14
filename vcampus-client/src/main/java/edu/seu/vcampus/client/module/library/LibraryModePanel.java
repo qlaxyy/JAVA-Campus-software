@@ -17,6 +17,8 @@ import java.awt.CardLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 
 /** Selects and hosts the online library and simulated self-service terminal modes. */
@@ -28,13 +30,16 @@ public final class LibraryModePanel extends JPanel implements ModuleViewLifecycl
     private static final String SELF_SERVICE_TERMINAL = "selfServiceTerminal";
 
     private final CardLayout cards = new CardLayout();
+    private final MyLibraryPanel myLibrary;
+    private final LibraryAdminPanel admin;
+    private JTabbedPane onlineTabs;
 
     /** @param context shared authenticated client context */
     public LibraryModePanel(ClientContext context) {
         LibraryPanel catalog = new LibraryPanel(context);
-        MyLibraryPanel myLibrary = new MyLibraryPanel(
+        myLibrary = new MyLibraryPanel(
                 context, catalog::reservationStateChanged);
-        LibraryAdminPanel admin = context.currentSession()
+        admin = context.currentSession()
                 .filter(session -> session.canAdminister(ModuleNames.LIBRARY))
                 .map(session -> new LibraryAdminPanel(context)).orElse(null);
         setName("library.modeRoot");
@@ -78,13 +83,13 @@ public final class LibraryModePanel extends JPanel implements ModuleViewLifecycl
         choices.add(createModeChoice("线上图书馆", "library.mode.online",
                 "ONLINE SERVICES",
                 "馆藏查询 · 预约 · 我的借阅",
-                "进入线上图书馆  →", true,
+                "进入  →", true,
                 () -> cards.show(this, ONLINE_LIBRARY)));
         if (admin != null) {
-            choices.add(createModeChoice("图书管理", "library.mode.admin",
+            choices.add(createModeChoice("图书管理员工作台", "library.mode.admin",
                     "LIBRARIAN WORKSPACE",
                     "书目 · 单册 · 借阅 · 统计",
-                    "进入管理工作台  →", false,
+                    "进入  →", false,
                     () -> {
                         cards.show(this, ADMIN_LIBRARY);
                         admin.refresh();
@@ -93,9 +98,20 @@ public final class LibraryModePanel extends JPanel implements ModuleViewLifecycl
         choices.add(createModeChoice("模拟自助终端", "library.mode.terminal",
                 "SELF-SERVICE TERMINAL",
                 "借书 · 还书",
-                "进入模拟终端  →", false,
+                "进入  →", false,
                 () -> cards.show(this, SELF_SERVICE_TERMINAL)));
-        selection.add(choices, BorderLayout.CENTER);
+        // 让入口卡片保持自身高度并整体居中，而不是被拉伸到整页高。
+        JPanel choicesArea = new JPanel(new GridBagLayout());
+        choicesArea.setOpaque(false);
+        GridBagConstraints constraints = new GridBagConstraints();
+        constraints.gridx = 0;
+        constraints.gridy = 0;
+        constraints.weightx = 1;
+        constraints.weighty = 1;
+        constraints.fill = GridBagConstraints.HORIZONTAL;
+        constraints.anchor = GridBagConstraints.CENTER;
+        choicesArea.add(choices, constraints);
+        selection.add(choicesArea, BorderLayout.CENTER);
 
         return selection;
     }
@@ -153,6 +169,7 @@ public final class LibraryModePanel extends JPanel implements ModuleViewLifecycl
         LibraryUiTheme.styleTabbedPane(tabs);
         tabs.addTab("馆藏查询", catalog);
         tabs.addTab("我的图书馆", myLibrary);
+        onlineTabs = tabs;
 
         tabs.addChangeListener(event -> {
             if (tabs.getSelectedComponent() == myLibrary) {
@@ -174,7 +191,7 @@ public final class LibraryModePanel extends JPanel implements ModuleViewLifecycl
 
     private JPanel createTerminal(ClientContext context, Runnable circulationChanged) {
         JPanel terminal = createModeContainer(
-                "模拟自助借还终端", "library.mode.back.terminal");
+                "模拟自助终端", "library.mode.back.terminal");
         terminal.setName("library.terminal");
         terminal.add(new SelfServicePanel(context, circulationChanged), BorderLayout.CENTER);
         return terminal;
@@ -206,7 +223,18 @@ public final class LibraryModePanel extends JPanel implements ModuleViewLifecycl
         showModeSelection();
     }
 
+    /**
+     * 回到模式选择时顺带把各模式内部的页签复位，这样再次进入模块不会停在
+     * 上次离开时的那一页。
+     */
     private void showModeSelection() {
         cards.show(this, MODE_SELECTION);
+        if (onlineTabs != null) {
+            onlineTabs.setSelectedIndex(0);
+        }
+        myLibrary.resetTabs();
+        if (admin != null) {
+            admin.resetTabs();
+        }
     }
 }

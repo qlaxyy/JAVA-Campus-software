@@ -82,7 +82,7 @@ class LibraryAdminUiTest {
             assertTrue(newCopy.isEnabled());
             assertTrue(newCopy.getFont().isBold());
             assertNotEquals(newCopy.getBackground(), newCopy.getForeground());
-            JButton shelf = button(admin, "确认归架");
+            JButton shelf = button(admin, "确认上架");
             JButton restore = button(admin, "恢复单册");
             JButton withdraw = button(admin, "注销单册");
             assertFalse(shelf.isEnabled());
@@ -148,7 +148,7 @@ class LibraryAdminUiTest {
             assertFalse(named(admin, JComboBox.class, "library.admin.location").isEnabled());
             assertFalse(named(admin, JTextField.class, "library.admin.callNumber").isEnabled());
             assertFalse(button(admin, "保存位置与索书号").isEnabled());
-            assertFalse(button(admin, "确认归架").isEnabled());
+            assertFalse(button(admin, "确认上架").isEnabled());
             assertFalse(button(admin, "恢复单册").isEnabled());
             assertFalse(button(admin, "注销单册").isEnabled());
         }

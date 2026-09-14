@@ -171,11 +171,7 @@ final class CourseAdminView extends JPanel {
             "选课批次管理",
             new CourseAdminBatchPanel(
                 context));
-        tabs.addTab(
-            "培养方案管理",
-            createPlaceholder(
-                "培养方案管理",
-                "维护方案内课程和方案外课程替代关系。"));
+
 
         tabs.addTab(
             "成绩管理",

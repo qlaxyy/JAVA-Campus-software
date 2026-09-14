@@ -27,7 +27,7 @@ public final class AccessStudentRepository implements StudentRepository {
     private static final String PROFILE_TABLE = "tblStudentProfile";
     private static final String CHANGE_TABLE = "tblStudentStatusChange";
     private static final DateTimeFormatter CHANGE_TIME =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final AccessDatabase database;
     private final UserDirectory users;
@@ -45,7 +45,7 @@ public final class AccessStudentRepository implements StudentRepository {
             return Optional.empty();
         }
         String sql = "SELECT * FROM tblStudentProfile "
-                + "WHERE studentNumber = ? OR userId = ?";
+            + "WHERE studentNumber = ? OR userId = ?";
         try (Connection connection = database.openConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             String normalized = studentId.trim();
@@ -65,8 +65,8 @@ public final class AccessStudentRepository implements StudentRepository {
             return false;
         }
         String sql = "UPDATE tblStudentProfile SET politicalStatus = ?, phone = ?, "
-                + "email = ?, homeAddress = ?, emergencyContact = ?, emergencyPhone = ? "
-                + "WHERE studentNumber = ? OR userId = ?";
+            + "email = ?, homeAddress = ?, emergencyContact = ?, emergencyPhone = ? "
+            + "WHERE studentNumber = ? OR userId = ?";
         StudentProfileDto current = findByStudentId(request.getStudentId()).orElse(null);
         if (current == null) {
             return false;
@@ -99,11 +99,11 @@ public final class AccessStudentRepository implements StudentRepository {
         }
         String createdAt = LocalDateTime.now().format(CHANGE_TIME);
         String sql = "INSERT INTO tblStudentStatusChange "
-                + "(studentNumber, studentNameSnapshot, changeType, reason, changeDate, "
-                + "auditStatus, operatorNameSnapshot) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            + "(studentNumber, studentNameSnapshot, changeType, reason, changeDate, "
+            + "auditStatus, operatorNameSnapshot) VALUES (?, ?, ?, ?, ?, ?, ?)";
         try (Connection connection = database.openConnection();
              PreparedStatement statement = connection.prepareStatement(
-                     sql, Statement.RETURN_GENERATED_KEYS)) {
+                 sql, Statement.RETURN_GENERATED_KEYS)) {
             statement.setString(1, profile.getStudentId());
             statement.setString(2, profile.getName());
             statement.setString(3, request.getChangeType());
@@ -160,7 +160,7 @@ public final class AccessStudentRepository implements StudentRepository {
 
     @Override
     public synchronized boolean auditStatusChange(
-            Long changeId, boolean approved, String operator) {
+        Long changeId, boolean approved, String operator) {
         if (changeId == null) {
             return false;
         }
@@ -168,9 +168,11 @@ public final class AccessStudentRepository implements StudentRepository {
             connection.setAutoCommit(false);
             try {
                 String studentNumber;
+                String changeType;
+                String reason;
                 try (PreparedStatement select = connection.prepareStatement(
-                        "SELECT studentNumber, auditStatus FROM tblStudentStatusChange "
-                                + "WHERE changeId = ?")) {
+                    "SELECT studentNumber, changeType, reason, auditStatus FROM tblStudentStatusChange "
+                        + "WHERE changeId = ?")) {
                     select.setLong(1, changeId);
                     try (ResultSet result = select.executeQuery()) {
                         if (!result.next() || !"待审核".equals(result.getString("auditStatus"))) {
@@ -178,39 +180,37 @@ public final class AccessStudentRepository implements StudentRepository {
                             return false;
                         }
                         studentNumber = result.getString("studentNumber");
+                        changeType = result.getString("changeType");
+                        reason = result.getString("reason");
                     }
                 }
                 try (PreparedStatement update = connection.prepareStatement(
-                        "UPDATE tblStudentStatusChange SET auditStatus = ?, "
-                                + "operatorNameSnapshot = ? WHERE changeId = ?")) {
+                    "UPDATE tblStudentStatusChange SET auditStatus = ?, "
+                        + "operatorNameSnapshot = ? WHERE changeId = ?")) {
                     update.setString(1, approved ? "已通过" : "已驳回");
                     update.setString(2, operator == null ? "-" : operator);
                     update.setLong(3, changeId);
                     update.executeUpdate();
                 }
+
                 if (approved) {
-                    String changeType;
-                    try (PreparedStatement select = connection.prepareStatement(
-                            "SELECT changeType FROM tblStudentStatusChange WHERE changeId = ?")) {
-                        select.setLong(1, changeId);
-                        try (ResultSet result = select.executeQuery()) {
-                            result.next();
-                            changeType = result.getString(1);
-                        }
-                    }
-                    String status = switch (changeType) {
-                        case "休学" -> "休学";
-                        case "复学" -> "在读";
-                        case "退学" -> "退学";
-                        default -> null;
-                    };
-                    if (status != null) {
-                        try (PreparedStatement update = connection.prepareStatement(
+                    if ("基本信息变更".equals(changeType) && reason != null && reason.startsWith("[变更:")) {
+                        applyProfileFieldChange(connection, studentNumber, reason);
+                    } else {
+                        String status = switch (changeType) {
+                            case "休学" -> "休学";
+                            case "复学" -> "在读";
+                            case "退学" -> "退学";
+                            default -> null;
+                        };
+                        if (status != null) {
+                            try (PreparedStatement update = connection.prepareStatement(
                                 "UPDATE tblStudentProfile SET academicStatus = ? "
-                                        + "WHERE studentNumber = ?")) {
-                            update.setString(1, status);
-                            update.setString(2, studentNumber);
-                            update.executeUpdate();
+                                    + "WHERE studentNumber = ?")) {
+                                update.setString(1, status);
+                                update.setString(2, studentNumber);
+                                update.executeUpdate();
+                            }
                         }
                     }
                 }
@@ -229,30 +229,69 @@ public final class AccessStudentRepository implements StudentRepository {
         }
     }
 
+    private void applyProfileFieldChange(Connection connection, String studentNumber, String reason) throws SQLException {
+        int endIdx = reason.indexOf(']');
+        if (endIdx < 0) return;
+        String directive = reason.substring(4, endIdx).trim();
+        String[] parts = directive.split("->");
+        if (parts.length != 2) return;
+
+        String fieldName = parts[0].trim();
+        String newValue = parts[1].trim();
+
+        String colName;
+        switch (fieldName) {
+            case "姓名" -> colName = "NAME_UPDATE";
+            case "性别" -> colName = "gender";
+            case "民族" -> colName = "ethnicity";
+            case "籍贯" -> colName = "nativePlace";
+            case "身份证号" -> colName = "idCardNumber";
+            case "出生日期" -> colName = "birthDate";
+            default -> colName = null;
+        }
+        if (colName == null) return;
+
+        if ("NAME_UPDATE".equals(colName)) {
+            try (PreparedStatement update = connection.prepareStatement(
+                "UPDATE tblUser SET displayName = ? WHERE username = ?")) {
+                update.setString(1, newValue);
+                update.setString(2, studentNumber);
+                update.executeUpdate();
+            }
+        } else {
+            try (PreparedStatement update = connection.prepareStatement(
+                "UPDATE tblStudentProfile SET " + colName + " = ? WHERE studentNumber = ?")) {
+                update.setString(1, newValue);
+                update.setString(2, studentNumber);
+                update.executeUpdate();
+            }
+        }
+    }
+
     private void initializeSchema() {
         try (Connection connection = database.openConnection();
              Statement statement = connection.createStatement()) {
             if (!tableExists(connection, PROFILE_TABLE)) {
                 statement.executeUpdate("CREATE TABLE tblStudentProfile ("
-                        + "profileId LONG PRIMARY KEY, userId TEXT(36) NOT NULL, "
-                        + "studentNumber TEXT(20) NOT NULL, gender TEXT(10), ethnicity TEXT(30), "
-                        + "nativePlace TEXT(100), idCardNumber TEXT(30), birthDate TEXT(20), "
-                        + "enrollmentDate TEXT(20), enrollmentYear LONG, department TEXT(100), "
-                        + "major TEXT(100), className TEXT(100), schoolingLength LONG, "
-                        + "academicStatus TEXT(30), planId LONG, currentTerm LONG, campusId LONG, "
-                        + "politicalStatus TEXT(30), phone TEXT(30), email TEXT(100), "
-                        + "homeAddress TEXT(255), emergencyContact TEXT(100), emergencyPhone TEXT(30))");
+                    + "profileId LONG PRIMARY KEY, userId TEXT(36) NOT NULL, "
+                    + "studentNumber TEXT(20) NOT NULL, gender TEXT(10), ethnicity TEXT(30), "
+                    + "nativePlace TEXT(100), idCardNumber TEXT(30), birthDate TEXT(20), "
+                    + "enrollmentDate TEXT(20), enrollmentYear LONG, department TEXT(100), "
+                    + "major TEXT(100), className TEXT(100), schoolingLength LONG, "
+                    + "academicStatus TEXT(30), planId LONG, currentTerm LONG, campusId LONG, "
+                    + "politicalStatus TEXT(30), phone TEXT(30), email TEXT(100), "
+                    + "homeAddress TEXT(255), emergencyContact TEXT(100), emergencyPhone TEXT(30))");
                 statement.executeUpdate("CREATE UNIQUE INDEX ux_tblStudentProfile_userId "
-                        + "ON tblStudentProfile (userId)");
+                    + "ON tblStudentProfile (userId)");
                 statement.executeUpdate("CREATE UNIQUE INDEX ux_tblStudentProfile_number "
-                        + "ON tblStudentProfile (studentNumber)");
+                    + "ON tblStudentProfile (studentNumber)");
             }
             if (!tableExists(connection, CHANGE_TABLE)) {
                 statement.executeUpdate("CREATE TABLE tblStudentStatusChange ("
-                        + "changeId AUTOINCREMENT PRIMARY KEY, studentNumber TEXT(20) NOT NULL, "
-                        + "studentNameSnapshot TEXT(100) NOT NULL, changeType TEXT(30) NOT NULL, "
-                        + "reason TEXT(255), changeDate TEXT(30) NOT NULL, "
-                        + "auditStatus TEXT(30) NOT NULL, operatorNameSnapshot TEXT(100) NOT NULL)");
+                    + "changeId AUTOINCREMENT PRIMARY KEY, studentNumber TEXT(20) NOT NULL, "
+                    + "studentNameSnapshot TEXT(100) NOT NULL, changeType TEXT(30) NOT NULL, "
+                    + "reason TEXT(255), changeDate TEXT(30) NOT NULL, "
+                    + "auditStatus TEXT(30) NOT NULL, operatorNameSnapshot TEXT(100) NOT NULL)");
             }
         } catch (SQLException exception) {
             throw failure("Cannot initialize student schema.", exception);
@@ -269,20 +308,20 @@ public final class AccessStudentRepository implements StudentRepository {
             }
             connection.setAutoCommit(false);
             try (PreparedStatement insert = connection.prepareStatement(
-                    "INSERT INTO tblStudentProfile (profileId, userId, studentNumber, gender, "
-                            + "ethnicity, nativePlace, idCardNumber, birthDate, enrollmentDate, "
-                            + "enrollmentYear, department, major, className, schoolingLength, "
-                            + "academicStatus, planId, currentTerm, campusId, politicalStatus, "
-                            + "phone, email, homeAddress, emergencyContact, emergencyPhone) "
-                            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+                "INSERT INTO tblStudentProfile (profileId, userId, studentNumber, gender, "
+                    + "ethnicity, nativePlace, idCardNumber, birthDate, enrollmentDate, "
+                    + "enrollmentYear, department, major, className, schoolingLength, "
+                    + "academicStatus, planId, currentTerm, campusId, politicalStatus, "
+                    + "phone, email, homeAddress, emergencyContact, emergencyPhone) "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
                 List<FinalDemoRoster.AccountSeed> students = FinalDemoRoster.students();
                 for (int index = 0; index < students.size(); index++) {
                     FinalDemoRoster.AccountSeed student = students.get(index);
                     int number = index + 1;
                     String major = number <= 5 ? "计算机科学与技术"
-                            : number <= 10 ? "软件工程" : "网络空间安全";
+                        : number <= 10 ? "软件工程" : "网络空间安全";
                     String className = number <= 5 ? "计科2601班"
-                            : number <= 10 ? "软件2601班" : "网安2601班";
+                        : number <= 10 ? "软件2601班" : "网安2601班";
                     bindSeed(insert, number, student, major, className);
                     insert.addBatch();
                 }
@@ -302,11 +341,11 @@ public final class AccessStudentRepository implements StudentRepository {
     }
 
     private static void bindSeed(
-            PreparedStatement statement,
-            int index,
-            FinalDemoRoster.AccountSeed student,
-            String major,
-            String className) throws SQLException {
+        PreparedStatement statement,
+        int index,
+        FinalDemoRoster.AccountSeed student,
+        String major,
+        String className) throws SQLException {
         int column = 1;
         statement.setLong(column++, index);
         statement.setString(column++, student.userId());
@@ -340,8 +379,8 @@ public final class AccessStudentRepository implements StudentRepository {
         profile.setStudentId(result.getString("studentNumber"));
         String userId = result.getString("userId");
         profile.setName(users.findByUserId(userId)
-                .map(identity -> identity.displayName())
-                .orElse(result.getString("studentNumber")));
+            .map(identity -> identity.displayName())
+            .orElse(result.getString("studentNumber")));
         profile.setGender(result.getString("gender"));
         profile.setEthnicity(result.getString("ethnicity"));
         profile.setNativePlace(result.getString("nativePlace"));

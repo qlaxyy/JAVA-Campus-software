@@ -650,7 +650,410 @@ classDiagram
 
 ## 7. 选课子系统设计说明（待负责人材料汇总）
 
-负责人：杨凯涵。后续按 4.3 节结构补充选课批次、课程查询、选课退课、冲突与容量规则、接口、数据库、图表和测试。
+## 7. 选课子系统设计说明（已实现，已知限制见 7.10）
+
+### 7.1 模块背景
+
+负责人：杨凯涵。选课子系统负责处理选课批次、课程目录、教学班、学生选课与退课、课表、成绩、教师教学管理以及教务管理。
+
+系统将“课程”和“教学班”分开建模：课程保存课程代码、课程名称、学分和课程类型等基本信息；教学班表示课程在本学期的具体开设情况，保存班号、任课教师、上课时间、地点、容量和开放状态。同一门课程可以开设多个教学班，但同一学生不能同时选择同一课程的多个教学班。
+
+课程分为方案内课程、方案外替代课程、体育课程和通选课程。学生选课时，服务器统一检查批次状态、历史修读资格、重复选课、替代关系、容量、体育课性别名额和上课时间冲突。
+
+正式启动路径使用 Microsoft Access `vCampus.accdb` 保存课程目录、教学班、批次、选课记录、成绩和任课关系；默认构造器及部分测试路径仍可使用内存 Repository。
+
+当前数据字典见[选课系统数据字典](../../database/schema/course.md)。
+
+### 7.2 用例设计
+
+选课模块包含三类使用者：
+
+| 使用者   | 判定方式                                                 | 主要能力                             |
+| ----- | ---------------------------------------------------- | -------------------------------- |
+| 学生    | 已登录且客户端未识别为课程管理员或教师的普通账号                             | 查看批次、查询课程、选课、退课、查看课表和本人课程成绩      |
+| 普通教师  | 公共教师目录中存在有效教师档案                                      | 查看本人负责的教学班、学生名单，录入成绩并设置成绩比例      |
+| 选课管理员 | `Role.USER + AdminScope.COURSE`，或 `Role.SUPER_ADMIN` | 管理学生选课、课程、教学班、任课教师、批次、成绩、统计和操作日志 |
+
+客户端先判断账号是否具有选课管理权限，再查询公共教师档案，最后进入学生端。服务器不会信任客户端自报的身份，而是从请求 token 对应的 `SessionInfo` 获取当前账号，并对每个 Action 重新鉴权。
+
+#### 7.2.1 学生用例
+
+1. **查看选课批次**：查看当前学期启用的预选课、重修选课和退改补批次，以及批次开放状态、开始时间、结束时间和选退课权限。
+2. **进入选课批次**：从选课中心进入指定批次。预选课和退改补批次显示方案内课程、方案外课程、体育课和通选课；重修批次不显示体育课和通选课。
+3. **查询方案内课程**：查看培养方案范围内的课程、教学班、任课教师、上课时间、容量和剩余名额。
+4. **查询方案外课程**：查看可以替代培养方案课程的方案外课程。已选择某门方案课程或其替代课程后，不得再选择满足同一培养要求的其他课程。
+5. **查询体育课程**：按体育项目筛选课程，并根据学生性别、教学班性别限制、总容量及男女名额判断是否可选。
+6. **查询通选课程**：按通选课类别筛选课程。学生可以选择多门不同通选课，但不能选择同一课程的多个教学班。
+7. **全校课程查询**：按课程代码、课程名称、教师姓名、开课院系和余量状态组合查询，并分页显示教学班结果。
+8. **选择课程**：提交批次 ID 和教学班 ID，服务器完成全部资格与冲突校验后保存选课记录。
+9. **查看已选课程**：查看课程名称、班号、任课教师、时间、地点、学分和课程类型。
+10. **查看课表**：将全部有效选课记录按星期和节次展示为课表。
+11. **退课**：在批次开放且允许退课时退选课程。退课不删除原记录，而是将状态改为 `DROPPED` 并记录退课时间。
+12. **查看成绩**：查看本人各课程的平时成绩、期末成绩、计算比例、总成绩、录入时间和是否及格。
+
+学生相关请求不携带可用于冒充他人的学生身份。服务器使用 `SessionInfo.username` 作为当前学生学号。
+
+#### 7.2.2 普通教师用例
+
+1. **查看我的教学班**：按批次查询当前教师负责的课程及教学班。
+2. **查看学生名单**：教师只能查看自己负责教学班中的有效选课学生。
+3. **查看教学班成绩**：查看负责教学班中各学生的平时成绩、期末成绩和总成绩。
+4. **录入或修改成绩**：教师只能修改自己负责教学班中的学生成绩，平时成绩和期末成绩均必须在 0—100 之间。
+5. **查看成绩比例**：查询教学班的平时成绩和期末成绩比例；未设置时默认使用 40% 和 60%。
+6. **修改成绩比例**：两个比例都必须在 0—100 之间，且总和必须等于 100。修改后总成绩按新比例动态计算。
+
+总成绩计算公式为：
+
+$$
+总成绩=平时成绩\times\frac{平时成绩比例}{100}
++期末成绩\times\frac{期末成绩比例}{100}
+$$
+
+计算结果保留两位小数，总成绩不低于 60 分时判定为及格。
+
+#### 7.2.3 选课管理员用例
+
+1. **学生选课管理**：输入学生学号，查看该学生当前已选课程，并执行强制选课或强制退课。
+2. **强制选课**：不检查批次开放时间、课程容量、时间冲突、体育课性别限制和历史修读资格，但课程和教学班必须存在，并且仍禁止同一课程重复选择。强制选课记录的 `selectedBatchId` 为 `0`。
+3. **强制退课**：不受学生退课时间和批次状态限制，但选课记录必须属于指定学生且仍处于已选状态。
+4. **教学班管理**：查看全部教学班，修改教学班容量和开放状态；容量不得小于当前已选人数。
+5. **新增教学班**：为已有课程创建教学班，同时录入班号、地点、校区、授课语言、容量和首条上课时间。
+6. **任课教师管理**：从公共有效教师目录中选择教师，为教学班建立或移除任课关系；同一教师不能重复分配到同一教学班。
+7. **课程管理**：修改已有课程的课程代码、名称、学分和课程类型；课程代码不得与其他课程重复。
+8. **批次管理**：修改批次名称、学期、类型、开始时间、结束时间、状态以及是否允许选课和退课。
+9. **成绩管理**：选课管理员可以查询指定学生成绩；只有 `SUPER_ADMIN` 可以从管理员页面直接修改成绩。
+10. **数据统计**：按批次统计课程数、教学班数、已选人数、总容量、剩余容量、已满教学班数、关闭教学班数和选课率。
+11. **操作日志**：查看强制选课、强制退课、新增教学班、修改教学班、修改课程、修改批次、修改成绩和修改成绩比例等操作记录。
+
+### 7.3 界面设计
+
+#### 7.3.1 页面组成
+
+| 使用端  | 页面或类                         | 主要职责                             |
+| ---- | ---------------------------- | -------------------------------- |
+| 统一入口 | `CourseClientModule`         | 根据会话权限和公共教师档案选择管理员端、教师端或学生端      |
+| 学生端  | `CourseSelectionView`        | 使用 `CardLayout` 在选课中心和具体批次页面之间切换 |
+| 学生端  | `CourseCenterPanel`          | 加载选课批次，显示批次类型、时间、状态和进入按钮         |
+| 学生端  | `CourseBatchPanel`           | 组织具体批次中的所有选课功能页签                 |
+| 学生端  | `PlanCoursePanel`            | 查询和选择方案内课程                       |
+| 学生端  | `SubstituteCoursePanel`      | 查询和选择方案外替代课程                     |
+| 学生端  | `PeCoursePanel`              | 按体育项目查询和选择体育课程                   |
+| 学生端  | `GeneralCoursePanel`         | 按类别查询和选择通选课程                     |
+| 学生端  | `TimetablePanel`             | 将当前已选课程显示为周课表                    |
+| 学生端  | `SelectedCoursePanel`        | 查看已选课程并执行退课                      |
+| 学生端  | `CourseSearchPanel`          | 全校课程组合查询与分页显示                    |
+| 学生端  | `CourseStudentGradePanel`    | 查看当前学生本人课程成绩                     |
+| 教师端  | `CourseTeacherView`          | 提供“我的教学班”“学生名单”“成绩管理”三个页签        |
+| 教师端  | `CourseTeacherOfferingPanel` | 查询当前教师负责的教学班                     |
+| 教师端  | `CourseTeacherStudentPanel`  | 查询指定教学班学生名单                      |
+| 教师端  | `CourseTeacherGradePanel`    | 查询、录入成绩并维护成绩比例                   |
+| 管理端  | `CourseAdminView`            | 提供选课管理模块的八个管理页签                  |
+| 管理端  | `CourseAdminStudentPanel`    | 查询学生已选课程并执行强制选退课                 |
+| 管理端  | `CourseAdminAuditPanel`      | 查询教务操作日志                         |
+| 管理端  | `CourseAdminOfferingPanel`   | 新增教学班，修改容量和开放状态                  |
+| 管理端  | `CourseAdminTeacherPanel`    | 分配和移除教学班任课教师                     |
+| 管理端  | `CourseAdminCoursePanel`     | 修改课程基本信息                         |
+| 管理端  | `CourseAdminBatchPanel`      | 修改选课批次                           |
+| 管理端  | `CourseAdminGradePanel`      | 查询学生成绩；超级管理员可以修改成绩               |
+| 管理端  | `CourseAdminStatisticsPanel` | 查看指定批次的选课统计                      |
+
+#### 7.3.2 页面状态与交互约定
+
+* 学生端每次进入批次时，根据当前批次重新创建 `CourseBatchPanel`。
+* 重修批次隐藏体育课和通选课页签，预选课和退改补批次显示全部课程类别。
+* 选课或退课成功后，已选课程列表和课表重新加载。
+* 切换页签时，当前页重新读取服务器数据，避免长时间显示旧状态。
+* 表格中的可选状态和按钮禁用状态只用于改善交互，服务器仍会重新执行全部业务校验。
+* 教师身份通过公共教师接口异步查询，网络请求不阻塞 Swing 事件分派线程。
+* 管理员身份判断优先于教师身份，避免同时具有教师资格的管理员误进入教师端。
+* 只有超级管理员的成绩编辑控件处于启用状态，普通选课管理员只能查看成绩。
+* 页面样式统一由 `CourseTheme` 提供背景色、表格、标题、按钮和状态提示样式。
+
+### 7.4 学生选课判定流程
+
+```mermaid
+flowchart TD
+    A[提交批次和教学班] --> B{批次存在且开放}
+    B -- 否 --> B1[拒绝选课]
+    B -- 是 --> C{允许选课}
+    C -- 否 --> B1
+    C -- 是 --> D{教学班属于可选范围}
+    D -- 否 --> B1
+    D -- 是 --> E{课程类别资格通过}
+    E -- 否 --> B1
+    E -- 是 --> F{教学班开放}
+    F -- 否 --> B1
+    F -- 是 --> G{历史修读资格通过}
+    G -- 否 --> B1
+    G -- 是 --> H{无同课程或替代课程重复}
+    H -- 否 --> B1
+    H -- 是 --> I{总容量和性别名额充足}
+    I -- 否 --> B1
+    I -- 是 --> J{无时间冲突}
+    J -- 否 --> B1
+    J -- 是 --> K[保存 SELECTED 选课记录]
+    K --> L[返回选课成功]
+```
+
+时间冲突由 `CourseScheduleConflictChecker` 判断。只有以下条件同时成立时才构成冲突：
+
+1. 上课星期相同；
+2. 开始节次和结束节次存在交集；
+3. 教学周范围存在交集；
+4. 在交集周内，两条课程安排均实际开课。
+
+教学周支持 `EVERY`、`ODD` 和 `EVEN`，因此同一星期、同一节次的单周课程和双周课程不判定为冲突。
+
+### 7.5 学生选课时序图
+
+```mermaid
+sequenceDiagram
+    actor Student as 学生
+    participant Panel as 课程页面
+    participant Context as ClientContext
+    participant Module as CourseServerModule
+    participant Service as CourseSelectionService
+
+    Student->>Panel: 选择教学班并点击选课
+    Panel->>Context: send(SELECT_COURSE, request)
+    Context->>Module: 携带 token 发送请求
+    Module->>Module: 查询 SessionInfo
+    Module->>Service: selectCourse(当前学生, 批次, 教学班)
+    Service->>Service: 校验批次、资格、重复、容量和冲突
+    alt 校验失败
+        Service-->>Module: failure(失败原因)
+        Module-->>Context: COMMON_INVALID_REQUEST
+        Context-->>Panel: 显示失败原因
+    else 校验通过
+        Service->>Service: 保存 SELECTED 记录
+        Service-->>Module: success
+        Module-->>Context: 成功响应
+        Context-->>Panel: 刷新课程、已选列表和课表
+    end
+```
+
+### 7.6 类分析
+
+```mermaid
+classDiagram
+    direction TB
+
+    class CourseClientModule
+    class CourseServerModule
+    class CourseBatchService
+    class CourseSelectionService
+    class CourseEnrollmentService
+    class CourseOfferingAdministrationService
+    class CourseTeacherService
+    class CourseGradeService
+    class CourseScheduleConflictChecker
+    class CourseEnrollmentRepository {
+        <<interface>>
+    }
+    class CoursePlanRepository {
+        <<interface>>
+    }
+    class CourseTeacherAssignmentRepository {
+        <<interface>>
+    }
+    class CourseGradeRepository {
+        <<interface>>
+    }
+
+    CourseClientModule --> CourseServerModule : Action请求
+    CourseServerModule --> CourseBatchService
+    CourseServerModule --> CourseSelectionService
+    CourseServerModule --> CourseEnrollmentService
+    CourseServerModule --> CourseOfferingAdministrationService
+    CourseServerModule --> CourseTeacherService
+    CourseServerModule --> CourseGradeService
+    CourseSelectionService --> CourseScheduleConflictChecker
+    CourseSelectionService --> CourseEnrollmentRepository
+    CourseSelectionService --> CoursePlanRepository
+    CourseEnrollmentService --> CourseEnrollmentRepository
+    CourseTeacherService --> CourseTeacherAssignmentRepository
+    CourseTeacherService --> CourseEnrollmentRepository
+    CourseGradeService --> CourseGradeRepository
+```
+
+主要职责如下：
+
+| 类或接口                                  | 主要职责                                                  |
+| ------------------------------------- | ----------------------------------------------------- |
+| `CourseServerModule`                  | 注册 Action，校验 token、权限和 DTO 类型，调用 Service 并包装 Response |
+| `CourseBatchService`                  | 查询和修改选课批次，计算或应用批次状态                                   |
+| `CoursePlanService`                   | 查询方案内课程，计算已选状态、余量和时间冲突                                |
+| `CourseSubstitutionService`           | 查询方案外替代课程，处理历史修读和替代关系                                 |
+| `PeCourseService`                     | 查询体育课，处理学生性别、性别限制及男女容量                                |
+| `GeneralCourseService`                | 查询通选课并按通选类别筛选                                         |
+| `CourseSearchService`                 | 对全校教学班执行组合查询和分页                                       |
+| `CourseSelectionService`              | 执行学生选课和管理员强制选课规则                                      |
+| `CourseEnrollmentService`             | 查询有效选课记录，执行学生退课和管理员强制退课                               |
+| `CourseOfferingAdministrationService` | 查询、创建和修改课程及教学班设置                                      |
+| `CourseTeacherService`                | 处理任课关系、教师教学班和学生范围鉴权                                   |
+| `CourseGradeService`                  | 查询和保存学生成绩，计算总成绩                                       |
+| `CourseGradePolicyService`            | 查询和修改平时成绩与期末成绩比例                                      |
+| `CourseAdminStatisticsService`        | 汇总批次课程、容量和选课率                                         |
+| `CourseAdminAuditService`             | 保存并查询教务操作记录                                           |
+| `CourseScheduleConflictChecker`       | 根据星期、节次、周次和单双周检测冲突                                    |
+| 各 Repository 接口                       | 隔离业务逻辑与 Access、内存存储实现                                 |
+
+### 7.7 Action、DTO 与错误码
+
+#### 7.7.1 学生 Action
+
+| Action                           | Request.data                                         | 成功 Response.data           | 权限           |
+| -------------------------------- | ---------------------------------------------------- | -------------------------- | ------------ |
+| `COURSE.LIST_BATCHES`            | `null`                                               | `List<SelectionBatchInfo>` | 已登录          |
+| `COURSE.LIST_PLAN_COURSES`       | `BatchRequest(batchId)`                              | `List<CourseInfo>`         | 已登录          |
+| `COURSE.LIST_SUBSTITUTE_COURSES` | `BatchRequest(batchId)`                              | `List<CourseInfo>`         | 已登录          |
+| `COURSE.LIST_PE_COURSES`         | `PeCourseListRequest(batchId, sportProject)`         | `List<CourseInfo>`         | 已登录          |
+| `COURSE.LIST_GENERAL_COURSES`    | `GeneralCourseListRequest(batchId, generalCategory)` | `List<CourseInfo>`         | 已登录          |
+| `COURSE.SEARCH_OFFERINGS`        | `CourseSearchRequest`                                | `CourseSearchResult`       | 已登录          |
+| `COURSE.SELECT_COURSE`           | `SelectCourseRequest(batchId, offeringId)`           | `null`                     | 已登录          |
+| `COURSE.LIST_ENROLLMENTS`        | `BatchRequest(batchId)`                              | `List<EnrollmentInfo>`     | 已登录且只能查询本人   |
+| `COURSE.DROP_COURSE`             | `DropCourseRequest(batchId, enrollmentId)`           | `null`                     | 已登录且选课记录属于本人 |
+| `COURSE.STUDENT_LIST_GRADES`     | `null`                                               | `List<CourseGradeInfo>`    | 已登录且只能查询本人   |
+
+`CourseSearchRequest` 支持课程代码、课程名称、教师姓名、开课院系、余量状态、页码和每页数量。查询结果以教学班为一行，而不是以课程为一行。
+
+#### 7.7.2 教师 Action
+
+| Action                               | Request.data                                      | 成功 Response.data           | 权限               |
+| ------------------------------------ | ------------------------------------------------- | -------------------------- | ---------------- |
+| `COURSE.TEACHER_LIST_OFFERINGS`      | `BatchRequest(batchId)`                           | `List<CourseInfo>`         | 有效教师             |
+| `COURSE.TEACHER_LIST_STUDENTS`       | `TeacherListStudentsRequest(batchId, offeringId)` | `List<TeacherStudentInfo>` | 有效教师且负责该教学班      |
+| `COURSE.TEACHER_LIST_GRADES`         | `TeacherListStudentsRequest(batchId, offeringId)` | `List<CourseGradeInfo>`    | 有效教师且负责该教学班      |
+| `COURSE.TEACHER_UPDATE_GRADE`        | `AdminUpdateGradeRequest`                         | `CourseGradeInfo`          | 有效教师且选课记录属于本人教学班 |
+| `COURSE.TEACHER_GET_GRADE_POLICY`    | `TeacherListStudentsRequest`                      | `CourseGradePolicyInfo`    | 有效教师且负责该教学班      |
+| `COURSE.TEACHER_UPDATE_GRADE_POLICY` | `TeacherUpdateGradePolicyRequest`                 | `CourseGradePolicyInfo`    | 有效教师且负责该教学班      |
+
+#### 7.7.3 管理 Action
+
+下列 Action 除特别说明外，均要求 `SessionInfo.canAdminister(ModuleNames.COURSE)`：
+
+| Action                                  | Request.data                                                   | 成功 Response.data             |
+| --------------------------------------- | -------------------------------------------------------------- | ---------------------------- |
+| `COURSE.ADMIN_LIST_STUDENT_ENROLLMENTS` | `AdminListStudentEnrollmentsRequest(studentId)`                | `List<EnrollmentInfo>`       |
+| `COURSE.ADMIN_FORCE_SELECT_COURSE`      | `AdminForceSelectCourseRequest(studentId, offeringId, reason)` | `null`                       |
+| `COURSE.ADMIN_FORCE_DROP_COURSE`        | `AdminForceDropCourseRequest(studentId, enrollmentId, reason)` | `null`                       |
+| `COURSE.ADMIN_LIST_OFFERINGS`           | `null` 或兼容旧客户端的 `BatchRequest`                                 | `List<CourseInfo>`           |
+| `COURSE.ADMIN_CREATE_OFFERING`          | `AdminCreateOfferingRequest`                                   | 新教学班 ID                      |
+| `COURSE.ADMIN_UPDATE_OFFERING`          | `AdminUpdateOfferingRequest`                                   | `null`                       |
+| `COURSE.ADMIN_UPDATE_COURSE`            | `AdminUpdateCourseRequest`                                     | `CourseInfo`                 |
+| `COURSE.ADMIN_UPDATE_BATCH`             | `AdminUpdateBatchRequest`                                      | `SelectionBatchInfo`         |
+| `COURSE.ADMIN_LIST_ACTIVE_TEACHERS`     | `null`                                                         | `List<TeacherProfileView>`   |
+| `COURSE.ADMIN_LIST_OFFERING_TEACHERS`   | `OfferingTeacherRequest(offeringId)`                           | `List<String>`，内容为教师 userId  |
+| `COURSE.ADMIN_ASSIGN_TEACHER`           | `AdminTeacherAssignmentRequest`                                | `null`                       |
+| `COURSE.ADMIN_REMOVE_TEACHER`           | `AdminTeacherAssignmentRequest`                                | `null`                       |
+| `COURSE.ADMIN_LIST_GRADES`              | `AdminListGradesRequest(studentId)`                            | `List<CourseGradeInfo>`      |
+| `COURSE.ADMIN_UPDATE_GRADE`             | `AdminUpdateGradeRequest`                                      | `CourseGradeInfo`            |
+| `COURSE.ADMIN_GET_STATISTICS`           | `BatchRequest(batchId)`                                        | `CourseAdminStatisticsInfo`  |
+| `COURSE.ADMIN_LIST_AUDIT_LOGS`          | `null`                                                         | `List<CourseAdminAuditInfo>` |
+
+`ADMIN_UPDATE_GRADE` 额外要求全局角色为 `SUPER_ADMIN`。普通选课管理员只能查询成绩，不能通过该 Action 修改成绩。
+
+#### 7.7.4 错误码
+
+当前选课模块使用三类公共错误码：
+
+| 错误码                      | 使用场景                      |
+| ------------------------ | ------------------------- |
+| `AUTH_REQUIRED`          | token 缺失、无效或会话已过期         |
+| `AUTH_FORBIDDEN`         | 当前账号没有选课管理权限、教师资格或指定教学班权限 |
+| `COMMON_INVALID_REQUEST` | DTO 类型错误、参数错误或选课业务校验失败    |
+
+当前尚未定义以 `COURSE_` 开头的细分业务错误码。容量已满、时间冲突、重复选课、批次关闭等情况通过 `COMMON_INVALID_REQUEST` 的响应消息区分。
+
+### 7.8 数据表与并发规则
+
+#### 7.8.1 主要数据表
+
+| 表名                          | 主要用途                 | 重要约束                               |
+| --------------------------- | -------------------- | ---------------------------------- |
+| `tblCourse`                 | 课程代码、名称、学分、类型、院系和课程组 | `courseId`、`courseCode` 唯一         |
+| `tblCourseOffering`         | 教学班、地点、校区、语言、容量和状态   | `offeringId` 唯一                    |
+| `tblCourseSchedule`         | 星期、节次、教学周和单双周安排      | 通过 `offeringId` 关联教学班              |
+| `tblOfferingTeacher`        | 教学班与公共教师账号的任课关系      | `(offeringId, teacherUserId)` 业务唯一 |
+| `tblSelectionBatch`         | 原始选课批次               | `batchId` 唯一                       |
+| `tblEnrollment`             | 学生选课及退课记录            | `(userId, offeringId)` 唯一          |
+| `tblCourseHistory`          | 学生历史修读课程             | `(userId, courseId)` 唯一            |
+| `tblGrade`                  | 平时成绩、期末成绩和录入时间       | `enrollmentId` 唯一                  |
+| `tblGradePolicy`            | 教学班成绩计算比例            | `offeringId` 唯一                    |
+| `tblCourseSubstitution`     | 方案外课程与被替代课程关系        | 替代课程 ID 唯一                         |
+| `tblPeCourse`               | 体育课程及体育项目            | `courseId` 唯一                      |
+| `tblPeOfferingRule`         | 体育教学班性别和男女容量规则       | `offeringId` 唯一                    |
+| `tblGeneralCourse`          | 通选课程类别               | `courseId` 唯一                      |
+| `tblCourseSettings`         | 管理员修改后的课程基本信息        | `courseId` 唯一                      |
+| `tblCourseOfferingSettings` | 管理员修改后的容量和开放状态       | `offeringId` 唯一                    |
+| `tblCourseBatchSettings`    | 管理员修改后的批次设置          | `batchId` 唯一                       |
+| `tblCourseAdminAudit`       | 教务操作日志               | 按 `operatedAt` 建立索引                |
+
+`tblEnrollment` 使用 `SELECTED` 和 `DROPPED` 两种状态。退课后再次选择同一教学班时，Repository 重新启用原有记录，而不是插入违反唯一约束的新记录。
+
+`tblGrade` 每条有效选课记录最多对应一条成绩。平时成绩和期末成绩写入数据库，总成绩根据 `tblGradePolicy` 中的比例动态计算，不重复保存。
+
+任课关系使用公共教师档案的稳定 `teacherUserId`。`teacherName` 只作为兼容旧数据的显示快照，当前姓名优先从公共教师目录读取。
+
+#### 7.8.2 并发规则
+
+1. `CourseSelectionService.selectCourse()` 使用 `synchronized` 串行化单个服务器实例中的学生选课，防止同一实例内的容量检查和保存发生交错。
+2. `CourseEnrollmentService.dropCourse()` 和强制退课操作使用 `synchronized`，避免同一记录被重复退课。
+3. 成绩、成绩比例、批次、课程和教学班修改操作分别在对应 Service 或 Repository 中串行化。
+4. `tblEnrollment(userId, offeringId)` 和 `tblGrade.enrollmentId` 的唯一索引作为持久化层的最后约束。
+5. 新增教学班时，教学班和首条上课时间使用同一个数据库事务写入，任一步失败则整体回滚。
+6. 当前同步锁只对单个 Java 服务器实例有效，不支持多个服务器进程同时操作同一 Access 数据库。
+
+### 7.9 测试与验收
+
+当前专门针对选课模块的自动化测试为 `AccessCourseOfferingCreationRepositoryTest`，覆盖：
+
+* 为已有课程新增教学班及首条上课时间；
+* 新教学班可以通过课程 Repository 重新读取；
+* 新教学班 ID 正确生成；
+* 同一课程下重复班号被拒绝。
+
+选课、退课、冲突、容量、体育课性别限制、教师权限、成绩和管理员操作目前主要依赖业务代码校验与人工联调，仍需补充独立自动化测试。
+
+验收条件：
+
+* [ ] 学生可以查看当前启用的预选、重修和退改补批次。
+* [ ] 重修批次不显示体育课和通选课。
+* [ ] 普通批次拒绝再次选择已经正式修读过的普通课程。
+* [ ] 重修批次只允许选择以前修读过的普通课程；不要求历史成绩低于 60 分。
+* [ ] 同一学生不能同时选择同一课程的两个教学班。
+* [ ] 方案课程或其替代课程已满足同一培养要求时，拒绝重复选择。
+* [ ] 教学班已关闭或人数已满时，普通学生无法选课。
+* [ ] 体育课按学生性别、教学班限制和男女容量判断资格。
+* [ ] 时间冲突检测同时考虑星期、节次、周次及单双周。
+* [ ] 学生只能在批次开放且允许退课时退课。
+* [ ] 管理员可以不受批次时间限制执行强制选课和强制退课。
+* [ ] 强制选课仍禁止同一课程重复选择。
+* [ ] 普通教师只能查看和管理自己负责的教学班。
+* [ ] 平时成绩和期末成绩均限制在 0—100 之间。
+* [ ] 成绩比例总和必须等于 100，未设置时使用 40% 和 60%。
+* [ ] 学生只能通过 token 查看本人成绩。
+* [ ] 只有超级管理员可以通过管理员成绩页面修改成绩。
+* [ ] 修改课程、教学班、批次、成绩和强制选退课后生成操作日志。
+* [ ] 服务器重启后课程、选课、成绩和任课关系仍能从 Access 恢复。
+* [ ] `mvn clean verify` 全部通过。
+
+### 7.10 仍未完成的内容和已知限制
+
+* 当前不能新增或删除课程，只能修改已有课程；新增功能仅覆盖“为已有课程新增教学班”。
+* 当前不能删除教学班，只能通过开放状态关闭教学班。
+* 课程和教学班目前是全局数据，Repository 中保留的 `batchId` 参数未真正用于划分课程范围；不同批次暂时共享同一课程目录。
+* 方案内课程暂未按具体培养方案、专业和年级区分，Access 实现直接把 `courseGroup = REGULAR` 的课程作为方案内课程。
+* 管理员修改课程、教学班和批次时采用额外 Settings 表覆盖原始数据，尚未统一回写基础表。
+* 原始 `tblCourseOffering.selectedCount` 与根据 `tblEnrollment` 动态统计的人数同时存在，存在两套人数来源；演示数据重建和运行时统计需要保持一致，后续应统一为根据有效选课记录实时计算。
+* 当前没有课程专用业务错误码，所有业务失败均使用 `COMMON_INVALID_REQUEST`，客户端只能根据消息区分具体原因。
+* 教师分配和移除任课关系目前没有写入 `tblCourseAdminAudit`。
+* 选课和退课依赖单实例 `synchronized`，没有数据库行锁或乐观锁，不支持多个服务器实例并发抢占最后名额。
+* 学生身份目前使用登录账号 `username` 作为学号，尚未统一改为公共用户 `userId` 与学籍主键的稳定关联。
+* `database/schema/course.md` 中的部分设计字段和当前 Access DAO 实际表结构尚未完全一致，需要在最终提交前统一。
+* 自动化测试覆盖不足，尚缺学生选课、退课、跨类别时间冲突、体育课男女容量、管理员越权、教师越权、成绩计算、并发选课和服务器重启持久化测试。
+* 当前不提供候补队列、抽签选课、志愿优先级、选课结果通知、成绩申诉和课程评价功能。
+
 
 ## 8. 图书馆子系统设计说明（已实现，已知限制见 8.10）
 

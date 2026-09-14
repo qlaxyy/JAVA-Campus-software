@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Access-backed student profiles used by the single demonstration server. */
 public final class AccessStudentRepository implements StudentRepository {
 
     private static final String PROFILE_TABLE = "tblStudentProfile";
@@ -44,8 +43,7 @@ public final class AccessStudentRepository implements StudentRepository {
         if (studentId == null || studentId.isBlank()) {
             return Optional.empty();
         }
-        String sql = "SELECT * FROM tblStudentProfile "
-            + "WHERE studentNumber = ? OR userId = ?";
+        String sql = "SELECT * FROM tblStudentProfile WHERE studentNumber = ? OR userId = ?";
         try (Connection connection = database.openConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             String normalized = studentId.trim();
@@ -85,6 +83,80 @@ public final class AccessStudentRepository implements StudentRepository {
             return statement.executeUpdate() == 1;
         } catch (SQLException exception) {
             throw failure("Cannot update student profile.", exception);
+        }
+    }
+
+    @Override
+    public synchronized boolean addStudent(StudentProfileDto profile) {
+        if (profile == null || profile.getStudentId() == null || profile.getStudentId().isBlank()) {
+            return false;
+        }
+        if (findByStudentId(profile.getStudentId()).isPresent()) {
+            return false;
+        }
+
+        String studentId = profile.getStudentId().trim();
+        String userId = "U-STUDENT-" + studentId;
+        String realName = (profile.getName() != null && !profile.getName().isBlank()) ? profile.getName().trim() : studentId;
+
+        String sql = "INSERT INTO tblStudentProfile (profileId, userId, studentNumber, studentName, gender, "
+            + "ethnicity, nativePlace, idCardNumber, birthDate, enrollmentDate, "
+            + "enrollmentYear, department, major, className, schoolingLength, "
+            + "academicStatus, planId, currentTerm, campusId, politicalStatus, "
+            + "phone, email, homeAddress, emergencyContact, emergencyPhone) "
+            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+        try (Connection connection = database.openConnection();
+             PreparedStatement insert = connection.prepareStatement(sql)) {
+
+            long newProfileId = System.currentTimeMillis() % 1000000L;
+            int col = 1;
+            insert.setLong(col++, newProfileId);
+            insert.setString(col++, userId);
+            insert.setString(col++, studentId);
+            insert.setString(col++, realName); // 直接写入学生姓名列，确保完美显示
+            insert.setString(col++, profile.getGender() != null ? profile.getGender() : "男");
+            insert.setString(col++, profile.getEthnicity() != null ? profile.getEthnicity() : "汉族");
+            insert.setString(col++, profile.getNativePlace() != null ? profile.getNativePlace() : "江苏省南京市");
+            insert.setString(col++, profile.getIdCardNumber() != null ? profile.getIdCardNumber() : "320102200601010000");
+            insert.setString(col++, profile.getBirthDate() != null ? profile.getBirthDate() : "2006-01-01");
+            insert.setString(col++, profile.getEnrollmentDate() != null ? profile.getEnrollmentDate() : "2026-09-01");
+            insert.setInt(col++, profile.getEnrollmentYear() != null ? profile.getEnrollmentYear() : 2026);
+            insert.setString(col++, profile.getDepartment() != null ? profile.getDepartment() : "计算机科学与工程学院");
+            insert.setString(col++, profile.getMajor() != null ? profile.getMajor() : "计算机科学与技术");
+            insert.setString(col++, profile.getClassName() != null ? profile.getClassName() : "计科2601班");
+            insert.setInt(col++, profile.getSchoolingLength() != null ? profile.getSchoolingLength() : 4);
+            insert.setString(col++, "在读");
+            insert.setLong(col++, 1L);
+            insert.setInt(col++, 1);
+            insert.setLong(col++, 1L);
+            insert.setString(col++, profile.getPoliticalStatus() != null ? profile.getPoliticalStatus() : "共青团员");
+            insert.setString(col++, profile.getPhone() != null ? profile.getPhone() : "13800000000");
+            insert.setString(col++, studentId + "@seu.edu.cn");
+            insert.setString(col++, "江苏省南京市江宁区东南大学九龙湖校区");
+            insert.setString(col++, realName + "家长");
+            insert.setString(col, "13900000000");
+
+            insert.executeUpdate();
+            return true;
+        } catch (SQLException exception) {
+            throw failure("Cannot add student profile.", exception);
+        }
+    }
+
+    @Override
+    public synchronized boolean deleteStudent(String studentId) {
+        if (studentId == null || studentId.isBlank()) {
+            return false;
+        }
+        String sql = "DELETE FROM tblStudentProfile WHERE studentNumber = ? OR userId = ?";
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, studentId.trim());
+            statement.setString(2, studentId.trim());
+            return statement.executeUpdate() > 0;
+        } catch (SQLException exception) {
+            throw failure("Cannot delete student profile.", exception);
         }
     }
 
@@ -239,31 +311,29 @@ public final class AccessStudentRepository implements StudentRepository {
         String fieldName = parts[0].trim();
         String newValue = parts[1].trim();
 
-        String colName;
-        switch (fieldName) {
-            case "姓名" -> colName = "NAME_UPDATE";
-            case "性别" -> colName = "gender";
-            case "民族" -> colName = "ethnicity";
-            case "籍贯" -> colName = "nativePlace";
-            case "身份证号" -> colName = "idCardNumber";
-            case "出生日期" -> colName = "birthDate";
-            default -> colName = null;
-        }
-        if (colName == null) return;
-
-        if ("NAME_UPDATE".equals(colName)) {
+        if ("姓名".equals(fieldName)) {
             try (PreparedStatement update = connection.prepareStatement(
-                "UPDATE tblUser SET displayName = ? WHERE username = ?")) {
+                "UPDATE tblStudentProfile SET studentName = ? WHERE studentNumber = ?")) {
                 update.setString(1, newValue);
                 update.setString(2, studentNumber);
                 update.executeUpdate();
             }
         } else {
-            try (PreparedStatement update = connection.prepareStatement(
-                "UPDATE tblStudentProfile SET " + colName + " = ? WHERE studentNumber = ?")) {
-                update.setString(1, newValue);
-                update.setString(2, studentNumber);
-                update.executeUpdate();
+            String colName = switch (fieldName) {
+                case "性别" -> "gender";
+                case "民族" -> "ethnicity";
+                case "籍贯" -> "nativePlace";
+                case "身份证号" -> "idCardNumber";
+                case "出生日期" -> "birthDate";
+                default -> null;
+            };
+            if (colName != null) {
+                try (PreparedStatement update = connection.prepareStatement(
+                    "UPDATE tblStudentProfile SET " + colName + " = ? WHERE studentNumber = ?")) {
+                    update.setString(1, newValue);
+                    update.setString(2, studentNumber);
+                    update.executeUpdate();
+                }
             }
         }
     }
@@ -274,7 +344,7 @@ public final class AccessStudentRepository implements StudentRepository {
             if (!tableExists(connection, PROFILE_TABLE)) {
                 statement.executeUpdate("CREATE TABLE tblStudentProfile ("
                     + "profileId LONG PRIMARY KEY, userId TEXT(36) NOT NULL, "
-                    + "studentNumber TEXT(20) NOT NULL, gender TEXT(10), ethnicity TEXT(30), "
+                    + "studentNumber TEXT(20) NOT NULL, studentName TEXT(100), gender TEXT(10), ethnicity TEXT(30), "
                     + "nativePlace TEXT(100), idCardNumber TEXT(30), birthDate TEXT(20), "
                     + "enrollmentDate TEXT(20), enrollmentYear LONG, department TEXT(100), "
                     + "major TEXT(100), className TEXT(100), schoolingLength LONG, "
@@ -285,6 +355,11 @@ public final class AccessStudentRepository implements StudentRepository {
                     + "ON tblStudentProfile (userId)");
                 statement.executeUpdate("CREATE UNIQUE INDEX ux_tblStudentProfile_number "
                     + "ON tblStudentProfile (studentNumber)");
+            } else {
+                // 兼容已有旧表：自动尝试增加 studentName 字段防止报错
+                try {
+                    statement.executeUpdate("ALTER TABLE tblStudentProfile ADD COLUMN studentName TEXT(100)");
+                } catch (Exception ignored) {}
             }
             if (!tableExists(connection, CHANGE_TABLE)) {
                 statement.executeUpdate("CREATE TABLE tblStudentStatusChange ("
@@ -308,20 +383,18 @@ public final class AccessStudentRepository implements StudentRepository {
             }
             connection.setAutoCommit(false);
             try (PreparedStatement insert = connection.prepareStatement(
-                "INSERT INTO tblStudentProfile (profileId, userId, studentNumber, gender, "
+                "INSERT INTO tblStudentProfile (profileId, userId, studentNumber, studentName, gender, "
                     + "ethnicity, nativePlace, idCardNumber, birthDate, enrollmentDate, "
                     + "enrollmentYear, department, major, className, schoolingLength, "
                     + "academicStatus, planId, currentTerm, campusId, politicalStatus, "
                     + "phone, email, homeAddress, emergencyContact, emergencyPhone) "
-                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
                 List<FinalDemoRoster.AccountSeed> students = FinalDemoRoster.students();
                 for (int index = 0; index < students.size(); index++) {
                     FinalDemoRoster.AccountSeed student = students.get(index);
                     int number = index + 1;
-                    String major = number <= 5 ? "计算机科学与技术"
-                        : number <= 10 ? "软件工程" : "网络空间安全";
-                    String className = number <= 5 ? "计科2601班"
-                        : number <= 10 ? "软件2601班" : "网安2601班";
+                    String major = number <= 5 ? "计算机科学与技术" : number <= 10 ? "软件工程" : "网络空间安全";
+                    String className = number <= 5 ? "计科2601班" : number <= 10 ? "软件2601班" : "网安2601班";
                     bindSeed(insert, number, student, major, className);
                     insert.addBatch();
                 }
@@ -350,6 +423,7 @@ public final class AccessStudentRepository implements StudentRepository {
         statement.setLong(column++, index);
         statement.setString(column++, student.userId());
         statement.setString(column++, student.campusCardNumber());
+        statement.setString(column++, student.displayName()); // 直接写入真实姓名
         statement.setString(column++, index % 2 == 0 ? "女" : "男");
         statement.setString(column++, "汉族");
         statement.setString(column++, index % 3 == 0 ? "江苏省苏州市" : "江苏省南京市");
@@ -377,10 +451,22 @@ public final class AccessStudentRepository implements StudentRepository {
         StudentProfileDto profile = new StudentProfileDto();
         profile.setId(result.getLong("profileId"));
         profile.setStudentId(result.getString("studentNumber"));
-        String userId = result.getString("userId");
-        profile.setName(users.findByUserId(userId)
-            .map(identity -> identity.displayName())
-            .orElse(result.getString("studentNumber")));
+
+        // 优先从 studentName 列读取真实姓名，若为空则降级取用户目录或学号
+        String storedName = null;
+        try {
+            storedName = result.getString("studentName");
+        } catch (Exception ignored) {}
+
+        if (storedName != null && !storedName.isBlank()) {
+            profile.setName(storedName);
+        } else {
+            String userId = result.getString("userId");
+            profile.setName(users.findByUserId(userId)
+                .map(identity -> identity.displayName())
+                .orElse(result.getString("studentNumber")));
+        }
+
         profile.setGender(result.getString("gender"));
         profile.setEthnicity(result.getString("ethnicity"));
         profile.setNativePlace(result.getString("nativePlace"));

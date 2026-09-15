@@ -68,11 +68,8 @@ final class ShopModePanel extends JPanel {
         title.putClientProperty("module.pageTitle", true);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 26F));
         title.setForeground(ShopPalette.TEXT);
-        JLabel subtitle = new JLabel("商店管理员可进入购物或管理；一次只打开其中一个工作台");
-        subtitle.setForeground(ShopPalette.MUTED);
         accountLabel.setForeground(ShopPalette.PRIMARY_DARK);
         copy.add(title);
-        copy.add(Box.createVerticalStrut(5));
         copy.add(Box.createVerticalStrut(8));
         copy.add(accountLabel);
 
@@ -88,46 +85,23 @@ final class ShopModePanel extends JPanel {
         modes.setOpaque(false);
         shopButton.addActionListener(event -> openShopping.run());
         manageButton.addActionListener(event -> openManage.run());
-        modes.add(modeCard(
-                "购物",
-                "浏览商品、加入购物车并用校园卡付款",
-                "首页商品<br>购物车<br>校园卡充值与付款<br>我的订单",
-                shopButton));
-        modes.add(modeCard(
-                "管理",
-                "需要商店管理范围授权",
-                "上架商品<br>在售目录<br>成交订单",
-                manageButton));
+        modes.add(modeCard("购物", shopButton));
+        modes.add(modeCard("管理", manageButton));
         return modes;
     }
 
-    private JPanel modeCard(String titleText, String requirement, String features, JButton action) {
+    private JPanel modeCard(String titleText, JButton action) {
         ShopPalette.SurfacePanel card = new ShopPalette.SurfacePanel();
         card.setLayout(new BorderLayout(24, 0));
         card.setPreferredSize(new Dimension(800, 130));
         card.setBorder(BorderFactory.createEmptyBorder(22, 20, 20, 20));
 
-        JPanel heading = new JPanel();
-        heading.setOpaque(false);
-        heading.setLayout(new BoxLayout(heading, BoxLayout.Y_AXIS));
-        JLabel title = new JLabel(titleText);
-        title.setFont(title.getFont().deriveFont(Font.BOLD, 20F));
+        JLabel title = new JLabel(titleText, SwingConstants.CENTER);
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 22F));
         title.setForeground(ShopPalette.TEXT);
-        JLabel rule = new JLabel(requirement);
-        rule.setForeground(ShopPalette.MUTED);
-        heading.add(title);
-
-        JLabel featureList = new JLabel(
-                features.replace("<br>", " · "));
-        featureList.setForeground(ShopPalette.TEXT);
         action.setPreferredSize(new Dimension(230, 48));
-        heading.add(Box.createVerticalStrut(10));
-        heading.add(featureList);
-        card.add(heading, BorderLayout.CENTER);
-        JPanel actions = new JPanel(new java.awt.GridBagLayout());
-        actions.setOpaque(false);
-        actions.add(action);
-        card.add(actions, BorderLayout.EAST);
+        card.add(title, BorderLayout.CENTER);
+        card.add(action, BorderLayout.EAST);
         return card;
     }
 

@@ -115,10 +115,11 @@ public final class SelfServicePanel extends JPanel {
         outcome.setFont(outcome.getFont().deriveFont(Font.BOLD, 13F));
         form.add(outcome, c);
 
-        JPanel center = new JPanel(new BorderLayout());
+        // 让终端卡片保持自身尺寸并居中，不要被拉伸成整页高。
+        JPanel center = new JPanel(new GridBagLayout());
         center.setOpaque(false);
-        center.setBorder(BorderFactory.createEmptyBorder(0, 50, 0, 50));
-        center.add(ResponsiveLayout.compact(form, 720), BorderLayout.CENTER);
+        center.setBorder(BorderFactory.createEmptyBorder(10, 50, 10, 50));
+        center.add(ResponsiveLayout.compact(form, 720), new GridBagConstraints());
         add(center, BorderLayout.CENTER);
 
         inspectionTimer = new Timer(350, event -> inspectBarcode(true));
@@ -175,13 +176,16 @@ public final class SelfServicePanel extends JPanel {
                                 : LibraryMessages.failure(response)));
                         return;
                     }
+                    // 先清空条码：清空动作会按“无条码”隐藏结果标签，之后再写结论并重新显示，
+                    // 否则“已领取预约图书”这类提示刚设置就被隐藏，读者永远看不到。
+                    barcode.setText("");
                     reservationCheck.setText(borrowing && result.ownedReservation()
                             ? "已领取预约图书"
                             : "办理成功");
+                    reservationCheck.setVisible(true);
                     outcome.setText(borrowing
                             ? "借书成功：" + scanned + "，借期 30 天"
                             : "归还成功：" + scanned + "，单册正在等待管理员上架");
-                    barcode.setText("");
                     circulationChanged.run();
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();

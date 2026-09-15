@@ -38,6 +38,14 @@ final class ShopRechargeDialog {
             button.addActionListener(event -> recharge(owner, context, dialog, fen, balance, onChanged));
             amounts.add(button);
         }
+        JButton custom = ShopPalette.quietButton("自定义金额");
+        custom.addActionListener(event -> {
+            Integer fen = promptCustomAmount(dialog);
+            if (fen != null) {
+                recharge(owner, context, dialog, fen, balance, onChanged);
+            }
+        });
+        amounts.add(custom);
 
         JButton close = ShopPalette.quietButton("关闭");
         close.addActionListener(event -> dialog.dispose());
@@ -49,7 +57,7 @@ final class ShopRechargeDialog {
         dialog.add(balance, BorderLayout.NORTH);
         dialog.add(amounts, BorderLayout.CENTER);
         dialog.add(south, BorderLayout.SOUTH);
-        dialog.setSize(420, 200);
+        dialog.setSize(520, 220);
         dialog.setLocationRelativeTo(owner);
         dialog.setVisible(true);
     }
@@ -75,6 +83,31 @@ final class ShopRechargeDialog {
                 }
             }
         }.execute();
+    }
+
+    private static Integer promptCustomAmount(JDialog dialog) {
+        String input = (String) JOptionPane.showInputDialog(
+                dialog,
+                "请输入充值金额（元），范围 0.01–10000。",
+                "自定义金额",
+                JOptionPane.PLAIN_MESSAGE,
+                null,
+                null,
+                "");
+        if (input == null) {
+            return null;
+        }
+        Integer fen = ShopMoney.yuanToFen(
+                input, RechargeCampusCardRequest.MIN_FEN, RechargeCampusCardRequest.MAX_FEN);
+        if (fen == null) {
+            JOptionPane.showMessageDialog(
+                    dialog,
+                    "请输入 0.01 到 10000 之间的金额，最多两位小数。",
+                    "自定义金额",
+                    JOptionPane.WARNING_MESSAGE);
+            return null;
+        }
+        return fen;
     }
 
     private static void recharge(

@@ -59,7 +59,7 @@ public final class LibraryAdminPanel extends JPanel {
     private final JButton previousBookPage = new JButton("上一页");
     private final JButton nextBookPage = new JButton("下一页");
     private final JLabel bookPageLabel = new JLabel();
-    private final JButton newBook = primaryAction("＋ 新建书目");
+    private final JButton newBook = new JButton("＋ 新建书目");
     private final JButton addCategory = new JButton("＋ 新增分类");
     private final JButton saveBook = new JButton("保存书目信息");
     private final JButton activateBook = new JButton("开放借阅");
@@ -87,10 +87,10 @@ public final class LibraryAdminPanel extends JPanel {
     private final JComboBox<LibraryLocationDTO> location = new JComboBox<>();
     private final JButton addLocation = new JButton("＋ 新增馆藏地");
     private final JTextField callNumber = new JTextField(18);
-    private final JButton newCopy = primaryAction("＋ 登记新单册");
+    private final JButton newCopy = new JButton("＋ 登记新单册");
     private final JButton addCopy = new JButton("确认登记");
     private final JButton updateCopy = new JButton("保存位置与索书号");
-    private final JButton shelfCopy = new JButton("确认归架");
+    private final JButton shelfCopy = new JButton("确认上架");
     private final JButton restoreCopy = new JButton("恢复单册");
     private final JButton withdrawCopy = new JButton("注销单册");
     private final JButton refreshCopies = new JButton("刷新单册");
@@ -113,7 +113,7 @@ public final class LibraryAdminPanel extends JPanel {
 
     private final JButton refreshStatistics = new JButton("刷新统计");
     private final JButton exportStatistics = new JButton("导出 CSV");
-    private final JTextArea statisticsSummary = new JTextArea(10, 40);
+    private final JTextArea statisticsSummary = new JTextArea(4, 40);
     private final DefaultTableModel categoryModel =
             readOnlyModel(new String[]{"分类", "书目数", "馆藏数"});
     private final DefaultTableModel popularModel =
@@ -122,7 +122,6 @@ public final class LibraryAdminPanel extends JPanel {
     private final JTable popularTable = new JTable(popularModel);
     private LibraryStatisticsDTO statistics;
 
-    private final JLabel outcome = new JLabel(" ");
     private final JLabel status = new JLabel("正在等待加载数据");
     private List<BookDTO> books = List.of();
     private List<BookCopyDTO> copies = List.of();
@@ -135,6 +134,7 @@ public final class LibraryAdminPanel extends JPanel {
     private boolean addingCopy;
     private boolean working;
     private boolean uncertainWrite;
+    private boolean pendingTabSync;
 
     /** @param context authenticated client context */
     public LibraryAdminPanel(ClientContext context) {
@@ -152,15 +152,11 @@ public final class LibraryAdminPanel extends JPanel {
         areas.addTab("统计", createStatisticsArea());
         add(areas, BorderLayout.CENTER);
 
-        outcome.setName("library.admin.outcome");
+        // 底部只有一条状态行：它由当前页签的加载结果或最近一次操作改写，
+        // 切换页签时先清空，因此不会残留其它页签的操作结果。
         status.setName("library.admin.status");
-        JPanel footer = new JPanel(new GridLayout(1, 2, 8, 0));
-        footer.setOpaque(false);
-        LibraryUiTheme.styleStatusLabel(outcome);
         LibraryUiTheme.styleStatusLabel(status);
-        footer.add(outcome);
-        footer.add(status);
-        add(footer, BorderLayout.SOUTH);
+        add(status, BorderLayout.SOUTH);
 
         applyVisualTheme();
         wireEvents();
@@ -175,6 +171,7 @@ public final class LibraryAdminPanel extends JPanel {
         category.setName("library.admin.category");
         publisher.setName("library.admin.publisher");
         year.setName("library.admin.year");
+        price.setName("library.admin.price");
         language.setName("library.admin.language");
         LibraryCategories.render(category);
 
@@ -200,7 +197,7 @@ public final class LibraryAdminPanel extends JPanel {
         editor.setMinimumSize(new Dimension(300, 0));
         editor.setBorder(BorderFactory.createTitledBorder(
                 LibraryUiTheme.cardBorder(10, 10),
-                "书目元数据（馆藏数量由实体单册统计）"));
+                "书目元数据"));
         GridBagConstraints c = formConstraints();
         row(editor, c, 0, "当前书目", selectedBook);
         row(editor, c, 1, "ISBN", isbn);
@@ -215,15 +212,6 @@ public final class LibraryAdminPanel extends JPanel {
         row(editor, c, 6, "出版年", year);
         row(editor, c, 7, "定价（元）", price);
         row(editor, c, 8, "语种", language);
-        JPanel metadataActions = new JPanel(new GridLayout(0, 1, 0, 6));
-        metadataActions.setOpaque(false);
-        metadataActions.add(saveBook);
-        metadataActions.add(activateBook);
-        metadataActions.add(deactivateBook);
-        c.gridx = 0;
-        c.gridy = 9;
-        c.gridwidth = 2;
-        editor.add(metadataActions, c);
 
         JPanel catalogArea = new JPanel(new BorderLayout(0, 6));
         catalogArea.setOpaque(false);
@@ -239,8 +227,24 @@ public final class LibraryAdminPanel extends JPanel {
         editorScroll.setBorder(null);
         editorScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         editorScroll.getViewport().setBackground(LibraryUiTheme.SURFACE);
-        editorScroll.setPreferredSize(new Dimension(350, 0));
-        workspace.add(editorScroll, BorderLayout.EAST);
+
+        // 元数据字段较多，编辑器本身可滚动；操作按钮固定在右栏底部，任何窗口高度下都可见。
+        JPanel metadataActions = new JPanel(new GridLayout(0, 1, 0, 6));
+        metadataActions.setOpaque(false);
+        metadataActions.add(saveBook);
+        metadataActions.add(activateBook);
+        metadataActions.add(deactivateBook);
+        JPanel actionsCard = new JPanel(new BorderLayout());
+        LibraryUiTheme.styleCard(actionsCard);
+        actionsCard.setBorder(LibraryUiTheme.cardBorder(10, 10));
+        actionsCard.add(metadataActions, BorderLayout.CENTER);
+
+        JPanel editorColumn = new JPanel(new BorderLayout(0, 10));
+        editorColumn.setOpaque(false);
+        editorColumn.setPreferredSize(new Dimension(350, 0));
+        editorColumn.add(editorScroll, BorderLayout.CENTER);
+        editorColumn.add(actionsCard, BorderLayout.SOUTH);
+        workspace.add(editorColumn, BorderLayout.EAST);
         panel.add(workspace, BorderLayout.CENTER);
         return panel;
     }
@@ -365,8 +369,6 @@ public final class LibraryAdminPanel extends JPanel {
         header.setBorder(LibraryUiTheme.cardBorder(10, 12));
         header.add(refreshStatistics);
         header.add(exportStatistics);
-        header.add(LibraryUiTheme.createMutedLabel(
-                "统计为查询时派生，不落库；导出为当前快照"));
         panel.add(header, BorderLayout.NORTH);
 
         JPanel body = new JPanel(new BorderLayout(10, 10));
@@ -442,7 +444,7 @@ public final class LibraryAdminPanel extends JPanel {
 
     private void exportStatisticsCsv() {
         if (statistics == null) {
-            outcome.setText("请先刷新统计再导出");
+            status.setText("请先刷新统计再导出");
             return;
         }
         JFileChooser chooser = new JFileChooser();
@@ -453,9 +455,9 @@ public final class LibraryAdminPanel extends JPanel {
         try {
             Files.writeString(chooser.getSelectedFile().toPath(),
                     statisticsCsv(statistics), StandardCharsets.UTF_8);
-            outcome.setText("已导出：" + chooser.getSelectedFile().getAbsolutePath());
+            status.setText("已导出：" + chooser.getSelectedFile().getAbsolutePath());
         } catch (java.io.IOException exception) {
-            outcome.setText("导出失败：" + exception.getMessage());
+            status.setText("导出失败：" + exception.getMessage());
         }
     }
 
@@ -617,19 +619,35 @@ public final class LibraryAdminPanel extends JPanel {
             if (!working && areas.getSelectedIndex() == 3) { loadReservations(); }
         });
         areas.addChangeListener(event -> {
-            if (working) { return; }
-            if (areas.getSelectedIndex() == 1 && selectedBookId != null) {
-                loadCopies();
-            } else if (areas.getSelectedIndex() == 2) {
-                loadBorrows();
-            } else if (areas.getSelectedIndex() == 3) {
-                loadReservations();
-            } else if (areas.getSelectedIndex() == 4) {
-                loadStatistics();
+            // 切页签先清空状态行，避免上一个页签的加载或操作结果留在这里。
+            status.setText(" ");
+            if (working) {
+                // 正在处理请求时切换页签不能直接丢弃，否则目标页签永远是空的。
+                pendingTabSync = true;
+                return;
             }
+            syncSelectedTab();
         });
         refreshStatistics.addActionListener(event -> loadStatistics());
         exportStatistics.addActionListener(event -> exportStatisticsCsv());
+    }
+
+    /** Puts the workbench tabs back on “书目维护” when the module is entered again. */
+    void resetTabs() {
+        areas.setSelectedIndex(0);
+    }
+
+    /** Loads the data the currently selected tab shows. */
+    private void syncSelectedTab() {
+        if (areas.getSelectedIndex() == 1 && selectedBookId != null) {
+            loadCopies();
+        } else if (areas.getSelectedIndex() == 2) {
+            loadBorrows();
+        } else if (areas.getSelectedIndex() == 3) {
+            loadReservations();
+        } else if (areas.getSelectedIndex() == 4) {
+            loadStatistics();
+        }
     }
 
     /** Reloads authoritative categories and the catalog page currently on screen. */
@@ -683,8 +701,7 @@ public final class LibraryAdminPanel extends JPanel {
                     fillBookTable();
                     clearBookForm();
                     uncertainWrite = false;
-                    status.setText("共 " + bookTotalCount + " 条书目，本页 " + books.size()
-                            + " 条；馆藏与可借数量来自实体单册实时汇总");
+                    status.setText("共 " + bookTotalCount + " 条书目，本页 " + books.size() + " 条");
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
                     status.setText("刷新已中断，可重新查询");
@@ -736,7 +753,7 @@ public final class LibraryAdminPanel extends JPanel {
         addingBook = true;
         category.setSelectedIndex(0);
         selectedBook.setText("新书目（保存后再登记实体单册）");
-        outcome.setText("请填写书目元数据；新增书目初始馆藏为 0");
+        status.setText("请填写书目元数据；新增书目初始馆藏为 0");
         updateControls();
         isbn.requestFocusInWindow();
     }
@@ -748,14 +765,14 @@ public final class LibraryAdminPanel extends JPanel {
                 JOptionPane.PLAIN_MESSAGE);
         if (name == null) return;
         if (name.isBlank()) {
-            outcome.setText("分类名称不能为空");
+            status.setText("分类名称不能为空");
             return;
         }
         submit(LibraryActions.ADD_BOOK_CATEGORY, new AddBookCategoryRequest(name),
                 "新增分类", BookCategoryDTO.class, added -> {
                     category.addItem(added);
                     category.setSelectedItem(added);
-                    outcome.setText("分类“" + added.getCategoryName() + "”已新增，可用于新书目");
+                    status.setText("分类“" + added.getCategoryName() + "”已新增，可用于新书目");
                 });
     }
 
@@ -776,7 +793,7 @@ public final class LibraryAdminPanel extends JPanel {
         selectCategory(book.getCategoryId());
         copyBook.setText("当前书目：《" + book.getTitle() + "》（" + book.getBookId() + "）· "
                 + displayBookStatus(book.getStatus()));
-        outcome.setText("已选择《" + book.getTitle() + "》");
+        status.setText("已选择《" + book.getTitle() + "》");
         clearCopyForm();
         updateControls();
     }
@@ -789,7 +806,7 @@ public final class LibraryAdminPanel extends JPanel {
         int priceFen = readPriceFen();
         if (priceFen == Integer.MIN_VALUE) { return; }
         if (choice == null || isbn.getText().isBlank() || title.getText().isBlank() || author.getText().isBlank()) {
-            outcome.setText("请填写 ISBN、书名、作者并选择分类");
+            status.setText("请填写 ISBN、书名、作者并选择分类");
             return;
         }
         Serializable request = addingBook
@@ -812,7 +829,7 @@ public final class LibraryAdminPanel extends JPanel {
 
     private void submitBook(String action, Serializable request, String operation) {
         submit(action, request, operation, BookDTO.class, book -> {
-            outcome.setText(operation + "成功：《" + book.getTitle() + "》；馆藏 "
+            status.setText(operation + "成功：《" + book.getTitle() + "》；馆藏 "
                     + book.getTotalCount() + " 本，可借 " + book.getAvailableCount() + " 本");
             keyword.setText(book.getIsbn());
             SwingUtilities.invokeLater(this::refresh);
@@ -858,7 +875,7 @@ public final class LibraryAdminPanel extends JPanel {
         copyTable.clearSelection();
         clearCopyForm();
         addingCopy = true;
-        outcome.setText("请输入全馆唯一的馆藏条码、馆藏地和索书号");
+        status.setText("请输入全馆唯一的馆藏条码、馆藏地和索书号");
         updateControls();
         barcode.requestFocusInWindow();
     }
@@ -872,7 +889,7 @@ public final class LibraryAdminPanel extends JPanel {
         barcode.setText(copy.getBarcode());
         selectLocation(copy.getLocation());
         callNumber.setText(copy.getCallNumber());
-        outcome.setText("已选择单册 " + copy.getBarcode() + " · " + displayCopyStatus(copy.getStatus()));
+        status.setText("已选择单册 " + copy.getBarcode() + " · " + displayCopyStatus(copy.getStatus()));
         updateControls();
     }
 
@@ -880,7 +897,7 @@ public final class LibraryAdminPanel extends JPanel {
         if (working || !addingCopy || selectedBookId == null) { return; }
         if (barcode.getText().isBlank() || selectedLocation() == null
                 || callNumber.getText().isBlank()) {
-            outcome.setText("请填写馆藏条码、馆藏地和索书号");
+            status.setText("请填写馆藏条码、馆藏地和索书号");
             return;
         }
         submitCopy(LibraryActions.ADD_BOOK_COPY,
@@ -892,7 +909,7 @@ public final class LibraryAdminPanel extends JPanel {
     private void updateCopy() {
         if (working || addingCopy || selectedCopyId == null) { return; }
         if (selectedLocation() == null || callNumber.getText().isBlank()) {
-            outcome.setText("馆藏地和索书号不能为空");
+            status.setText("馆藏地和索书号不能为空");
             return;
         }
         submitCopy(LibraryActions.UPDATE_BOOK_COPY,
@@ -936,14 +953,14 @@ public final class LibraryAdminPanel extends JPanel {
                 JOptionPane.PLAIN_MESSAGE);
         if (name == null) return;
         if (name.isBlank()) {
-            outcome.setText("馆藏地名称不能为空");
+            status.setText("馆藏地名称不能为空");
             return;
         }
         submit(LibraryActions.ADMIN_ADD_LOCATION, new AddLocationRequest(name),
                 "新增馆藏地", LibraryLocationDTO.class, added -> {
                     location.addItem(added);
                     location.setSelectedItem(added);
-                    outcome.setText("馆藏地“" + added.getLocationName() + "”已新增，可用于登记或迁移单册");
+                    status.setText("馆藏地“" + added.getLocationName() + "”已新增，可用于登记或迁移单册");
                 });
     }
 
@@ -969,7 +986,7 @@ public final class LibraryAdminPanel extends JPanel {
 
     private void submitCopy(String action, Serializable request, String operation) {
         submit(action, request, operation, BookCopyDTO.class, copy -> {
-            outcome.setText(operation + "成功：" + copy.getBarcode() + " · " + displayCopyStatus(copy.getStatus()));
+            status.setText(operation + "成功：" + copy.getBarcode() + " · " + displayCopyStatus(copy.getStatus()));
             SwingUtilities.invokeLater(this::loadCopies);
         });
     }
@@ -1013,7 +1030,7 @@ public final class LibraryAdminPanel extends JPanel {
             Class<T> type, Consumer<T> success) {
         if (working || uncertainWrite) { return; }
         setWorking(true);
-        outcome.setText("正在" + operation + "……");
+        status.setText("正在" + operation + "……");
         new SwingWorker<Response, Void>() {
             protected Response doInBackground() throws Exception { return context.send(action, request); }
             protected void done() {
@@ -1024,7 +1041,7 @@ public final class LibraryAdminPanel extends JPanel {
                         return;
                     }
                     if (!response.isSuccess()) {
-                        outcome.setText(operation + "失败："
+                        status.setText(operation + "失败："
                                 + (ErrorCodes.COMMON_INVALID_ARGUMENT.equals(response.getCode())
                                 ? response.getMessage() : LibraryMessages.failure(response)));
                         return;
@@ -1066,7 +1083,7 @@ public final class LibraryAdminPanel extends JPanel {
 
     private void unknownWrite(String operation) {
         uncertainWrite = true;
-        outcome.setText(operation + "结果未确认，请先查询 / 刷新核对，勿重复提交");
+        status.setText(operation + "结果未确认，请先查询 / 刷新核对，勿重复提交");
         updateControls();
     }
 
@@ -1078,7 +1095,7 @@ public final class LibraryAdminPanel extends JPanel {
             if (parsed < 1000 || parsed > 9999) { throw new NumberFormatException(); }
             return parsed;
         } catch (NumberFormatException exception) {
-            outcome.setText("出版年须为空或 1000 至 9999 的整数");
+            status.setText("出版年须为空或 1000 至 9999 的整数");
             return Integer.MIN_VALUE;
         }
     }
@@ -1093,7 +1110,7 @@ public final class LibraryAdminPanel extends JPanel {
             }
             return fen;
         } catch (NumberFormatException | ArithmeticException exception) {
-            outcome.setText("定价须为 0.01 至 9999.99 元，最多两位小数");
+            status.setText("定价须为 0.01 至 9999.99 元，最多两位小数");
             return Integer.MIN_VALUE;
         }
     }
@@ -1148,6 +1165,10 @@ public final class LibraryAdminPanel extends JPanel {
     private void setWorking(boolean value) {
         working = value;
         updateControls();
+        if (!value && pendingTabSync) {
+            pendingTabSync = false;
+            syncSelectedTab();
+        }
     }
 
     private void updateControls() {
@@ -1200,10 +1221,6 @@ public final class LibraryAdminPanel extends JPanel {
             @Override
             public boolean isCellEditable(int row, int column) { return false; }
         };
-    }
-
-    private static JButton primaryAction(String text) {
-        return new JButton(text);
     }
 
     private static void configureTable(JTable table, String name) {

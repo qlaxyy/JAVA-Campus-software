@@ -157,6 +157,7 @@ public final class LibraryPanel extends JPanel {
         LibraryUiTheme.stylePrimaryButton(reservationButton);
         reservationHint.setName("library.reservation.hint");
         reservationHint.setForeground(LibraryUiTheme.MUTED);
+        reservationHint.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 2));
         JPanel reservationControls = new JPanel(new BorderLayout(8, 8));
         reservationControls.setOpaque(false);
         JPanel reservationInput = new JPanel(new BorderLayout(8, 0));
@@ -178,8 +179,9 @@ public final class LibraryPanel extends JPanel {
         detailsArea.add(detailTitle, BorderLayout.NORTH);
         detailsArea.add(holdingScroll, BorderLayout.CENTER);
         detailsArea.add(reservationControls, BorderLayout.SOUTH);
-        detailsArea.setMinimumSize(new java.awt.Dimension(275, 0));
-        detailsArea.setPreferredSize(new java.awt.Dimension(320, 0));
+        // 馆藏地名称较长，详情栏留出足够宽度，避免“可借 N 本 / 馆藏 N 本”被折行。
+        detailsArea.setMinimumSize(new java.awt.Dimension(300, 0));
+        detailsArea.setPreferredSize(new java.awt.Dimension(380, 0));
 
         JPanel resultArea = new JPanel(new BorderLayout(8, 8));
         resultArea.setName("library.catalog.results");
@@ -318,8 +320,7 @@ public final class LibraryPanel extends JPanel {
             statusLabel.setText("共 " + result.getTotalCount() + " 本书目，本页显示 "
                     + (books.isEmpty() ? 0
                             : (currentPage - 1) * result.getPageSize() + 1)
-                    + "–" + ((currentPage - 1) * result.getPageSize() + books.size())
-                    + "；选择书目和馆藏地后可预约，实体书借还在模拟终端登记");
+                    + "–" + ((currentPage - 1) * result.getPageSize() + books.size()));
         }
     }
 
@@ -351,8 +352,8 @@ public final class LibraryPanel extends JPanel {
                 ? "暂无馆藏"
                 : book.getLocations().stream()
                         .map(location -> location.getLocation() + "：可借 "
-                                + location.getAvailableCount() + " 本 / 馆藏 "
-                                + location.getTotalCount() + " 本")
+                                + location.getAvailableCount() + " / 馆藏 "
+                                + location.getTotalCount())
                         .collect(Collectors.joining(System.lineSeparator()));
         holdingDetails.setText("《" + book.getTitle() + "》" + System.lineSeparator() + locations);
         holdingDetails.setCaretPosition(0);
@@ -442,16 +443,17 @@ public final class LibraryPanel extends JPanel {
         reservationButton.setEnabled(!working && book != null && location != null
                 && !alreadyReserved);
         if (book == null) {
-            reservationHint.setText("请先选择书目和取书馆藏地");
+            // 上方馆藏详情区已经提示“请选择一条书目”，这里不再重复同一句话。
+            reservationHint.setText(" ");
         } else if (alreadyReserved) {
-            reservationHint.setText("该书目已预约；可到“我的图书馆”查看或取消");
+            reservationHint.setText("该书目已预约，可在“我的图书馆”取消");
         } else if (location == null) {
             reservationHint.setText("该书目暂无可预约的馆藏地");
         } else if (location.getAvailableCount() > 0) {
             reservationHint.setText("当前可借 " + location.getAvailableCount()
-                    + " 本；预约成功后立即保留 24 小时（1 天）");
+                    + " 本；预约后保留 24 小时");
         } else {
-            reservationHint.setText("当前无可借单册；提交后将进入预约队列并按顺序等待");
+            reservationHint.setText("当前无可借单册，提交后进入预约队列");
         }
     }
 

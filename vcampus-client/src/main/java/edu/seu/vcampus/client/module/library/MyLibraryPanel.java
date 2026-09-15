@@ -32,7 +32,7 @@ import java.util.concurrent.ExecutionException;
 public final class MyLibraryPanel extends JPanel {
 
     private static final String[] BORROW_COLUMNS = {
-        "书名", "馆藏条码", "借阅时间", "到期时间", "续借次数", "归还时间", "状态", "待缴费用"
+        "书名", "馆藏条码", "借阅时间", "到期时间", "续借次数", "归还时间", "状态", "费用"
     };
     private static final String[] RESERVATION_COLUMNS = {
         "书名", "取书馆藏地", "预约状态", "排队位次", "馆藏条码", "取书截止时间"
@@ -57,6 +57,7 @@ public final class MyLibraryPanel extends JPanel {
     private final JLabel feeHint = new JLabel("选择有“待缴”费用的历史借阅后结清");
     private final JLabel reservationHint = new JLabel("只有“排队中”和“待取书”预约可以取消");
     private final JLabel statusLabel = new JLabel(" ");
+    private final JTabbedPane records = new JTabbedPane();
     private final JLabel renewHint = new JLabel("每次借阅最多续借 1 次；逾期或已有预约时不能续借");
     private List<BorrowRecordDTO> currentBorrows = List.of();
     private List<BorrowRecordDTO> historyBorrows = List.of();
@@ -90,7 +91,7 @@ public final class MyLibraryPanel extends JPanel {
         overview.add(statusLabel, BorderLayout.CENTER);
         overview.add(refreshButton, BorderLayout.EAST);
 
-        JTabbedPane records = new JTabbedPane();
+        JTabbedPane records = this.records;
         records.setName("library.recordTabs");
         LibraryUiTheme.styleTabbedPane(records);
         records.addTab("当前借阅", createCurrentBorrowArea());
@@ -98,9 +99,6 @@ public final class MyLibraryPanel extends JPanel {
         records.addTab("我的预约", createReservationArea());
         add(overview, BorderLayout.NORTH);
         add(records, BorderLayout.CENTER);
-        JLabel terminalHint = LibraryUiTheme.createMutedLabel(
-                "借还实体书请返回模式选择，进入“模拟自助终端”");
-        add(terminalHint, BorderLayout.SOUTH);
 
         refreshButton.addActionListener(event -> refresh());
         renewBorrow.addActionListener(event -> renewSelectedBorrow());
@@ -174,6 +172,11 @@ public final class MyLibraryPanel extends JPanel {
         actions.add(cancelReservation, BorderLayout.EAST);
         panel.add(actions, BorderLayout.SOUTH);
         return panel;
+    }
+
+    /** Puts the record tabs back on “当前借阅” when the module is entered again. */
+    void resetTabs() {
+        records.setSelectedIndex(0);
     }
 
     void refresh() {
@@ -487,13 +490,13 @@ public final class MyLibraryPanel extends JPanel {
                 && selected.getRenewalCount() < 1;
         renewBorrow.setEnabled(allowed);
         if (selected == null) {
-            renewHint.setText("选择当前借阅后可以续借；服务器会再次检查预约与逾期状态");
+            renewHint.setText("选择当前借阅后可以续借");
         } else if (selected.isOverdue()) {
             renewHint.setText("该借阅已经逾期，不能续借");
         } else if (selected.getRenewalCount() >= 1) {
             renewHint.setText("该借阅已续借 1 次，不能再次续借");
         } else {
-            renewHint.setText("续借后从当前到期日顺延 30 天；有人预约时服务器会拒绝");
+            renewHint.setText("续借后从当前到期日顺延 30 天；该书目有人预约时不能续借");
         }
     }
 

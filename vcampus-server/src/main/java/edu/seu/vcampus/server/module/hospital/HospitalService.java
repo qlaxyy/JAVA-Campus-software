@@ -170,6 +170,8 @@ final class HospitalService {
     AdminDepartmentWorkspaceView getAdminDepartmentWorkspace(SessionInfo session) {
         requireHospitalAdmin(session);
         List<HospitalDepartment> departments = repository.findAllDepartments();
+        List<HospitalDoctor> doctors = repository.findAllDoctors();
+        List<HospitalSlot> schedules = repository.findAllSlots();
         LocalDateTime now = LocalDateTime.now(clock);
         return new AdminDepartmentWorkspaceView(departments.stream()
                 .sorted(Comparator.comparing(HospitalDepartment::active).reversed()
@@ -186,12 +188,12 @@ final class HospitalService {
                                 .orElse(null),
                         department.bookable(),
                         department.active(),
-                        (int) repository.findAllDoctors().stream()
+                        (int) doctors.stream()
                                 .filter(HospitalDoctor::active)
                                 .filter(doctor -> doctor.departmentId().equals(
                                         department.departmentId()))
                                 .count(),
-                        (int) repository.findAllSlots().stream()
+                        (int) schedules.stream()
                                 .filter(slot -> slot.departmentId().equals(
                                         department.departmentId()))
                                 .filter(slot -> slot.endTime().isAfter(now))

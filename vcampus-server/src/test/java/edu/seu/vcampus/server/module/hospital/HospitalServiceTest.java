@@ -417,6 +417,39 @@ class HospitalServiceTest {
     }
 
     @Test
+    void departmentWorkspaceReadsDoctorsAndSchedulesOnlyOnce() {
+        InMemoryHospitalRepository source = new InMemoryHospitalRepository(FIXED_CLOCK);
+        AtomicInteger departmentReads = new AtomicInteger();
+        AtomicInteger doctorReads = new AtomicInteger();
+        AtomicInteger scheduleReads = new AtomicInteger();
+        HospitalRepository counted = (HospitalRepository) Proxy.newProxyInstance(
+                HospitalRepository.class.getClassLoader(),
+                new Class<?>[]{HospitalRepository.class},
+                (proxy, method, arguments) -> {
+                    switch (method.getName()) {
+                        case "findAllDepartments" -> departmentReads.incrementAndGet();
+                        case "findAllDoctors" -> doctorReads.incrementAndGet();
+                        case "findAllSlots" -> scheduleReads.incrementAndGet();
+                        default -> { }
+                    }
+                    try {
+                        return method.invoke(source, arguments);
+                    } catch (InvocationTargetException exception) {
+                        throw exception.getCause();
+                    }
+                });
+        HospitalService target = new HospitalService(counted, FIXED_CLOCK);
+        SessionInfo administrator = session(
+                "U-HOSPITAL-ADMIN-001", Role.USER, Set.of(AdminScope.HOSPITAL));
+
+        assertEquals(15, target.getAdminDepartmentWorkspace(administrator)
+                .getDepartments().size());
+        assertEquals(1, departmentReads.get());
+        assertEquals(1, doctorReads.get());
+        assertEquals(1, scheduleReads.get());
+    }
+
+    @Test
     void administratorCancelsFutureAbnormalAppointmentAndRefundsRegistration() {
         SessionInfo administrator = session(
                 "U-HOSPITAL-ADMIN-001", Role.USER, Set.of(AdminScope.HOSPITAL));

@@ -20,6 +20,64 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HospitalResponsiveLayoutTest {
+    @Test void wrappingTextMeasurementIsSafeInValidatedWindow() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeFalse(java.awt.GraphicsEnvironment.isHeadless());
+        SwingUtilities.invokeAndWait(() -> {
+            javax.swing.JFrame frame = new javax.swing.JFrame();
+            try {
+                JPanel box = new JPanel();
+                javax.swing.BoxLayout layout = new javax.swing.BoxLayout(box, javax.swing.BoxLayout.Y_AXIS);
+                box.setLayout(layout);
+                JTextArea text = HospitalResponsiveLayout.wrappingText(
+                        "医院说明文字测试换行与布局缓存。".repeat(30), new Font("Microsoft YaHei", Font.PLAIN, 13), Color.BLACK);
+                box.add(text);
+                frame.setContentPane(box);
+                frame.pack();
+                for (int width : new int[]{480, 900, 320, 900}) {
+                    frame.setSize(width, 600);
+                    frame.validate();
+                    layout.invalidateLayout(box);
+                    Dimension before = text.getSize();
+                    org.junit.jupiter.api.Assertions.assertDoesNotThrow(box::getPreferredSize);
+                    assertEquals(before, text.getSize());
+                }
+            } finally { frame.dispose(); }
+        });
+    }
+
+    @Test void wrappingTextCanBeMeasuredInsideBoxLayoutWithoutChangingBounds() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JPanel box = new JPanel();
+            box.setLayout(new javax.swing.BoxLayout(box, javax.swing.BoxLayout.Y_AXIS));
+            JTextArea text = HospitalResponsiveLayout.wrappingText(
+                    "这是测试换行的医院说明文字。".repeat(30), new Font("Microsoft YaHei", Font.PLAIN, 13), Color.BLACK);
+            box.add(text);
+            for (int width : new int[]{480, 900, 320, 900}) {
+                box.setSize(width, 500);
+                Dimension before = text.getSize();
+                org.junit.jupiter.api.Assertions.assertDoesNotThrow(box::getPreferredSize);
+                assertEquals(before, text.getSize(), "measurement must not resize live text components");
+                box.doLayout();
+            }
+        });
+    }
+
+    @Test void hospitalGridCanBeMeasuredInsideBoxLayoutDuringColumnChanges() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            JPanel box = new JPanel();
+            box.setLayout(new javax.swing.BoxLayout(box, javax.swing.BoxLayout.Y_AXIS));
+            JPanel grid = HospitalResponsiveLayout.grid(3, 240, 14, 14);
+            for (int i = 0; i < 6; i++) { grid.add(new javax.swing.JLabel("测试卡片")); }
+            box.add(grid);
+            for (int width : new int[]{900, 480, 1280, 900}) {
+                grid.setSize(0, 0);
+                box.setSize(width, 800);
+                org.junit.jupiter.api.Assertions.assertDoesNotThrow(box::getPreferredSize);
+                org.junit.jupiter.api.Assertions.assertDoesNotThrow(box::doLayout);
+            }
+        });
+    }
+
 
     @Test
     void gridChangesFromThreeColumnsToTwoAndOne() throws Exception {

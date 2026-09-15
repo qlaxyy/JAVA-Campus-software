@@ -341,6 +341,7 @@ final class DoctorWorkspacePanel extends JPanel {
         header.setOpaque(false);
         JPanel copy = verticalList();
         JLabel title = new JLabel("医生工作台");
+        title.putClientProperty("module.pageTitle", true);
         title.setFont(HospitalTheme.uiFont(Font.BOLD, 28F));
         title.setForeground(HospitalTheme.TEXT);
         doctorIdentity.setFont(HospitalTheme.uiFont(Font.PLAIN, 13F));
@@ -360,6 +361,7 @@ final class DoctorWorkspacePanel extends JPanel {
             Runnable backAction,
             JLabel title,
             JLabel subtitle) {
+        title.putClientProperty("module.pageTitle", true);
         JPanel header = new JPanel(new BorderLayout(18, 0));
         header.setOpaque(false);
         JButton back = HospitalTheme.backButton(backText.replaceFirst("^返回", ""));

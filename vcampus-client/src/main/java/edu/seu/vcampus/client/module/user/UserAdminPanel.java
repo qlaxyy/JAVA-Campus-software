@@ -181,7 +181,7 @@ public final class UserAdminPanel extends JPanel {
     }
 
     private JPanel createActionBar() {
-        JPanel actions = new JPanel(new BorderLayout(18, 0));
+        JPanel actions = new JPanel(new edu.seu.vcampus.client.view.WrapLayout(FlowLayout.LEFT, 8, 8));
         actions.setOpaque(false);
 
         JPanel accountActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
@@ -198,8 +198,8 @@ public final class UserAdminPanel extends JPanel {
         relatedActions.add(doctorReviewButton);
         relatedActions.add(auditButton);
 
-        actions.add(accountActions, BorderLayout.WEST);
-        actions.add(relatedActions, BorderLayout.EAST);
+        for (java.awt.Component button : accountActions.getComponents()) { actions.add(button); }
+        for (java.awt.Component button : relatedActions.getComponents()) { actions.add(button); }
         return actions;
     }
 

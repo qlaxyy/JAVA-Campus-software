@@ -101,6 +101,7 @@ final class CourseAdminView extends JPanel {
         JLabel title =
             CourseTheme.title(
                 "选课管理");
+        title.putClientProperty("module.pageTitle", true);
 
         title.setAlignmentX(
             Component.LEFT_ALIGNMENT);

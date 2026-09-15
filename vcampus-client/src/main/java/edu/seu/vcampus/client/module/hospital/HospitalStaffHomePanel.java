@@ -35,6 +35,7 @@ final class HospitalStaffHomePanel extends JPanel {
         copy.setOpaque(false);
         copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
         JLabel title = new JLabel(titleText);
+        title.putClientProperty("module.pageTitle", true);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 26F));
         title.setForeground(HospitalTheme.TEXT);
         JLabel subtitle = new JLabel(subtitleText);

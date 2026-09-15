@@ -52,7 +52,7 @@ public final class MainFrame extends JFrame {
     private static final String LOGIN_CARD = "login";
     private static final String WORKSPACE_CARD = "workspace";
     private static final String MODULE_HOME_CARD = "module-home";
-    private static final Color NAVY = new Color(18, 59, 74);
+    private static final Color NAVY = new Color(24, 40, 59);
     private static final Color PRIMARY = new Color(15, 118, 110);
     private static final Color SURFACE = new Color(244, 248, 247);
     private static final Color TEXT = new Color(30, 41, 59);
@@ -151,7 +151,8 @@ public final class MainFrame extends JFrame {
         JPanel modulePanel = new JPanel(moduleLayout);
         JPanel home = new JPanel(new BorderLayout());
         home.add(headerPanel, BorderLayout.NORTH);
-        home.add(createModuleHome(modules, modulePanel, moduleLayout), BorderLayout.CENTER);
+        home.add(ResponsiveLayout.constrain(
+                createModuleHome(modules, modulePanel, moduleLayout)), BorderLayout.CENTER);
         modulePanel.add(home, MODULE_HOME_CARD);
         for (ClientModule module : modules) {
             modulePanel.add(createModulePage(module, modulePanel, moduleLayout), module.id());
@@ -164,9 +165,11 @@ public final class MainFrame extends JFrame {
 
     private JPanel createWorkspaceHeader() {
         GradientHeader header = new GradientHeader();
-        header.setLayout(new BorderLayout(24, 0));
-        header.setBorder(BorderFactory.createEmptyBorder(15, 30, 15, 30));
+        header.setLayout(new BorderLayout());
         header.setPreferredSize(new Dimension(0, 82));
+        JPanel content = new JPanel(new BorderLayout(24, 0));
+        content.setOpaque(false);
+        content.setBorder(BorderFactory.createEmptyBorder(15, 30, 15, 30));
 
         JLabel logo = new JLabel("V", SwingConstants.CENTER);
         logo.setOpaque(true);
@@ -185,7 +188,7 @@ public final class MainFrame extends JFrame {
         title.setForeground(Color.WHITE);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 20F));
         JLabel subtitle = new JLabel("VIRTUAL CAMPUS");
-        subtitle.setForeground(new Color(167, 243, 208));
+        subtitle.setForeground(new Color(216, 193, 143));
         subtitle.setFont(subtitle.getFont().deriveFont(Font.BOLD, 11F));
         titles.add(title);
         titles.add(subtitle);
@@ -204,24 +207,27 @@ public final class MainFrame extends JFrame {
         account.add(sessionLabel, BorderLayout.CENTER);
         account.add(accountActions, BorderLayout.EAST);
 
-        header.add(brand, BorderLayout.WEST);
-        header.add(account, BorderLayout.EAST);
+        content.add(brand, BorderLayout.WEST);
+        content.add(account, BorderLayout.EAST);
+        header.add(ResponsiveLayout.constrain(content), BorderLayout.CENTER);
         return header;
     }
 
     private JPanel createStatusBar() {
-        JPanel status = new JPanel(new BorderLayout(16, 0));
+        JPanel status = new JPanel(new BorderLayout());
         status.setBackground(Color.WHITE);
-        status.setBorder(BorderFactory.createCompoundBorder(
-                new MatteBorder(1, 0, 0, 0, BORDER),
-                BorderFactory.createEmptyBorder(10, 30, 10, 30)));
+        status.setBorder(new MatteBorder(1, 0, 0, 0, BORDER));
+        JPanel content = new JPanel(new BorderLayout(16, 0));
+        content.setOpaque(false);
+        content.setBorder(BorderFactory.createEmptyBorder(10, 30, 10, 30));
 
         statusLabel.setHorizontalAlignment(SwingConstants.LEFT);
         statusLabel.setForeground(MUTED);
         statusLabel.setFont(statusLabel.getFont().deriveFont(13F));
         styleOutlineButton(pingButton);
-        status.add(statusLabel, BorderLayout.CENTER);
-        status.add(pingButton, BorderLayout.EAST);
+        content.add(statusLabel, BorderLayout.CENTER);
+        content.add(pingButton, BorderLayout.EAST);
+        status.add(ResponsiveLayout.constrain(content), BorderLayout.CENTER);
         return status;
     }
 
@@ -245,7 +251,7 @@ public final class MainFrame extends JFrame {
         introduction.add(hint);
         home.add(introduction, BorderLayout.NORTH);
 
-        JPanel tiles = new JPanel(new GridLayout(0, 3, 18, 18));
+        JPanel tiles = ResponsiveLayout.grid(3, 250, 18);
         tiles.setOpaque(false);
 
         for (ClientModule module : modules) {
@@ -255,17 +261,11 @@ public final class MainFrame extends JFrame {
             tiles.add(button);
         }
 
-        JPanel tileArea = new JPanel(new GridBagLayout());
+        JPanel tileArea = new JPanel(new BorderLayout());
         tileArea.setOpaque(false);
-        GridBagConstraints constraints = new GridBagConstraints();
-        constraints.gridx = 0;
-        constraints.gridy = 0;
-        constraints.weightx = 1.0;
-        constraints.weighty = 1.0;
-        constraints.fill = GridBagConstraints.HORIZONTAL;
-        constraints.anchor = GridBagConstraints.NORTH;
-        constraints.insets = new Insets(24, 0, 0, 0);
-        tileArea.add(tiles, constraints);
+        tileArea.setBorder(BorderFactory.createEmptyBorder(24, 0, 0, 0));
+        tileArea.add(ResponsiveLayout.verticalScroll(
+                ResponsiveLayout.compact(tiles, ResponsiveLayout.CONTENT_WIDTH)), BorderLayout.CENTER);
         home.add(tileArea, BorderLayout.CENTER);
         return home;
     }
@@ -275,7 +275,8 @@ public final class MainFrame extends JFrame {
             JPanel modulePanel,
             CardLayout moduleLayout) {
         JComponent moduleView = module.createView(context);
-        return new ModulePage(module.id(), moduleView, () -> {
+        return new ModulePage(module.id(), module.displayName(),
+                () -> context.currentSession().map(SessionInfo::getDisplayName).orElse(""), moduleView, () -> {
             if (moduleView instanceof ModuleViewLifecycle lifecycle) {
                 lifecycle.onModuleExit();
             }
@@ -559,8 +560,11 @@ public final class MainFrame extends JFrame {
                     ? new Color(94, 190, 176)
                     : BORDER);
             copy.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
-            copy.setColor(PRIMARY);
-            copy.fillRoundRect(0, 0, 5, getHeight(), 5, 5);
+            copy.setColor(getModel().isRollover() ? new Color(191, 163, 105) : PRIMARY);
+            copy.fillRoundRect(0, 14, 4, getHeight() - 28, 4, 4);
+            copy.setFont(getFont().deriveFont(Font.PLAIN, 24F));
+            copy.setColor(new Color(147, 161, 170));
+            copy.drawString("›", getWidth() - 30, getHeight() / 2 + 8);
             copy.dispose();
             super.paintComponent(graphics);
         }

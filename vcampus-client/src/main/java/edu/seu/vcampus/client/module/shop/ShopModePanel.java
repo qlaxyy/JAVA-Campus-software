@@ -1,5 +1,7 @@
 package edu.seu.vcampus.client.module.shop;
 
+import edu.seu.vcampus.client.view.ResponsiveLayout;
+
 import edu.seu.vcampus.common.protocol.ModuleNames;
 import edu.seu.vcampus.common.user.SessionInfo;
 
@@ -13,7 +15,6 @@ import javax.swing.SwingConstants;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.GridLayout;
 
 /**
  * Entry page that splits shopping and merchant workbenches, like the hospital mode chooser.
@@ -30,7 +31,8 @@ final class ShopModePanel extends JPanel {
         setBackground(ShopPalette.PAGE);
         setBorder(BorderFactory.createEmptyBorder(24, 28, 24, 28));
         add(createHeader(refreshAccess), BorderLayout.NORTH);
-        add(createModes(openShopping, openManage), BorderLayout.CENTER);
+        add(ResponsiveLayout.verticalScroll(ResponsiveLayout.compact(
+                createModes(openShopping, openManage), 1080)), BorderLayout.CENTER);
         statusLabel.setForeground(ShopPalette.MUTED);
         add(statusLabel, BorderLayout.SOUTH);
     }
@@ -63,6 +65,7 @@ final class ShopModePanel extends JPanel {
         copy.setOpaque(false);
         copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
         JLabel title = new JLabel("选择商店使用方式");
+        title.putClientProperty("module.pageTitle", true);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 26F));
         title.setForeground(ShopPalette.TEXT);
         accountLabel.setForeground(ShopPalette.PRIMARY_DARK);
@@ -78,7 +81,7 @@ final class ShopModePanel extends JPanel {
     }
 
     private JPanel createModes(Runnable openShopping, Runnable openManage) {
-        JPanel modes = new JPanel(new GridLayout(1, 2, 16, 0));
+        JPanel modes = ResponsiveLayout.grid(1, 320, 16);
         modes.setOpaque(false);
         shopButton.addActionListener(event -> openShopping.run());
         manageButton.addActionListener(event -> openManage.run());
@@ -89,25 +92,20 @@ final class ShopModePanel extends JPanel {
 
     private JPanel modeCard(String titleText, JButton action) {
         ShopPalette.SurfacePanel card = new ShopPalette.SurfacePanel();
-        card.setLayout(new BorderLayout(0, 24));
-        card.setBorder(BorderFactory.createEmptyBorder(32, 24, 24, 24));
+        card.setLayout(new BorderLayout(24, 0));
+        card.setPreferredSize(new Dimension(800, 130));
+        card.setBorder(BorderFactory.createEmptyBorder(22, 20, 20, 20));
 
         JLabel title = new JLabel(titleText, SwingConstants.CENTER);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 22F));
         title.setForeground(ShopPalette.TEXT);
-        action.setPreferredSize(new Dimension(0, 44));
+        action.setPreferredSize(new Dimension(230, 48));
         card.add(title, BorderLayout.CENTER);
-        card.add(action, BorderLayout.SOUTH);
+        card.add(action, BorderLayout.EAST);
         return card;
     }
 
     private static String accountText(SessionInfo session) {
-        String accountType = session.canAdminister(ModuleNames.SHOP)
-                ? "商店管理员"
-                : "顾客";
-        if (session.canManageUsers()) {
-            accountType = "超级管理员";
-        }
-        return "当前账号：" + session.getDisplayName() + "（" + accountType + "）";
+        return session.getDisplayName();
     }
 }

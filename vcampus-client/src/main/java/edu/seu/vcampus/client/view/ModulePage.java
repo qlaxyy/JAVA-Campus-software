@@ -4,6 +4,8 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
+import javax.swing.JLabel;
+import javax.swing.Box;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -11,6 +13,9 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.FlowLayout;
+import java.util.function.Supplier;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ContainerAdapter;
@@ -26,19 +31,34 @@ final class ModulePage extends JPanel {
     private final JComponent view;
     private final Runnable exit;
     private final JButton back = new JButton("←");
+    private final JLabel heading = new JLabel();
+    private final JLabel identity = new JLabel();
+    private final String defaultTitle;
+    private final Supplier<String> displayName;
+    private final List<JLabel> headings = new ArrayList<>();
+    private final Set<Component> retiredHeadings = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<Component> observed = Collections.newSetFromMap(new IdentityHashMap<>());
     private final List<JButton> navigation = new ArrayList<>();
     private JButton activeBack;
     private boolean refreshQueued;
 
     ModulePage(String moduleId, JComponent view, Runnable exit) {
+        this(moduleId, moduleId, () -> "", view, exit);
+    }
+
+    ModulePage(String moduleId, String title, Supplier<String> displayName, JComponent view, Runnable exit) {
         super(new BorderLayout());
         this.view = view;
         this.exit = exit;
+        this.defaultTitle = title;
+        this.displayName = displayName;
         setBackground(new Color(244, 248, 247));
         JPanel bar = new JPanel(new BorderLayout());
-        bar.setBackground(getBackground());
-        bar.setBorder(BorderFactory.createEmptyBorder(8, 18, 6, 18));
+        bar.setName("module.header." + moduleId);
+        bar.setBackground(Color.WHITE);
+        bar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(218, 226, 229)),
+                BorderFactory.createEmptyBorder(12, 22, 12, 24)));
         back.setName("module.back." + moduleId);
         back.setUI(new RoundedButtonUI());
         back.setOpaque(false);
@@ -58,9 +78,23 @@ final class ModulePage extends JPanel {
                 queueRefresh();
             }
         });
-        bar.add(back, BorderLayout.WEST);
-        add(bar, BorderLayout.NORTH);
-        add(view, BorderLayout.CENTER);
+        JPanel navigationRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
+        navigationRow.setOpaque(false);
+        heading.setName("module.title." + moduleId);
+        heading.setFont(new Font("Microsoft YaHei", Font.BOLD, 22));
+        heading.setForeground(new Color(30, 47, 65));
+        identity.setName("module.identity." + moduleId);
+        identity.setFont(new Font("Microsoft YaHei", Font.PLAIN, 14));
+        identity.setForeground(new Color(91, 108, 120));
+        navigationRow.add(back);
+        navigationRow.add(heading);
+        bar.add(navigationRow, BorderLayout.WEST);
+        bar.add(identity, BorderLayout.EAST);
+        JPanel page = new JPanel(new BorderLayout());
+        page.setOpaque(false);
+        page.add(bar, BorderLayout.NORTH);
+        page.add(view, BorderLayout.CENTER);
+        add(ResponsiveLayout.constrain(page), BorderLayout.CENTER);
         observe(view);
         refreshNavigation();
     }
@@ -68,6 +102,17 @@ final class ModulePage extends JPanel {
     private void observe(Component component) {
         if (!observed.add(component)) {
             return;
+        }
+        ResponsiveLayout.prepare(component);
+        if (component instanceof JComponent && component.getFont() != null) {
+            Font font = component.getFont();
+            component.setFont(new Font("Microsoft YaHei", font.getStyle(), font.getSize()));
+        }
+        if (component instanceof JLabel label
+                && Boolean.TRUE.equals(label.getClientProperty("module.pageTitle"))) {
+            headings.add(label);
+            label.addPropertyChangeListener("text", event -> queueRefresh());
+            retireHeading(label);
         }
         component.addComponentListener(new ComponentAdapter() {
             @Override public void componentShown(ComponentEvent event) { queueRefresh(); }
@@ -80,7 +125,11 @@ final class ModulePage extends JPanel {
                 button.setVisible(false);
                 button.addPropertyChangeListener("enabled", event -> queueRefresh());
             } else {
+                Color foreground = button.getForeground();
+                Color background = button.getBackground();
                 button.setUI(new RoundedButtonUI());
+                button.setForeground(foreground);
+                button.setBackground(background);
                 button.setOpaque(false);
                 button.setBorder(BorderFactory.createEmptyBorder(8, 12, 8, 12));
                 button.setRolloverEnabled(true);
@@ -105,6 +154,8 @@ final class ModulePage extends JPanel {
 
     private void forget(Component component) {
         observed.remove(component);
+        retiredHeadings.remove(component);
+        if (component instanceof JLabel label) { headings.remove(label); }
         if (component instanceof JButton button) { navigation.remove(button); }
         if (component instanceof Container container) {
             for (Component child : container.getComponents()) { forget(child); }
@@ -128,6 +179,17 @@ final class ModulePage extends JPanel {
 
     /** Does not use isShowing, so detached/off-screen panels are testable as well. */
     void refreshNavigation() {
+        identity.setText(displayName.get());
+        JLabel currentHeading = null;
+        int headingDepth = -1;
+        for (JLabel candidate : headings) {
+            int depth = visibleDepth(candidate.getParent());
+            if (depth > headingDepth) {
+                currentHeading = candidate;
+                headingDepth = depth;
+            }
+        }
+        heading.setText(currentHeading == null ? defaultTitle : currentHeading.getText());
         activeBack = null;
         int best = -1;
         for (JButton candidate : navigation) {
@@ -156,7 +218,7 @@ final class ModulePage extends JPanel {
     private int visibleDepth(Container parent) {
         int depth = 0;
         for (Container current = parent; current != null; current = current.getParent()) {
-            if (!current.isVisible()) {
+            if (!current.isVisible() && !retiredHeadings.contains(current)) {
                 return -1;
             }
             if (current == view) {
@@ -165,5 +227,32 @@ final class ModulePage extends JPanel {
             depth++;
         }
         return -1;
+    }
+
+    /** Hide only decorative title groups; controls such as refresh and recharge remain in place. */
+    private void retireHeading(JLabel label) {
+        Component group = label;
+        for (Container parent = label.getParent(); parent != null && parent != view;
+                parent = parent.getParent()) {
+            // CardLayout owns page visibility; never retire a whole card, even an empty one.
+            if (parent.getParent() != null
+                    && parent.getParent().getLayout() instanceof java.awt.CardLayout) { break; }
+            if (!decorative(parent)) { break; }
+            group = parent;
+        }
+        retiredHeadings.add(group);
+        group.setVisible(false);
+    }
+
+    private static boolean decorative(Component component) {
+        if (component instanceof JComponent widget
+                && Boolean.TRUE.equals(widget.getClientProperty("module.keepInPage"))) { return false; }
+        if (component instanceof JLabel || component instanceof Box.Filler) { return true; }
+        if (component instanceof JButton button) { return isNavigation(button.getText()); }
+        if (!(component instanceof JPanel panel)) { return false; }
+        for (Component child : panel.getComponents()) {
+            if (!decorative(child)) { return false; }
+        }
+        return true;
     }
 }

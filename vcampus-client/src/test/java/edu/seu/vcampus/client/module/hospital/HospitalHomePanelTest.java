@@ -12,6 +12,8 @@ import org.junit.jupiter.api.Test;
 
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
@@ -24,6 +26,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HospitalHomePanelTest {
+
+    @Test
+    void guideKeepsAllThreeStepDescriptionsVisible() throws Exception {
+        HospitalHomePanel[] panel = new HospitalHomePanel[1];
+        SwingUtilities.invokeAndWait(() -> panel[0] = new HospitalHomePanel(
+                () -> { }, () -> { }, () -> { }, () -> { }, () -> { },
+                () -> { }, () -> { }, () -> { }, () -> { }, () -> { }, () -> { }));
+
+        JPanel guide = panel[0].createGuideContent();
+        List<JTextArea> details = components(guide, JTextArea.class).stream()
+                .filter(area -> "hospitalGuideStepDetail".equals(area.getName()))
+                .toList();
+        assertEquals(3, details.size());
+        assertTrue(details.stream().anyMatch(area -> area.getText().contains("患者模式")));
+        assertTrue(details.stream().anyMatch(area -> area.getText().contains("智能导诊")));
+        assertTrue(details.stream().anyMatch(area -> area.getText().contains("具体科室")));
+    }
 
     @Test
     void resultReadyCreatesAVisibleDirectFollowUpAction() throws Exception {

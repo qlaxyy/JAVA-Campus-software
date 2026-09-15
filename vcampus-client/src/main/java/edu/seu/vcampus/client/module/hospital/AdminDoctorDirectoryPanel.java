@@ -206,7 +206,10 @@ final class AdminDoctorDirectoryPanel extends JPanel {
         state.setForeground(item.isActive() ? HospitalTheme.SUCCESS : HospitalTheme.MUTED);
         card.add(copy, BorderLayout.CENTER);
         card.add(state, BorderLayout.EAST);
-        card.setPreferredSize(new Dimension(230, 54));
+        // Two text rows plus vertical insets need a stable minimum height.
+        // A 54px card clips the account line on high-DPI Windows rendering.
+        card.setMinimumSize(new Dimension(230, 78));
+        card.setPreferredSize(new Dimension(230, 78));
         return card;
     }
 

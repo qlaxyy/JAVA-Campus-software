@@ -302,7 +302,7 @@ final class HospitalHomePanel extends JPanel {
         return hero;
     }
 
-    private JPanel createGuideContent() {
+    JPanel createGuideContent() {
         JPanel guide = new JPanel(new BorderLayout(0, 18));
         guide.setBackground(HospitalTheme.BACKGROUND);
         guide.setBorder(BorderFactory.createEmptyBorder(10, 10, 8, 10));
@@ -361,7 +361,9 @@ final class HospitalHomePanel extends JPanel {
 
         javax.swing.JTextArea detail = HospitalResponsiveLayout.wrappingText(
                 description, HospitalTheme.uiFont(Font.PLAIN, 13F), HospitalTheme.MUTED);
+        detail.setName("hospitalGuideStepDetail");
         card.add(heading, BorderLayout.NORTH);
+        card.add(detail, BorderLayout.CENTER);
         return card;
     }
 

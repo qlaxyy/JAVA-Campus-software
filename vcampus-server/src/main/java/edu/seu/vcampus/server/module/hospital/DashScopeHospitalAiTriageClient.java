@@ -17,12 +17,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/** Minimal OpenAI-compatible client for Alibaba Cloud Model Studio. */
+/** Minimal OpenAI-compatible client for the configured hospital triage provider. */
 final class DashScopeHospitalAiTriageClient implements HospitalAiTriageClient {
 
     private static final String DEFAULT_BASE_URL =
-            "https://dashscope.aliyuncs.com/compatible-mode/v1";
-    private static final String DEFAULT_MODEL = "qwen3.7-flash-2026-07-15";
+            "https://api.deepseek.com";
+    private static final String DEFAULT_MODEL = "deepseek-flash";
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(6);
     private static final String SYSTEM_PROMPT = """
             你是校医院的科室导诊助手，只负责收集症状线索并推荐给定白名单中的可挂号科室。
@@ -110,7 +110,10 @@ final class DashScopeHospitalAiTriageClient implements HospitalAiTriageClient {
                 "enabled", "false");
         String apiKey = value(
                 properties, environment, fileConfiguration,
-                "vcampus.triage.ai.apiKey", "DASHSCOPE_API_KEY", "apiKey", "");
+                "vcampus.triage.ai.apiKey", "VCAMPUS_TRIAGE_AI_API_KEY", "apiKey", "");
+        if (apiKey.isBlank()) {
+            apiKey = environment.getOrDefault("DASHSCOPE_API_KEY", "");
+        }
         if (!Boolean.parseBoolean(enabledValue) || apiKey.isBlank()) {
             return HospitalAiTriageClient.disabled();
         }
@@ -194,8 +197,9 @@ final class DashScopeHospitalAiTriageClient implements HospitalAiTriageClient {
             edu.seu.vcampus.common.hospital.TriageChatRequest request,
             List<HospitalDepartment> departments) throws HospitalAiTriageException {
         ObjectNode body = mapper.createObjectNode();
-        body.put("model", model).put("stream", false).put("enable_thinking", false)
+        body.put("model", model).put("stream", false)
                 .put("temperature", 0.1).put("max_tokens", 700);
+        addThinkingMode(body);
         ObjectNode input = mapper.createObjectNode();
         input.set("transcript", mapper.valueToTree(request.messages()));
         ArrayNode coverage = input.putArray("statementsToCover");
@@ -234,9 +238,7 @@ final class DashScopeHospitalAiTriageClient implements HospitalAiTriageClient {
         fact.putArray("required").add("topic").add("state").add("evidence").add("messageIndex");
         schema.putArray("required").add("reply").add("summary").add("urgentEvidence")
                 .add("urgentMessageIndex").add("ready").add("missingInformation").add("candidates").add("facts");
-        body.putObject("response_format").put("type", "json_schema")
-                .putObject("json_schema").put("name", "hospital_conversation")
-                .put("strict", true).set("schema", schema);
+        addResponseFormat(body, "hospital_conversation", schema);
         try {
             HttpResponse<String> response = httpClient.send(HttpRequest.newBuilder(endpoint)
                     .timeout(timeout).header("Authorization", "Bearer " + apiKey)
@@ -309,22 +311,41 @@ final class DashScopeHospitalAiTriageClient implements HospitalAiTriageClient {
         ObjectNode body = mapper.createObjectNode();
         body.put("model", model);
         body.put("stream", false);
-        body.put("enable_thinking", false);
         body.put("temperature", 0.1);
         body.put("max_tokens", 700);
+        addThinkingMode(body);
 
         ArrayNode messages = body.putArray("messages");
         messages.addObject().put("role", "system").put("content", SYSTEM_PROMPT);
         messages.addObject().put("role", "user").put(
                 "content", buildConversationJson(request, bookableDepartments));
 
-        ObjectNode jsonSchema = body.putObject("response_format")
-                .put("type", "json_schema")
-                .putObject("json_schema");
-        jsonSchema.put("name", "campus_hospital_triage");
-        jsonSchema.put("strict", true);
-        jsonSchema.set("schema", responseSchema());
+        addResponseFormat(body, "campus_hospital_triage", responseSchema());
         return body;
+    }
+
+    private void addThinkingMode(ObjectNode body) {
+        if (usesDeepSeekJsonMode()) {
+            body.putObject("thinking").put("type", "disabled");
+        } else {
+            body.put("enable_thinking", false);
+        }
+    }
+
+    private void addResponseFormat(ObjectNode body, String name, ObjectNode schema) {
+        if (usesDeepSeekJsonMode()) {
+            body.putObject("response_format").put("type", "json_object");
+            return;
+        }
+        body.putObject("response_format").put("type", "json_schema")
+                .putObject("json_schema").put("name", name)
+                .put("strict", true).set("schema", schema);
+    }
+
+    private boolean usesDeepSeekJsonMode() {
+        String host = endpoint.getHost();
+        return host != null && host.toLowerCase(java.util.Locale.ROOT)
+                .endsWith("deepseek.com");
     }
 
     private String buildConversationJson(

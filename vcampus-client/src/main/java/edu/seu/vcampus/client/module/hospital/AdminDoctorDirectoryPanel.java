@@ -186,13 +186,25 @@ final class AdminDoctorDirectoryPanel extends JPanel {
         card.setName("adminDoctorDirectoryCard");
         card.setLayout(new BorderLayout(10, 0));
         card.setBorder(BorderFactory.createEmptyBorder(12, 14, 12, 14));
+        JPanel copy = new JPanel();
+        copy.setOpaque(false);
+        copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
         JLabel name = new JLabel(item.getDoctorName() + " · " + item.getDoctorTitle());
         name.setFont(HospitalTheme.uiFont(Font.BOLD, 14F));
         name.setForeground(HospitalTheme.TEXT);
+        copy.add(name);
+        if (!item.getAccountName().isBlank()) {
+            JLabel account = new JLabel("账号 " + item.getAccountName());
+            account.setName("adminDoctorAccount");
+            account.setFont(HospitalTheme.uiFont(Font.PLAIN, 12F));
+            account.setForeground(HospitalTheme.MUTED);
+            copy.add(Box.createVerticalStrut(3));
+            copy.add(account);
+        }
         JLabel state = new JLabel(item.isActive() ? "在岗" : "已停用");
         state.setFont(HospitalTheme.uiFont(Font.BOLD, 12F));
         state.setForeground(item.isActive() ? HospitalTheme.SUCCESS : HospitalTheme.MUTED);
-        card.add(name, BorderLayout.CENTER);
+        card.add(copy, BorderLayout.CENTER);
         card.add(state, BorderLayout.EAST);
         card.setPreferredSize(new Dimension(230, 54));
         return card;

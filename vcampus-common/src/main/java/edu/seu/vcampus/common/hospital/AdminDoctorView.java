@@ -15,6 +15,7 @@ public final class AdminDoctorView implements Serializable {
     private final String doctorTitle;
     private final String departmentId;
     private final String departmentName;
+    private final String accountName;
     private final boolean active;
 
     public AdminDoctorView(
@@ -33,11 +34,23 @@ public final class AdminDoctorView implements Serializable {
             String departmentId,
             String departmentName,
             boolean active) {
+        this(doctorId, doctorName, doctorTitle, departmentId, departmentName, "", active);
+    }
+
+    public AdminDoctorView(
+            String doctorId,
+            String doctorName,
+            String doctorTitle,
+            String departmentId,
+            String departmentName,
+            String accountName,
+            boolean active) {
         this.doctorId = requireText(doctorId, "doctorId");
         this.doctorName = requireText(doctorName, "doctorName");
         this.doctorTitle = requireText(doctorTitle, "doctorTitle");
         this.departmentId = requireText(departmentId, "departmentId");
         this.departmentName = requireText(departmentName, "departmentName");
+        this.accountName = accountName == null ? "" : accountName.trim();
         this.active = active;
     }
 
@@ -50,6 +63,9 @@ public final class AdminDoctorView implements Serializable {
     public String getDepartmentId() { return departmentId; }
 
     public String getDepartmentName() { return departmentName; }
+
+    /** Campus-card login account when the shared user directory can resolve it. */
+    public String getAccountName() { return accountName; }
 
     public boolean isActive() { return active; }
 

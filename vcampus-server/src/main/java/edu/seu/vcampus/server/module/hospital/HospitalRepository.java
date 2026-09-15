@@ -46,6 +46,9 @@ interface HospitalRepository {
 
     void insertSlot(HospitalSlot slot);
 
+    /** Atomically inserts one generated workweek without exposing a partial published week. */
+    void insertSlots(List<HospitalSlot> slots);
+
     void updateSlot(HospitalSlot slot);
 
     List<HospitalAppointment> findAppointmentsByScheduleId(String scheduleId);
@@ -109,7 +112,7 @@ interface HospitalRepository {
             HospitalConsultation consultation,
             HospitalBooking completedBooking,
             HospitalEpisode completedEpisode,
-            HospitalPatientBill treatmentBill);
+            List<HospitalPatientBill> clinicalBills);
 
     /** Saves a stage note, completes the appointment, and opens an examination. */
     void saveExaminationPlan(
@@ -139,5 +142,6 @@ interface HospitalRepository {
             HospitalConsultation consultation,
             HospitalBooking completedBooking,
             HospitalEpisode completedEpisode,
-            HospitalExaminationOrder reviewedOrder);
+            HospitalExaminationOrder reviewedOrder,
+            List<HospitalPatientBill> clinicalBills);
 }

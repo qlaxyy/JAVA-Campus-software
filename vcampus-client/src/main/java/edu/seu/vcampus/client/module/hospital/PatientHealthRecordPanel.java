@@ -802,7 +802,7 @@ final class PatientHealthRecordPanel extends JPanel {
                     button -> bookResultReview(examination, button, actionStatus)));
             detail.add(Box.createVerticalStrut(12));
             detail.add(message(
-                    "系统优先安排原医生七天内的可用排班；没有原医生号源时尝试同科室排班，挂号费为 ¥0.00。",
+                    "确认后将直接加入原接诊医生当前或下一次已发布排班的队尾，不占普通号源，也不重复收取挂号费。",
                     HospitalTheme.MUTED,
                     700));
         } else if (examination.isResultReviewBooked()
@@ -902,10 +902,10 @@ final class PatientHealthRecordPanel extends JPanel {
                         actionStatus.setForeground(HospitalTheme.SUCCESS);
                         if (bookingAction
                                 && response.getData() instanceof AppointmentBookingView booking) {
-                            actionStatus.setText("回诊已安排，可到“我的预约”查看。");
+                            actionStatus.setText("已加入原医生候诊队列，可到“我的预约”查看。");
                             HospitalDialogs.information(
                                     PatientHealthRecordPanel.this, "回诊安排成功",
-                                    "回诊已经安排成功。\n\n"
+                                    "已加入原接诊医生的候诊队列。\n\n"
                                             + "医生：" + booking.getDoctorName() + "\n"
                                             + "科室：" + booking.getDepartmentName() + "\n"
                                             + "时间：" + DATE_TIME_FORMAT.format(
@@ -981,7 +981,7 @@ final class PatientHealthRecordPanel extends JPanel {
             return "请先到“费用清单”完成检查费缴纳，再模拟完成检查。";
         }
         if (ErrorCodes.HOSPITAL_SLOT_FULL.equals(response.getCode())) {
-            return "七天内暂时没有可安排的同科室回诊号源。";
+            return "原接诊医生当前及后续暂无已发布排班，请稍后重试或联系医院。";
         }
         if (ErrorCodes.HOSPITAL_SELF_BOOKING_FORBIDDEN.equals(response.getCode())) {
             return "七天内只有你自己的医生排班，不能为本人安排回诊。";

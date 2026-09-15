@@ -163,16 +163,16 @@ class DoctorWorkspacePanelTest {
     }
 
     @Test
-    void wrapsManyScheduleCardsWithinTheVisibleViewport() throws Exception {
-        LocalDateTime now = LocalDateTime.of(2026, 9, 8, 9, 0);
+    void rendersTheNextSevenDaysAsAResponsiveDoctorAgenda() throws Exception {
+        LocalDateTime now = LocalDateTime.now().withHour(9).withMinute(0).withSecond(0).withNano(0);
         List<DoctorScheduleView> schedules = new ArrayList<>();
-        for (int index = 0; index < 8; index++) {
+        for (int index = 0; index < 7; index++) {
             schedules.add(new DoctorScheduleView(
                     "schedule-" + index,
                     "dept-general",
                     "全科门诊",
-                    now.plusDays(index + 1L),
-                    now.plusDays(index + 1L).plusMinutes(30),
+                    now.plusDays(index),
+                    now.plusDays(index).plusMinutes(30),
                     10,
                     10,
                     true,
@@ -180,7 +180,7 @@ class DoctorWorkspacePanelTest {
         }
         DoctorWorkspaceView workspace = new DoctorWorkspaceView(
                 "doctor-chen", "陈医生", "主治医师",
-                "dept-general", "全科门诊", schedules, List.of());
+                "dept-general", "全科门诊", List.of(), schedules, List.of(), List.of());
 
         SwingUtilities.invokeAndWait(() -> {
             try {
@@ -194,16 +194,12 @@ class DoctorWorkspacePanelTest {
                 for (int pass = 0; pass < 4; pass++) {
                     layoutTree(panel);
                 }
-                Field field = DoctorWorkspacePanel.class.getDeclaredField("scheduleGrid");
+                Field field = DoctorWorkspacePanel.class.getDeclaredField("weeklyScheduleGrid");
                 field.setAccessible(true);
                 JPanel grid = (JPanel) field.get(panel);
-                JViewport viewport = (JViewport) grid.getParent();
-                int maxRight = 0;
-                for (Component card : grid.getComponents()) {
-                    maxRight = Math.max(maxRight, card.getX() + card.getWidth());
-                }
-                assertTrue(maxRight <= viewport.getWidth());
-                assertTrue(grid.getPreferredSize().height > 400);
+                assertEquals(7, namedComponents(
+                        grid, JPanel.class, "doctorWeeklyScheduleDay").size());
+                assertTrue(grid.getPreferredSize().width <= panel.getWidth());
             } catch (ReflectiveOperationException exception) {
                 throw new AssertionError(exception);
             }
@@ -244,7 +240,7 @@ class DoctorWorkspacePanelTest {
                         "showWorkspace", DoctorWorkspaceView.class);
                 showWorkspace.setAccessible(true);
                 showWorkspace.invoke(panel[0], workspace);
-                namedButtons(panel[0], "doctorScheduleButton").getFirst().doClick();
+                namedButtons(panel[0], "openDoctorReceptionButton").getFirst().doClick();
             } catch (ReflectiveOperationException exception) {
                 throw new AssertionError(exception);
             }
@@ -269,7 +265,7 @@ class DoctorWorkspacePanelTest {
                 now);
         DoctorScheduleView schedule = new DoctorScheduleView(
                 "schedule-named", "dept-general", "全科门诊",
-                now.plusHours(1), now.plusHours(2), 8, 7, true,
+                now.minusMinutes(1), now.plusMinutes(29), 8, 7, true,
                 List.of(pending));
         DoctorWorkspaceView workspace = new DoctorWorkspaceView(
                 "doctor-chen", "陈医生", "主治医师", "dept-general",
@@ -284,7 +280,7 @@ class DoctorWorkspacePanelTest {
                         "showWorkspace", DoctorWorkspaceView.class);
                 showWorkspace.setAccessible(true);
                 showWorkspace.invoke(panel[0], workspace);
-                namedButtons(panel[0], "doctorScheduleButton").getFirst().doClick();
+                namedButtons(panel[0], "openDoctorReceptionButton").getFirst().doClick();
             } catch (ReflectiveOperationException exception) {
                 throw new AssertionError(exception);
             }
@@ -335,7 +331,7 @@ class DoctorWorkspacePanelTest {
     }
 
     @Test
-    void loadsDoctorSchedulesAndShowsSelectedPendingAppointmentDetails()
+    void hidesFutureSchedulesUntilTheirConsultationWindowStarts()
             throws Exception {
         try (CampusServer server = new CampusServer(0, 2)) {
             server.start();
@@ -343,7 +339,7 @@ class DoctorWorkspacePanelTest {
                     new CampusClient("127.0.0.1", server.getPort()));
             assertTrue(context.login(
                     "20260006", "123456".toCharArray()).isSuccess());
-            AppointmentBookingView booking = assertInstanceOf(
+            assertInstanceOf(
                     AppointmentBookingView.class,
                     context.send(
                             HospitalActions.BOOK_APPOINTMENT,
@@ -360,103 +356,12 @@ class DoctorWorkspacePanelTest {
 
             assertTrue(awaitCondition(() -> labelTexts(panel[0]).stream()
                     .anyMatch(text -> text.contains("陈安") && text.contains("全科门诊"))));
-            List<JButton> schedules = namedButtons(panel[0], "doctorScheduleButton");
-            assertEquals(3, schedules.size());
-            assertTrue(schedules.getFirst().getParent() instanceof Container);
-            assertTrue(labelTexts(schedules.getFirst().getParent()).stream()
-                    .anyMatch(text -> text.contains("待接诊 5 人")));
-            SwingUtilities.invokeAndWait(schedules.getFirst()::doClick);
-
-            assertTrue(awaitCondition(() -> namedButtons(
-                    panel[0], "doctorAppointmentButton").size() == 5));
-            assertEquals(5, namedComponents(
-                    panel[0], JPanel.class, "doctorAppointmentAdaptiveContent").size());
-            JButton patient = namedButtons(panel[0], "doctorAppointmentButton").stream()
-                    .filter(button -> {
-                        Container card = namedAncestor(button, "doctorAppointmentCard");
-                        return card != null
-                                && labelTexts(card).contains("吴尚扬");
-                    })
-                    .findFirst()
-                    .orElseThrow();
-            SwingUtilities.invokeAndWait(patient::doClick);
-
-            assertTrue(awaitCondition(() -> namedLabels(panel[0],
-                    "doctorAppointmentDetail").stream()
-                    .map(JLabel::getText)
-                    .anyMatch("吴尚扬"::equals)));
-            assertTrue(namedLabels(panel[0], "doctorAppointmentDetail").stream()
-                    .map(JLabel::getText)
-                    .anyMatch("5 号"::equals));
-            assertEquals(1, namedButtons(
-                    panel[0], "openCurrentVisitButton").size());
-            assertEquals(1, namedButtons(
-                    panel[0], "openDoctorHealthProfileButton").size());
-            assertEquals(1, namedButtons(
-                    panel[0], "openDoctorHistoryButton").size());
-
-            SwingUtilities.invokeAndWait(() -> namedButtons(
-                    panel[0], "openCurrentVisitButton").getFirst().doClick());
-            assertEquals(1, namedComponents(
-                    panel[0], JTextArea.class, "doctorDiagnosis").size());
-            assertEquals(1, namedComponents(
-                    panel[0], JTextArea.class, "doctorTreatment").size());
-            assertEquals(1, namedComponents(
-                    panel[0], JTextArea.class, "doctorInterimCare").size());
-            assertEquals(1, namedButtons(
-                    panel[0], "submitConsultationButton").size());
-            assertEquals(1, namedButtons(
-                    panel[0], "submitExaminationPlanButton").size());
-            assertEquals(1, namedComponents(
-                    panel[0], JPanel.class, "doctorCurrentVisitResponsiveColumns").size());
+            List<JButton> reception = namedButtons(panel[0], "openDoctorReceptionButton");
+            assertEquals(1, reception.size());
+            assertTrue(!reception.getFirst().isEnabled());
+            assertEquals(1, namedButtons(panel[0], "openDoctorWeeklyScheduleButton").size());
             assertTrue(labelTexts(panel[0]).stream()
-                    .anyMatch(text -> text.contains("患者自述健康档案")));
-            JPanel consultationForm = namedComponents(
-                    panel[0], JPanel.class, "doctorConsultationForm").getFirst();
-            assertTrue(consultationForm.getPreferredSize().height > 500);
-            JScrollPane visitScroll = namedComponents(
-                    panel[0], JScrollPane.class, "doctorCurrentVisitScrollPane").getFirst();
-            assertEquals(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
-                    visitScroll.getVerticalScrollBarPolicy());
-
-            ClientContext patientUpdater = new ClientContext(
-                    new CampusClient("127.0.0.1", server.getPort()));
-            assertTrue(patientUpdater.login(
-                    "20260006", "123456".toCharArray()).isSuccess());
-            assertTrue(patientUpdater.send(
-                    HospitalActions.UPDATE_MY_HEALTH_PROFILE,
-                    new UpdatePatientHealthProfileRequest(
-                            "AB型", "花粉过敏（刚刚更新）", "无", "无", "联系人"))
-                    .isSuccess());
-            SwingUtilities.invokeAndWait(() -> namedButtons(
-                    panel[0], "openDoctorHealthProfileButton").getFirst().doClick());
-            assertTrue(awaitCondition(() -> labelTexts(panel[0]).stream()
-                    .anyMatch(text -> text.contains("花粉过敏（刚刚更新）"))));
-
-            assertTrue(context.send(
-                    HospitalActions.SUBMIT_EXAMINATION_PLAN,
-                    new SubmitExaminationPlanRequest(
-                            booking.getAppointmentId(),
-                            "发热待查（课程演示）",
-                            "血常规",
-                            "无需空腹",
-                            "检查完成前注意休息")).isSuccess());
-            SwingUtilities.invokeAndWait(panel[0]::activate);
-            assertTrue(awaitCondition(() -> namedButtons(
-                    panel[0], "openDoctorFollowUpsButton").size() == 1));
-            SwingUtilities.invokeAndWait(() -> namedButtons(
-                    panel[0], "openDoctorFollowUpsButton").getFirst().doClick());
-            assertEquals(1, namedComponents(
-                    panel[0], JPanel.class, "doctorFollowUpCard").size());
-            assertTrue(namedLabels(panel[0], "doctorFollowUpStatus").stream()
-                    .map(JLabel::getText)
-                    .anyMatch("等待检查结果"::equals));
-            assertEquals(1, namedButtons(
-                    panel[0], "openDoctorFollowUpDetailButton").size());
-            SwingUtilities.invokeAndWait(() -> namedButtons(
-                    panel[0], "openDoctorFollowUpDetailButton").getFirst().doClick());
-            assertTrue(labelTexts(panel[0]).stream()
-                    .anyMatch(text -> text.contains("发热待查（课程演示）")));
+                    .anyMatch(text -> text.contains("当前没有进行中的排班")));
         }
     }
 

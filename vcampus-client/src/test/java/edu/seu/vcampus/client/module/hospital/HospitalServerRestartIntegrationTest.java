@@ -85,15 +85,19 @@ class HospitalServerRestartIntegrationTest {
         String oldToken;
         ExaminationOrderView order;
         // A doctor account acts as a patient, but books another doctor's schedule.
-        try (HospitalServerProcess server = start(database, "1-plan")) {
+        try (HospitalServerProcess server = start(database, "0-book")) {
             ClientContext patient = login(server, "20260029");
-            ClientContext treatingDoctor = login(server, "20260006");
-            ClientContext outsider = login(server, "20260005");
             oldToken = patient.currentSession().orElseThrow().getToken();
             AppointmentBookingView booking = send(patient, HospitalActions.BOOK_APPOINTMENT,
                     BookAppointmentRequest.firstVisit("restart-test-schedule"), AppointmentBookingView.class);
             appointmentId = booking.getAppointmentId();
             assertEquals(1200, booking.getAmountCents());
+        }
+        activateTestSchedule(database);
+
+        try (HospitalServerProcess server = start(database, "1-plan")) {
+            ClientContext treatingDoctor = login(server, "20260006");
+            ClientContext outsider = login(server, "20260005");
             assertRejected(outsider.send(HospitalActions.GET_DOCTOR_CONSULTATION_CONTEXT,
                     new DoctorConsultationContextRequest(appointmentId)),
                     ErrorCodes.AUTH_FORBIDDEN);
@@ -169,9 +173,12 @@ class HospitalServerRestartIntegrationTest {
             assertEquals(AppointmentStatus.BOOKED, review.getAppointmentStatus());
             assertEquals(0, review.getAmountCents());
             assertTrue(findOrder(healthRecord(patient), order.getOrderId()).isResultReviewBooked());
-            assertRejected(patient.send(HospitalActions.BOOK_RESULT_REVIEW,
-                    new BookResultReviewRequest(order.getOrderId())),
-                    ErrorCodes.HOSPITAL_RESULT_REVIEW_ALREADY_BOOKED);
+            AppointmentBookingView repeatedReview = send(
+                    patient,
+                    HospitalActions.BOOK_RESULT_REVIEW,
+                    new BookResultReviewRequest(order.getOrderId()),
+                    AppointmentBookingView.class);
+            assertEquals(reviewId, repeatedReview.getAppointmentId());
             assertRejected(outsider.send(HospitalActions.GET_DOCTOR_CONSULTATION_CONTEXT,
                     new DoctorConsultationContextRequest(reviewId)), ErrorCodes.AUTH_FORBIDDEN);
             DoctorConsultationContextView context = send(treatingDoctor,
@@ -269,7 +276,7 @@ class HospitalServerRestartIntegrationTest {
     private static void addTestSchedule(Path database) throws Exception {
         // Modify only the disposable copy while its server is stopped.
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime start = now.plusDays(1).withHour(11).withMinute(17).withSecond(0).withNano(0);
+        LocalDateTime start = now.plusHours(1).withSecond(0).withNano(0);
         try (var disk = new DatabaseBuilder(database).open()) {
             boolean otherDoctorBound = false;
             for (var doctor : disk.getTable("tblHospitalDoctor")) {
@@ -291,6 +298,22 @@ class HospitalServerRestartIntegrationTest {
                     Map.entry("startTime", start), Map.entry("endTime", start.plusMinutes(30)),
                     Map.entry("registrationFeeCents", 1200), Map.entry("capacity", 12),
                     Map.entry("status", "PUBLISHED"), Map.entry("createdAt", now), Map.entry("updatedAt", now))));
+        }
+    }
+
+    private static void activateTestSchedule(Path database) throws Exception {
+        LocalDateTime now = LocalDateTime.now();
+        try (var disk = new DatabaseBuilder(database).open()) {
+            for (var row : disk.getTable("tblHospitalSchedule")) {
+                if ("restart-test-schedule".equals(row.get("scheduleId"))) {
+                    row.put("startTime", now.minusMinutes(1));
+                    row.put("endTime", now.plusMinutes(29));
+                    row.put("updatedAt", now);
+                    disk.getTable("tblHospitalSchedule").updateRow(row);
+                    return;
+                }
+            }
+            fail("Expected restart-test-schedule before activation");
         }
     }
 

@@ -2,6 +2,7 @@ package edu.seu.vcampus.client.module.hospital;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.infrastructure.CampusClient;
+import edu.seu.vcampus.client.TestClock;
 import edu.seu.vcampus.common.hospital.AppointmentBookingView;
 import edu.seu.vcampus.common.hospital.BookAppointmentRequest;
 import edu.seu.vcampus.common.hospital.BookResultReviewRequest;
@@ -15,6 +16,7 @@ import edu.seu.vcampus.common.hospital.PublishDemoExaminationReportRequest;
 import edu.seu.vcampus.common.hospital.SubmitConsultationRequest;
 import edu.seu.vcampus.common.hospital.SubmitExaminationPlanRequest;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
+import edu.seu.vcampus.server.module.ServerModules;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.JButton;
@@ -38,7 +40,8 @@ class PatientHealthRecordPanelTest {
     @Test
     void patientNavigatesFromHealthRecordHubToProfileAndHistoryDetail()
             throws Exception {
-        try (CampusServer server = new CampusServer(0, 2)) {
+        TestClock clock = TestClock.startingNow();
+        try (CampusServer server = new CampusServer(0, 2, ServerModules.createRouter(clock))) {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
@@ -50,6 +53,7 @@ class PatientHealthRecordPanelTest {
                             HospitalActions.BOOK_APPOINTMENT,
                             BookAppointmentRequest.firstVisit("slot-general-1"))
                             .getData());
+            clock.advanceToFirstSeedSchedule();
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
                     "20260029", "123456".toCharArray()).isSuccess());
@@ -135,7 +139,8 @@ class PatientHealthRecordPanelTest {
     @Test
     void patientOpensExaminationPageAndSeesAutomaticallyUpdatedReviewState()
             throws Exception {
-        try (CampusServer server = new CampusServer(0, 2)) {
+        TestClock clock = TestClock.startingNow();
+        try (CampusServer server = new CampusServer(0, 2, ServerModules.createRouter(clock))) {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
@@ -147,6 +152,7 @@ class PatientHealthRecordPanelTest {
                             HospitalActions.BOOK_APPOINTMENT,
                             BookAppointmentRequest.firstVisit("slot-general-1"))
                             .getData());
+            clock.advanceToFirstSeedSchedule();
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
                     "20260029", "123456".toCharArray()).isSuccess());

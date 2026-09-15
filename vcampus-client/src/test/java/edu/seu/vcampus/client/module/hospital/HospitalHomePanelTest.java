@@ -11,6 +11,7 @@ import edu.seu.vcampus.common.hospital.PaymentStatus;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.JButton;
+import javax.swing.JLabel;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
@@ -32,13 +33,13 @@ class HospitalHomePanelTest {
             panel[0] = new HospitalHomePanel(
                     () -> { }, () -> { }, () -> { }, () -> { }, () -> { },
                     () -> { }, () -> { }, () -> { },
-                    () -> followUpOpened.set(true), () -> { });
+                    () -> { }, () -> followUpOpened.set(true), () -> { });
             panel[0].showCareTasks(recordWith(readyExamination(false)));
         });
 
         List<JButton> actions = namedButtons(panel[0], "patientHomeFollowUpButton");
         assertEquals(1, actions.size());
-        assertEquals("立即安排回诊", actions.getFirst().getText());
+        assertEquals("查看诊疗待办", actions.getFirst().getText());
         SwingUtilities.invokeAndWait(actions.getFirst()::doClick);
         assertTrue(followUpOpened.get());
     }
@@ -52,7 +53,7 @@ class HospitalHomePanelTest {
             panel[0] = new HospitalHomePanel(
                     () -> { }, () -> { }, () -> { }, () -> { }, () -> { },
                     () -> billsOpened.set(true), () -> { }, () -> { },
-                    () -> { }, () -> { });
+                    () -> { }, () -> { }, () -> { });
             panel[0].showBillTasks(
                     new PatientBillListResponse(List.of(new PatientBillView(
                             "bill-1", "appointment-1", HospitalBillType.TREATMENT,
@@ -65,6 +66,35 @@ class HospitalHomePanelTest {
         assertEquals(1, actions.size());
         SwingUtilities.invokeAndWait(actions.getFirst()::doClick);
         assertTrue(billsOpened.get());
+    }
+
+    @Test
+    void manyCareTasksRemainOneCompactHomeSummary() throws Exception {
+        AtomicBoolean taskPageOpened = new AtomicBoolean();
+        HospitalHomePanel[] panel = new HospitalHomePanel[1];
+        SwingUtilities.invokeAndWait(() -> {
+            panel[0] = new HospitalHomePanel(
+                    () -> { }, () -> { }, () -> { }, () -> { }, () -> { },
+                    () -> { }, () -> { }, () -> { }, () -> { },
+                    () -> taskPageOpened.set(true), () -> { });
+            panel[0].showCareTasks(new PatientHealthRecordView(
+                    new PatientHealthProfileView("", "", "", "", "", LocalDateTime.now()),
+                    List.of(), List.of(
+                            readyExamination(false),
+                            new ExaminationOrderView(
+                                    "order-2", "episode-2", "appointment-2",
+                                    "周医生", "呼吸内科", "胸片", "无需空腹",
+                                    ExaminationStatus.ORDERED, "", LocalDateTime.now(),
+                                    null, false))));
+        });
+
+        assertEquals(1, namedButtons(panel[0], "patientHomeFollowUpButton").size());
+        assertTrue(components(panel[0], JLabel.class).stream()
+                .map(JLabel::getText)
+                .anyMatch(text -> text.contains("共 2 项")));
+        SwingUtilities.invokeAndWait(() -> namedButtons(
+                panel[0], "patientHomeFollowUpButton").getFirst().doClick());
+        assertTrue(taskPageOpened.get());
     }
 
     private static PatientHealthRecordView recordWith(ExaminationOrderView examination) {

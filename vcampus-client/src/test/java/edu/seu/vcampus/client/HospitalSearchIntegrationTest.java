@@ -28,6 +28,7 @@ import edu.seu.vcampus.common.hospital.SubmitConsultationRequest;
 import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
+import edu.seu.vcampus.server.module.ServerModules;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -41,7 +42,8 @@ class HospitalSearchIntegrationTest {
 
     @Test
     void patientReadsAndPaysDoctorGeneratedFeeThroughSocket() throws Exception {
-        try (CampusServer server = new CampusServer(0, 2)) {
+        TestClock clock = TestClock.startingNow();
+        try (CampusServer server = new CampusServer(0, 2, ServerModules.createRouter(clock))) {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
@@ -52,6 +54,7 @@ class HospitalSearchIntegrationTest {
                             HospitalActions.BOOK_APPOINTMENT,
                             BookAppointmentRequest.firstVisit("slot-general-1"))
                             .getData());
+            clock.advanceToFirstSeedSchedule();
 
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login("20260029", "123456".toCharArray()).isSuccess());
@@ -85,7 +88,8 @@ class HospitalSearchIntegrationTest {
 
     @Test
     void administratorPublishesScheduleThroughSocketForPatientAndDoctor() throws Exception {
-        try (CampusServer server = new CampusServer(0, 2)) {
+        TestClock clock = TestClock.startingNow();
+        try (CampusServer server = new CampusServer(0, 2, ServerModules.createRouter(clock))) {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
@@ -127,6 +131,7 @@ class HospitalSearchIntegrationTest {
                             .getData());
             assertTrue(patientSlots.getSlots().stream()
                     .anyMatch(slot -> slot.getScheduleId().equals(draft.getScheduleId())));
+            clock.set(start.plusMinutes(1));
 
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login("20260029", "123456".toCharArray()).isSuccess());
@@ -288,7 +293,8 @@ class HospitalSearchIntegrationTest {
 
     @Test
     void doctorCompletesAppointmentAndPatientReadsRecordThroughSocket() throws Exception {
-        try (CampusServer server = new CampusServer(0, 2)) {
+        TestClock clock = TestClock.startingNow();
+        try (CampusServer server = new CampusServer(0, 2, ServerModules.createRouter(clock))) {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
@@ -310,6 +316,7 @@ class HospitalSearchIntegrationTest {
                     BookAppointmentRequest.firstVisit("slot-general-1"));
             AppointmentBookingView booking = assertInstanceOf(
                     AppointmentBookingView.class, bookingResponse.getData());
+            clock.advanceToFirstSeedSchedule();
 
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
@@ -320,7 +327,7 @@ class HospitalSearchIntegrationTest {
             DoctorWorkspaceView workspace = assertInstanceOf(
                     DoctorWorkspaceView.class, workspaceResponse.getData());
             assertEquals("doctor-chen", workspace.getDoctorId());
-            assertEquals(3, workspace.getSchedules().size());
+            assertEquals(1, workspace.getSchedules().size());
             var pending = workspace.getSchedules().getFirst()
                     .getPendingAppointments().stream()
                     .filter(appointment -> appointment.getAppointmentId()

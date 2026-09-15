@@ -17,6 +17,7 @@ import edu.seu.vcampus.server.module.user.UserAuthenticationBootstrap;
 import edu.seu.vcampus.server.module.user.UserServerModule;
 
 import java.nio.file.Path;
+import java.time.Clock;
 import java.util.List;
 
 /**
@@ -38,6 +39,19 @@ public final class ServerModules {
                 new LibraryServerModule(),
                 new ShopServerModule(),
                 new HospitalServerModule());
+    }
+
+    /** Builds the in-memory campus router with an injectable hospital clock. */
+    public static ActionRouter createRouter(Clock hospitalClock) {
+        InMemoryAuthenticationService authentication =
+                new InMemoryAuthenticationService();
+        return createRouter(
+                authentication,
+                new StudentServerModule(),
+                new CourseServerModule(),
+                new LibraryServerModule(),
+                new ShopServerModule(),
+                new HospitalServerModule(hospitalClock));
     }
 
     /**

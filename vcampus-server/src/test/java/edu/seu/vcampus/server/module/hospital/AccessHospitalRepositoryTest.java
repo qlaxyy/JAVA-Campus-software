@@ -6,12 +6,15 @@ import edu.seu.vcampus.common.hospital.CancelAppointmentRequest;
 import edu.seu.vcampus.common.hospital.EpisodeStatus;
 import edu.seu.vcampus.common.hospital.PaymentStatus;
 import edu.seu.vcampus.common.hospital.HospitalBillType;
+import edu.seu.vcampus.common.hospital.GenerateWeeklySchedulesRequest;
+import edu.seu.vcampus.common.hospital.SetSchedulePublicationRequest;
 import edu.seu.vcampus.common.hospital.PayHospitalBillRequest;
 import edu.seu.vcampus.common.hospital.SearchSlotsRequest;
 import edu.seu.vcampus.common.hospital.SlotView;
 import edu.seu.vcampus.common.hospital.SubmitConsultationRequest;
 import edu.seu.vcampus.common.hospital.VisitType;
 import edu.seu.vcampus.common.user.Role;
+import edu.seu.vcampus.common.user.AdminScope;
 import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.server.infrastructure.database.AccessDatabase;
 import edu.seu.vcampus.server.module.card.AccessCampusCardStore;
@@ -24,11 +27,13 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -39,9 +44,59 @@ class AccessHospitalRepositoryTest {
 
     private static final Clock CLOCK = Clock.fixed(
             Instant.parse("2026-09-04T00:00:00Z"), ZoneOffset.UTC);
+    private static final Clock ACTIVE_CLOCK = Clock.fixed(
+            Instant.parse("2026-09-05T08:31:00Z"), ZoneOffset.UTC);
 
     @TempDir
     Path temporaryDirectory;
+
+    @Test
+    void weeklyGenerationIsIdempotentAcrossAccessRepositoryReopen() {
+        Path path = temporaryDirectory.resolve("weekly-auto-generation.accdb");
+        SessionInfo admin = new SessionInfo("admin-token", "U-HOSPITAL-ADMIN-001",
+                "20260005", "医院管理员", Role.USER, Set.of(AdminScope.HOSPITAL));
+        GenerateWeeklySchedulesRequest request = new GenerateWeeklySchedulesRequest(
+                "doctor-chen", LocalDate.of(2026, 10, 5),
+                List.of(DayOfWeek.MONDAY), 1_200, 6);
+
+        HospitalService initial = new HospitalService(repository(path), CLOCK);
+        assertEquals(18, initial.generateWeeklySchedules(admin, request).getCreated());
+        HospitalService reopened = new HospitalService(repository(path), CLOCK);
+        var retry = reopened.generateWeeklySchedules(admin, request);
+        assertEquals(0, retry.getCreated());
+        assertEquals(18, retry.getExisting());
+        HospitalSlot first = repository(path).findSlotsByDoctorId("doctor-chen")
+                .stream().filter(slot -> slot.startTime().toLocalDate()
+                        .equals(LocalDate.of(2026, 10, 5)))
+                .findFirst().orElseThrow();
+        assertTrue(first.published());
+
+        reopened.setSchedulePublication(admin,
+                new SetSchedulePublicationRequest(first.scheduleId(), false));
+        assertEquals(0, new HospitalService(repository(path), CLOCK)
+                .generateWeeklySchedules(admin, request).getCreated());
+        assertFalse(repository(path).findSlotById(first.scheduleId())
+                .orElseThrow().published());
+    }
+
+    @Test
+    void failedBulkInsertionDoesNotExposeAPartialPublishedWorkweek() {
+        Path path = temporaryDirectory.resolve("weekly-auto-rollback.accdb");
+        AccessHospitalRepository store = repository(path);
+        LocalDateTime start = LocalDateTime.of(2026, 10, 5, 9, 0);
+        HospitalSlot first = new HospitalSlot(
+                "atomic-new", "dept-general", "全科门诊", "doctor-chen",
+                "陈医生", "副主任医师", start, start.plusMinutes(30),
+                1_200, 6, 0, true);
+        HospitalSlot duplicateId = new HospitalSlot(
+                "slot-general-1", "dept-general", "全科门诊", "doctor-chen",
+                "陈医生", "副主任医师", start.plusMinutes(30),
+                start.plusMinutes(60), 1_200, 6, 0, true);
+
+        assertThrows(IllegalStateException.class,
+                () -> store.insertSlots(List.of(first, duplicateId)));
+        assertTrue(repository(path).findSlotById("atomic-new").isEmpty());
+    }
 
     @Test
     void createsAndReloadsDepartmentDoctorAndScheduleCatalog() {
@@ -468,7 +523,8 @@ class AccessHospitalRepositoryTest {
         String appointmentId = first.bookAppointment(
                         patient, BookAppointmentRequest.firstVisit("slot-general-1"))
                 .getAppointmentId();
-        first.submitConsultation(doctor, new SubmitConsultationRequest(
+        new HospitalService(repository(path), ACTIVE_CLOCK).submitConsultation(
+                doctor, new SubmitConsultationRequest(
                 appointmentId,
                 "课程演示诊断",
                 "",
@@ -510,7 +566,8 @@ class AccessHospitalRepositoryTest {
         String appointmentId = service.bookAppointment(
                         patient, BookAppointmentRequest.firstVisit("slot-general-1"))
                 .getAppointmentId();
-        service.submitConsultation(doctor, new SubmitConsultationRequest(
+        new HospitalService(repository(path), ACTIVE_CLOCK, cards).submitConsultation(
+                doctor, new SubmitConsultationRequest(
                 appointmentId, "课程演示诊断", "", "课程演示处置", "无", "必要时复诊"));
         var unpaid = service.listMyBills(patient).getBills().stream()
                 .filter(bill -> bill.getPaymentStatus() == PaymentStatus.UNPAID)
@@ -549,7 +606,8 @@ class AccessHospitalRepositoryTest {
                         BookAppointmentRequest.firstVisit("slot-general-1"))
                 .getAppointmentId();
 
-        service.submitConsultation(doctor, new SubmitConsultationRequest(
+        new HospitalService(repository(path), ACTIVE_CLOCK).submitConsultation(
+                doctor, new SubmitConsultationRequest(
                 appointmentId,
                 "上呼吸道感染（虚构）",
                 "暂无（虚构）",

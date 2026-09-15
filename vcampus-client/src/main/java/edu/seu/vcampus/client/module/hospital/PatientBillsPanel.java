@@ -104,7 +104,7 @@ final class PatientBillsPanel extends JPanel {
     private JComponent createHeader(Runnable back) {
         return HospitalPageHeader.create(
                 "费用清单",
-                "查看挂号、检查和诊疗费用，并使用校园卡完成支付",
+                "查看挂号、检查、诊疗和药品费用，并使用校园卡完成支付",
                 "医院首页",
                 back,
                 null);
@@ -263,7 +263,8 @@ final class PatientBillsPanel extends JPanel {
             for (PatientBillView bill : visible) {
                 JComponent card = billCard(bill);
                 card.setAlignmentX(Component.LEFT_ALIGNMENT);
-                card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 220));
+                card.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+                        bill.getBillType() == HospitalBillType.MEDICATION ? 300 : 220));
                 billList.add(card);
                 billList.add(Box.createVerticalStrut(10));
             }
@@ -286,10 +287,29 @@ final class PatientBillsPanel extends JPanel {
         JPanel copy = new JPanel();
         copy.setOpaque(false);
         copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
-        JLabel heading = new JLabel(typeText(bill.getBillType()) + " · "
-                + bill.getItemName());
-        heading.setFont(HospitalTheme.uiFont(Font.BOLD, 18F));
-        heading.setForeground(HospitalTheme.TEXT);
+        JComponent heading;
+        if (bill.getBillType() == HospitalBillType.MEDICATION) {
+            JPanel medication = new JPanel();
+            medication.setOpaque(false);
+            medication.setLayout(new BoxLayout(medication, BoxLayout.Y_AXIS));
+            JLabel label = new JLabel("药品费用 · 医生用药建议");
+            label.setFont(HospitalTheme.uiFont(Font.BOLD, 18F));
+            label.setForeground(HospitalTheme.TEXT);
+            JComponent advice = HospitalResponsiveLayout.wrappingText(
+                    bill.getItemName(), HospitalTheme.uiFont(Font.PLAIN, 13F),
+                    HospitalTheme.MUTED);
+            advice.setName("patientMedicationAdvice");
+            medication.add(label);
+            medication.add(Box.createVerticalStrut(4));
+            medication.add(advice);
+            heading = medication;
+        } else {
+            JLabel label = new JLabel(typeText(bill.getBillType()) + " · "
+                    + bill.getItemName());
+            label.setFont(HospitalTheme.uiFont(Font.BOLD, 18F));
+            label.setForeground(HospitalTheme.TEXT);
+            heading = label;
+        }
         JLabel visit = new JLabel(bill.getDepartmentName() + " · "
                 + bill.getDoctorName() + " · 就诊时间 "
                 + DATE_TIME_FORMAT.format(bill.getVisitTime()));
@@ -410,6 +430,7 @@ final class PatientBillsPanel extends JPanel {
             case REGISTRATION -> "挂号费用";
             case EXAMINATION -> "检查费用";
             case TREATMENT -> "诊疗费用";
+            case MEDICATION -> "药品费用";
         };
     }
 

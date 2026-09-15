@@ -72,4 +72,9 @@ record HospitalAppointment(
     boolean occupiesSlot() {
         return status != AppointmentStatus.CANCELLED;
     }
+
+    /** Result reviews join the queue but do not consume ordinary registration quota. */
+    boolean countsAgainstCapacity() {
+        return occupiesSlot() && visitType != VisitType.RESULT_REVIEW;
+    }
 }

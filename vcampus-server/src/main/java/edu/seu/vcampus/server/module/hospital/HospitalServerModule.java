@@ -1,10 +1,12 @@
 package edu.seu.vcampus.server.module.hospital;
 
 import edu.seu.vcampus.common.hospital.HospitalActions;
+import edu.seu.vcampus.common.hospital.BatchCreateSchedulesRequest;
 import edu.seu.vcampus.common.hospital.BookAppointmentRequest;
 import edu.seu.vcampus.common.hospital.BookResultReviewRequest;
 import edu.seu.vcampus.common.hospital.CancelAppointmentRequest;
 import edu.seu.vcampus.common.hospital.CreateScheduleRequest;
+import edu.seu.vcampus.common.hospital.GenerateWeeklySchedulesRequest;
 import edu.seu.vcampus.common.hospital.DoctorConsultationContextRequest;
 import edu.seu.vcampus.common.hospital.MarkAppointmentNoShowRequest;
 import edu.seu.vcampus.common.hospital.PublishDemoExaminationReportRequest;
@@ -33,6 +35,7 @@ import edu.seu.vcampus.server.module.ServerContext;
 import edu.seu.vcampus.server.module.card.CampusCardWallet;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.time.Clock;
 import java.util.Objects;
 import java.util.Optional;
@@ -54,6 +57,11 @@ public final class HospitalServerModule implements ServerModule {
      */
     public HospitalServerModule(CampusCardWallet campusCards) {
         this(createDefaultService(campusCards));
+    }
+
+    /** Creates the in-memory hospital module with an injectable clock. */
+    public HospitalServerModule(Clock clock) {
+        this(createDefaultService(clock, null));
     }
 
     /** Creates an Access-backed doctor registry plus the staged clinical repository. */
@@ -138,6 +146,10 @@ public final class HospitalServerModule implements ServerModule {
                 request -> getAdminScheduleWorkspace(request, context));
         router.register(HospitalActions.CREATE_SCHEDULE,
                 request -> createSchedule(request, context));
+        router.register(HospitalActions.CREATE_SCHEDULES,
+                request -> createSchedules(request, context));
+        router.register(HospitalActions.GENERATE_WEEKLY_SCHEDULES,
+                request -> generateWeeklySchedules(request, context));
         router.register(HospitalActions.SET_SCHEDULE_PUBLICATION,
                 request -> setSchedulePublication(request, context));
         router.register(HospitalActions.GET_ADMIN_DEPARTMENT_WORKSPACE,
@@ -589,7 +601,7 @@ public final class HospitalServerModule implements ServerModule {
             return Response.success(
                     request,
                     "排班工作区加载成功。",
-                    service.getAdminScheduleWorkspace(session.get()));
+                    service.getAdminScheduleWorkspace(session.get(), context.users()));
         } catch (HospitalBusinessException exception) {
             return Response.failure(
                     request.getRequestId(), exception.errorCode(), exception.getMessage());
@@ -612,6 +624,45 @@ public final class HospitalServerModule implements ServerModule {
         } catch (HospitalBusinessException exception) {
             return Response.failure(
                     request.getRequestId(), exception.errorCode(), exception.getMessage());
+        } catch (IllegalArgumentException exception) {
+            return invalidRequest(request, exception.getMessage());
+        }
+    }
+
+    private Response createSchedules(Request request, ServerContext context) {
+        Optional<SessionInfo> session = authenticatedSession(request, context);
+        if (session.isEmpty()) {
+            return authenticationRequired(request);
+        }
+        if (!(request.getData() instanceof BatchCreateSchedulesRequest data)) {
+            return invalidRequest(request, "批量手动排班数据无效。");
+        }
+        try {
+            return Response.success(request, "排班草稿已全部建立。",
+                    (java.io.Serializable) new ArrayList<>(
+                            service.createSchedules(session.get(), data)));
+        } catch (HospitalBusinessException exception) {
+            return Response.failure(request.getRequestId(),
+                    exception.errorCode(), exception.getMessage());
+        } catch (IllegalArgumentException exception) {
+            return invalidRequest(request, exception.getMessage());
+        }
+    }
+
+    private Response generateWeeklySchedules(Request request, ServerContext context) {
+        Optional<SessionInfo> session = authenticatedSession(request, context);
+        if (session.isEmpty()) {
+            return authenticationRequired(request);
+        }
+        if (!(request.getData() instanceof GenerateWeeklySchedulesRequest data)) {
+            return invalidRequest(request, "自动排班请求无效。");
+        }
+        try {
+            return Response.success(request, "未来一周号源已自动生成并发布。",
+                    service.generateWeeklySchedules(session.get(), data));
+        } catch (HospitalBusinessException exception) {
+            return Response.failure(request.getRequestId(),
+                    exception.errorCode(), exception.getMessage());
         } catch (IllegalArgumentException exception) {
             return invalidRequest(request, exception.getMessage());
         }
@@ -816,7 +867,13 @@ public final class HospitalServerModule implements ServerModule {
     }
 
     static HospitalService createDefaultService(CampusCardWallet campusCards) {
-        Clock clock = Clock.systemDefaultZone();
+        return createDefaultService(Clock.systemDefaultZone(), campusCards);
+    }
+
+    private static HospitalService createDefaultService(
+            Clock clock,
+            CampusCardWallet campusCards) {
+        Objects.requireNonNull(clock, "clock must not be null");
         return new HospitalService(
                 new InMemoryHospitalRepository(clock),
                 clock,

@@ -46,6 +46,7 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
 import java.awt.event.HierarchyEvent;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
@@ -62,6 +63,7 @@ final class DoctorWorkspacePanel extends JPanel {
 
     private static final int AUTO_REFRESH_MILLIS = 15_000;
     private static final String SCHEDULES_PAGE = "schedules";
+    private static final String WEEKLY_SCHEDULE_PAGE = "weekly-schedule";
     private static final String QUEUE_PAGE = "queue";
     private static final String APPOINTMENT_PAGE = "appointment";
     private static final String CURRENT_VISIT_PAGE = "current-visit";
@@ -81,11 +83,13 @@ final class DoctorWorkspacePanel extends JPanel {
             DateTimeFormatter.ofPattern("yyyy年M月d日 HH:mm", Locale.CHINA);
 
     private final ClientContext context;
+    private final Runnable switchMode;
     private final CardLayout pageLayout = new CardLayout();
     private final JPanel pages = new JPanel(pageLayout);
     private final JLabel doctorIdentity = new JLabel("正在读取医生档案……");
     private final JLabel statusLabel = new JLabel(" ", SwingConstants.CENTER);
     private final JPanel scheduleGrid = new ScheduleWrapPanel();
+    private final JPanel weeklyScheduleGrid = HospitalResponsiveLayout.grid(7, 145, 8, 8);
     private final JPanel followUpSummary = new JPanel(new BorderLayout());
     private final JPanel followUpList = verticalList();
     private final JPanel signedRecordSummary = new JPanel(new BorderLayout());
@@ -132,11 +136,13 @@ final class DoctorWorkspacePanel extends JPanel {
 
     DoctorWorkspacePanel(ClientContext context, Runnable switchMode) {
         this.context = context;
+        this.switchMode = switchMode;
         setLayout(new BorderLayout());
         setBackground(HospitalTheme.BACKGROUND);
 
         pages.setOpaque(false);
         pages.add(createSchedulesPage(switchMode), SCHEDULES_PAGE);
+        pages.add(createWeeklySchedulePage(), WEEKLY_SCHEDULE_PAGE);
         pages.add(createQueuePage(), QUEUE_PAGE);
         pages.add(createAppointmentPage(), APPOINTMENT_PAGE);
         pages.add(createCurrentVisitPage(), CURRENT_VISIT_PAGE);
@@ -203,19 +209,12 @@ final class DoctorWorkspacePanel extends JPanel {
 
         JPanel content = new JPanel(new BorderLayout(0, 14));
         content.setOpaque(false);
-        JLabel instruction = new JLabel("选择排班，进入该时段的候诊队列");
+        JLabel instruction = new JLabel("选择医生功能");
         instruction.setFont(HospitalTheme.uiFont(Font.BOLD, 18F));
         instruction.setForeground(HospitalTheme.TEXT);
         JPanel lead = verticalList();
         lead.add(instruction);
         lead.add(Box.createVerticalStrut(12));
-        followUpSummary.setOpaque(false);
-        followUpSummary.setVisible(false);
-        lead.add(followUpSummary);
-        lead.add(Box.createVerticalStrut(10));
-        signedRecordSummary.setOpaque(false);
-        signedRecordSummary.setVisible(false);
-        lead.add(signedRecordSummary);
         content.add(lead, BorderLayout.NORTH);
 
         scheduleGrid.setOpaque(false);
@@ -229,9 +228,20 @@ final class DoctorWorkspacePanel extends JPanel {
         return page;
     }
 
+    private JPanel createWeeklySchedulePage() {
+        JPanel page = basePage();
+        page.add(pageHeader("返回医生工作台", this::openSchedulesPage,
+                new JLabel("我的排班"),
+                new JLabel("今天起七天内的全部已发布工作安排")), BorderLayout.NORTH);
+        weeklyScheduleGrid.setName("doctorWeeklyScheduleGrid");
+        weeklyScheduleGrid.setOpaque(false);
+        page.add(scroll(weeklyScheduleGrid), BorderLayout.CENTER);
+        return page;
+    }
+
     private JPanel createFollowUpsPage() {
         JPanel page = basePage();
-        page.add(pageHeader("返回我的排班", this::openSchedulesPage,
+        page.add(pageHeader("返回接诊台", this::openQueuePage,
                 followUpTitle, followUpSubtitle), BorderLayout.NORTH);
         page.add(scroll(followUpList), BorderLayout.CENTER);
         return page;
@@ -239,7 +249,7 @@ final class DoctorWorkspacePanel extends JPanel {
 
     private JPanel createSignedRecordsPage() {
         JPanel page = basePage();
-        page.add(pageHeader("返回我的排班", this::openSchedulesPage,
+        page.add(pageHeader("返回接诊台", this::openQueuePage,
                 new JLabel("我签署的诊疗记录"),
                 new JLabel("已完成诊疗")), BorderLayout.NORTH);
         page.add(scroll(signedRecordList), BorderLayout.CENTER);
@@ -266,7 +276,7 @@ final class DoctorWorkspacePanel extends JPanel {
 
     private JPanel createQueuePage() {
         JPanel page = basePage();
-        page.add(pageHeader("返回我的排班", this::openSchedulesPage,
+        page.add(pageHeader("返回医生工作台", this::openSchedulesPage,
                 queueTitle, queueSubtitle), BorderLayout.NORTH);
 
         HospitalTheme.SurfacePanel queueSurface = new HospitalTheme.SurfacePanel(
@@ -278,7 +288,19 @@ final class DoctorWorkspacePanel extends JPanel {
         heading.setForeground(HospitalTheme.TEXT);
         queueSurface.add(heading, BorderLayout.NORTH);
         queueSurface.add(scroll(patientList), BorderLayout.CENTER);
-        page.add(queueSurface, BorderLayout.CENTER);
+        JPanel reception = new JPanel(new BorderLayout(0, 12));
+        reception.setOpaque(false);
+        JPanel support = verticalList();
+        followUpSummary.setOpaque(false);
+        followUpSummary.setVisible(false);
+        signedRecordSummary.setOpaque(false);
+        signedRecordSummary.setVisible(false);
+        support.add(followUpSummary);
+        support.add(Box.createVerticalStrut(8));
+        support.add(signedRecordSummary);
+        reception.add(support, BorderLayout.NORTH);
+        reception.add(queueSurface, BorderLayout.CENTER);
+        page.add(reception, BorderLayout.CENTER);
         return page;
     }
 
@@ -401,8 +423,9 @@ final class DoctorWorkspacePanel extends JPanel {
         doctorIdentity.setText(loaded.getDoctorName() + "  ·  "
                 + loaded.getDoctorTitle() + "  ·  " + loaded.getDepartmentName());
         statusLabel.setForeground(HospitalTheme.MUTED);
-        statusLabel.setText("每个排班进入独立候诊队列；选择患者后再查看本次接诊信息。");
+        statusLabel.setText("仅显示当前接诊时段，患者已按候诊号排列。");
         renderScheduleCards();
+        renderWeeklySchedules();
         renderFollowUps();
         renderSignedRecords();
         pageLayout.show(pages, SCHEDULES_PAGE);
@@ -411,6 +434,7 @@ final class DoctorWorkspacePanel extends JPanel {
     private void renderFollowUps() {
         followUpList.removeAll();
         followUpSummary.removeAll();
+        followUpSummary.setVisible(false);
         if (workspace.getFollowUps().isEmpty()) {
             followUpSummary.setVisible(false);
             refresh(followUpSummary);
@@ -436,7 +460,6 @@ final class DoctorWorkspacePanel extends JPanel {
         summary.add(copy, BorderLayout.CENTER);
         summary.add(open, BorderLayout.EAST);
         followUpSummary.add(summary, BorderLayout.CENTER);
-        followUpSummary.setVisible(true);
 
         for (DoctorFollowUpView followUp : workspace.getFollowUps()) {
             followUpList.add(followUpCard(followUp));
@@ -645,59 +668,145 @@ final class DoctorWorkspacePanel extends JPanel {
 
     private void renderScheduleCards() {
         scheduleGrid.removeAll();
-        List<DoctorScheduleView> visibleSchedules = workspace.getSchedules().stream()
-                .filter(schedule -> !schedule.getPendingAppointments().isEmpty()
-                        || schedule.getRemaining() > 0)
-                .toList();
-        if (visibleSchedules.isEmpty()) {
-            scheduleGrid.add(message(
-                    "暂无待接诊患者或可用号源。",
-                    HospitalTheme.MUTED,
-                    420));
+        DoctorScheduleView active = workspace.getSchedules().stream().findFirst().orElse(null);
+        String receptionDetail;
+        if (active == null) {
+            receptionDetail = "当前没有进行中的排班。到达出诊时间后，候诊患者会出现在这里。";
         } else {
-            for (DoctorScheduleView schedule : visibleSchedules) {
-                scheduleGrid.add(scheduleCard(schedule));
-            }
+            receptionDetail = TIME_FORMAT.format(active.getStartTime()) + "–"
+                    + TIME_FORMAT.format(active.getEndTime()) + " · 待接诊 "
+                    + active.getPendingAppointments().size() + " 人";
         }
+        scheduleGrid.add(featureCard(
+                "接诊台", "处理当前时段患者", receptionDetail,
+                "进入接诊台", "openDoctorReceptionButton",
+                active != null, this::openReceptionDesk, HospitalTheme.PRIMARY));
+
+        List<DoctorScheduleView> weekly = workspace.getWeeklySchedules();
+        String weeklyDetail = weekly.isEmpty()
+                ? "未来七天暂无已发布排班。"
+                : "共 " + weekly.size() + " 个时段 · 下一班 "
+                        + DATE_FORMAT.format(weekly.getFirst().getStartTime()) + " "
+                        + TIME_FORMAT.format(weekly.getFirst().getStartTime());
+        scheduleGrid.add(featureCard(
+                "我的排班", "查看最近一周日程", weeklyDetail,
+                "查看一周排班", "openDoctorWeeklyScheduleButton",
+                true, this::openWeeklySchedulePage, HospitalTheme.SUCCESS));
         refresh(scheduleGrid);
     }
 
-    private JPanel scheduleCard(DoctorScheduleView schedule) {
+    private JPanel featureCard(
+            String titleText,
+            String eyebrowText,
+            String detailText,
+            String actionText,
+            String actionName,
+            boolean enabled,
+            Runnable action,
+            Color accent) {
         HospitalTheme.SurfacePanel card = new HospitalTheme.SurfacePanel(
                 HospitalTheme.SURFACE, 16, HospitalTheme.BORDER);
         card.setLayout(new BorderLayout(0, 14));
-        card.setBorder(BorderFactory.createEmptyBorder(17, 18, 16, 18));
-        card.setPreferredSize(new Dimension(350, 190));
-
-        JPanel dateBlock = verticalList();
-        JLabel date = new JLabel(DATE_FORMAT.format(schedule.getStartTime()) + "  "
-                + schedule.getStartTime().getDayOfWeek()
-                        .getDisplayName(TextStyle.FULL, Locale.CHINA));
-        date.setFont(HospitalTheme.uiFont(Font.BOLD, 20F));
-        date.setForeground(HospitalTheme.TEXT);
-        JLabel time = new JLabel(TIME_FORMAT.format(schedule.getStartTime()) + "–"
-                + TIME_FORMAT.format(schedule.getEndTime()));
-        time.setFont(HospitalTheme.dataFont(Font.BOLD, 17F));
-        time.setForeground(HospitalTheme.PRIMARY);
-        dateBlock.add(date);
-        dateBlock.add(Box.createVerticalStrut(4));
-        dateBlock.add(time);
-
-        JLabel facts = new JLabel("<html>" + html(schedule.getDepartmentName())
-                + "<br><b>待接诊 " + schedule.getPendingAppointments().size()
-                + " 人</b>　·　余号 " + schedule.getRemaining() + "/"
-                + schedule.getCapacity() + "</html>");
-        facts.setFont(HospitalTheme.uiFont(Font.PLAIN, 13F));
-        facts.setForeground(HospitalTheme.TEXT);
-
-        JButton open = HospitalTheme.primaryButton("查看候诊队列");
-        open.setName("doctorScheduleButton");
-        open.setActionCommand(schedule.getScheduleId());
-        open.addActionListener(event -> openQueue(schedule));
-        card.add(dateBlock, BorderLayout.NORTH);
-        card.add(facts, BorderLayout.CENTER);
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(5, 0, 0, 0, accent),
+                BorderFactory.createEmptyBorder(20, 20, 18, 20)));
+        card.setPreferredSize(new Dimension(390, 215));
+        JPanel copy = verticalList();
+        JLabel eyebrow = new JLabel(eyebrowText);
+        eyebrow.setFont(HospitalTheme.uiFont(Font.BOLD, 12F));
+        eyebrow.setForeground(accent);
+        JLabel title = new JLabel(titleText);
+        title.setFont(HospitalTheme.uiFont(Font.BOLD, 25F));
+        title.setForeground(HospitalTheme.TEXT);
+        JTextArea detail = message(detailText, HospitalTheme.MUTED, 340);
+        copy.add(eyebrow);
+        copy.add(Box.createVerticalStrut(7));
+        copy.add(title);
+        copy.add(Box.createVerticalStrut(12));
+        copy.add(detail);
+        JButton open = HospitalTheme.primaryButton(actionText);
+        open.setName(actionName);
+        open.setEnabled(enabled);
+        open.addActionListener(event -> action.run());
+        card.add(copy, BorderLayout.CENTER);
         card.add(open, BorderLayout.SOUTH);
         return card;
+    }
+
+    private void renderWeeklySchedules() {
+        weeklyScheduleGrid.removeAll();
+        LocalDate firstDate = LocalDate.now();
+        for (int offset = 0; offset < 7; offset++) {
+            LocalDate date = firstDate.plusDays(offset);
+            List<DoctorScheduleView> daySchedules = workspace.getWeeklySchedules().stream()
+                    .filter(schedule -> schedule.getStartTime().toLocalDate().equals(date))
+                    .toList();
+            weeklyScheduleGrid.add(weeklyDayCard(date, daySchedules, offset == 0));
+        }
+        refresh(weeklyScheduleGrid);
+    }
+
+    private JPanel weeklyDayCard(
+            LocalDate date, List<DoctorScheduleView> schedules, boolean today) {
+        HospitalTheme.SurfacePanel day = new HospitalTheme.SurfacePanel(
+                today ? HospitalTheme.PRIMARY_LIGHT : HospitalTheme.SURFACE,
+                13, HospitalTheme.BORDER);
+        day.setName("doctorWeeklyScheduleDay");
+        day.setLayout(new BoxLayout(day, BoxLayout.Y_AXIS));
+        day.setBorder(BorderFactory.createEmptyBorder(13, 12, 14, 12));
+        JLabel weekday = new JLabel(date.getDayOfWeek()
+                .getDisplayName(TextStyle.SHORT, Locale.CHINA));
+        weekday.setFont(HospitalTheme.uiFont(Font.BOLD, 13F));
+        weekday.setForeground(today ? HospitalTheme.PRIMARY : HospitalTheme.TEXT);
+        JLabel dateLabel = new JLabel(DATE_FORMAT.format(date));
+        // The date contains Chinese month/day characters, which Consolas cannot render.
+        dateLabel.setFont(HospitalTheme.uiFont(Font.BOLD, 16F));
+        dateLabel.setForeground(HospitalTheme.TEXT);
+        day.add(weekday);
+        day.add(Box.createVerticalStrut(3));
+        day.add(dateLabel);
+        day.add(Box.createVerticalStrut(12));
+        if (schedules.isEmpty()) {
+            JLabel rest = new JLabel("无排班");
+            rest.setFont(HospitalTheme.uiFont(Font.PLAIN, 12F));
+            rest.setForeground(HospitalTheme.MUTED);
+            day.add(rest);
+        } else {
+            for (DoctorScheduleView schedule : schedules) {
+                HospitalTheme.SurfacePanel slot = new HospitalTheme.SurfacePanel(
+                        Color.WHITE, 9, HospitalTheme.BORDER);
+                slot.setLayout(new BoxLayout(slot, BoxLayout.Y_AXIS));
+                slot.setBorder(BorderFactory.createEmptyBorder(9, 9, 9, 9));
+                JLabel time = new JLabel(TIME_FORMAT.format(schedule.getStartTime()) + "–"
+                        + TIME_FORMAT.format(schedule.getEndTime()));
+                time.setFont(HospitalTheme.dataFont(Font.BOLD, 12F));
+                time.setForeground(HospitalTheme.PRIMARY_DARK);
+                JLabel count = new JLabel("预约 "
+                        + (schedule.getCapacity() - schedule.getRemaining()) + "/"
+                        + schedule.getCapacity());
+                count.setFont(HospitalTheme.uiFont(Font.PLAIN, 11F));
+                count.setForeground(HospitalTheme.MUTED);
+                slot.add(time);
+                slot.add(Box.createVerticalStrut(4));
+                slot.add(count);
+                day.add(slot);
+                day.add(Box.createVerticalStrut(7));
+            }
+        }
+        return day;
+    }
+
+    private void openReceptionDesk() {
+        if (workspace == null || workspace.getSchedules().isEmpty()) {
+            statusLabel.setForeground(HospitalTheme.WARNING);
+            statusLabel.setText("当前没有进行中的排班，暂时不能进入接诊台。");
+            return;
+        }
+        openQueue(workspace.getSchedules().getFirst());
+    }
+
+    private void openWeeklySchedulePage() {
+        pageLayout.show(pages, WEEKLY_SCHEDULE_PAGE);
     }
 
     private void openQueue(DoctorScheduleView schedule) {
@@ -1858,8 +1967,9 @@ final class DoctorWorkspacePanel extends JPanel {
         boolean resultReview = consultationContext.getAppointment().getVisitType()
                 == VisitType.RESULT_REVIEW;
         String billingNotice = resultReview
-                ? "\n\n本次为检查结果回诊，不重复生成诊疗费。"
-                : "\n\n系统会同时生成 ¥18.00 诊疗费，患者可在费用清单中使用校园卡缴纳。";
+                ? "\n\n本次为检查结果回诊，不重复生成诊疗费；如实际开具用药建议，系统会生成药品费。"
+                : "\n\n系统会生成 ¥18.00 诊疗费；如实际开具用药建议，还会生成药品费。"
+                        + "患者可在费用清单中使用校园卡缴纳。";
         boolean confirmed = HospitalDialogs.confirm(
                 this, "完成接诊",
                 "确认完成本次接诊？\n\n患者姓名："
@@ -1992,6 +2102,7 @@ final class DoctorWorkspacePanel extends JPanel {
                 workspace.getDepartmentId(),
                 workspace.getDepartmentName(),
                 schedules,
+                workspace.getWeeklySchedules(),
                 workspace.getFollowUps(),
                 workspace.getSignedRecords());
         currentSchedule = updatedSchedule;
@@ -2028,6 +2139,7 @@ final class DoctorWorkspacePanel extends JPanel {
                 workspace.getDepartmentId(),
                 workspace.getDepartmentName(),
                 workspace.getSchedules(),
+                workspace.getWeeklySchedules(),
                 followUps,
                 workspace.getSignedRecords());
         renderFollowUps();
@@ -2045,6 +2157,7 @@ final class DoctorWorkspacePanel extends JPanel {
                 workspace.getDepartmentId(),
                 workspace.getDepartmentName(),
                 workspace.getSchedules(),
+                workspace.getWeeklySchedules(),
                 workspace.getFollowUps().stream()
                         .filter(item -> !item.getEpisodeId().equals(episodeId))
                         .toList(),
@@ -2078,6 +2191,7 @@ final class DoctorWorkspacePanel extends JPanel {
                                 .filter(item -> item.getScheduleId().equals(scheduleId))
                                 .findFirst().orElse(null);
                         renderScheduleCards();
+                        renderWeeklySchedules();
                         renderFollowUps();
                         renderSignedRecords();
                         statusLabel.setForeground(HospitalTheme.MUTED);
@@ -2118,7 +2232,7 @@ final class DoctorWorkspacePanel extends JPanel {
             return "该预约不存在，或不属于当前医生。";
         }
         if (ErrorCodes.HOSPITAL_APPOINTMENT_NOT_CONSULTABLE.equals(response.getCode())) {
-            return "该预约已取消或已经完成，不能再次接诊。";
+            return "当前不在该预约的接诊时段内，或预约状态已经变化，不能进行诊疗。";
         }
         if (ErrorCodes.HOSPITAL_CONSULTATION_ALREADY_EXISTS.equals(response.getCode())) {
             return "该预约已经生成诊疗记录，不能重复提交。";
@@ -2208,9 +2322,9 @@ final class DoctorWorkspacePanel extends JPanel {
     }
 
     private void openSchedulesPage() {
-        currentSchedule = null;
         currentAppointmentId = null;
         currentConsultationContext = null;
+        currentSchedule = null;
         pageLayout.show(pages, SCHEDULES_PAGE);
         refreshWorkspaceData();
     }

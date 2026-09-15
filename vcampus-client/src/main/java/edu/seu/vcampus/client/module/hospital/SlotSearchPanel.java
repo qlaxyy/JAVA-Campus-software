@@ -960,23 +960,19 @@ final class SlotSearchPanel extends JPanel {
     }
 
     private void selectEarliestAvailableDate() {
-        if (loadedSlots.isEmpty()) {
-            syncDateButtonSelection();
-            return;
-        }
-        boolean selectedDateHasBookableSlot = loadedSlots.stream()
-                .filter(slot -> slot.getStartTime().toLocalDate().equals(selectedDate))
-                .anyMatch(slot -> slot.getAvailability() == SlotAvailability.AVAILABLE
-                        && !slot.isBookedByCurrentUser());
-        if (!selectedDateHasBookableSlot) {
-            selectedDate = loadedSlots.stream()
-                    .filter(slot -> slot.getAvailability() == SlotAvailability.AVAILABLE)
-                    .filter(slot -> !slot.isBookedByCurrentUser())
-                    .map(slot -> slot.getStartTime().toLocalDate())
-                    .findFirst()
-                    .orElse(loadedSlots.getFirst().getStartTime().toLocalDate());
-        }
+        selectedDate = retainedOrFirstScheduledDate(selectedDate, loadedSlots);
         syncDateButtonSelection();
+    }
+
+    /** Keep the user's current day after booking so the booked card remains visible. */
+    static LocalDate retainedOrFirstScheduledDate(
+            LocalDate selectedDate,
+            List<SlotView> slots) {
+        if (slots.isEmpty() || slots.stream().anyMatch(slot ->
+                slot.getStartTime().toLocalDate().equals(selectedDate))) {
+            return selectedDate;
+        }
+        return slots.getFirst().getStartTime().toLocalDate();
     }
 
     private void syncDateButtonSelection() {
@@ -1218,6 +1214,7 @@ final class SlotSearchPanel extends JPanel {
                         } else {
                             String amount = String.format(
                                     Locale.ROOT, "%.2f", booking.getAmountCents() / 100.0);
+                            applySuccessfulBooking(slot.getScheduleId());
                             HospitalDialogs.information(
                                     SlotSearchPanel.this, "预约成功",
                                     "预约成功！\n候诊序号：" + booking.getQueueNumber()
@@ -1245,6 +1242,39 @@ final class SlotSearchPanel extends JPanel {
                 }
             }
         }.execute();
+    }
+
+    /**
+     * Keeps the just-booked card truthful while the authoritative refresh is in flight.
+     * The following searchSlots call remains the source of truth for every other slot.
+     */
+    private void applySuccessfulBooking(String scheduleId) {
+        loadedSlots = loadedSlots.stream()
+                .map(slot -> scheduleId.equals(slot.getScheduleId())
+                        ? bookedByCurrentUser(slot)
+                        : slot)
+                .toList();
+    }
+
+    static SlotView bookedByCurrentUser(SlotView slot) {
+        int remaining = Math.max(0, slot.getRemaining() - 1);
+        SlotAvailability availability = remaining == 0
+                ? SlotAvailability.FULL
+                : slot.getAvailability();
+        return new SlotView(
+                slot.getScheduleId(),
+                slot.getDepartmentId(),
+                slot.getDepartmentName(),
+                slot.getDoctorId(),
+                slot.getDoctorName(),
+                slot.getDoctorTitle(),
+                slot.getStartTime(),
+                slot.getEndTime(),
+                slot.getPriceCents(),
+                slot.getCapacity(),
+                remaining,
+                availability,
+                true);
     }
 
     private static String bookingErrorMessage(Response response) {

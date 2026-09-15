@@ -2,13 +2,17 @@ package edu.seu.vcampus.client.module.hospital;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.infrastructure.CampusClient;
+import edu.seu.vcampus.client.TestClock;
 import edu.seu.vcampus.common.hospital.AppointmentBookingView;
 import edu.seu.vcampus.common.hospital.BookAppointmentRequest;
 import edu.seu.vcampus.common.hospital.ConsultationRecordView;
 import edu.seu.vcampus.common.hospital.HospitalActions;
+import edu.seu.vcampus.common.hospital.SlotAvailability;
+import edu.seu.vcampus.common.hospital.SlotView;
 import edu.seu.vcampus.common.hospital.SubmitConsultationRequest;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
+import edu.seu.vcampus.server.module.ServerModules;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.AbstractButton;
@@ -20,6 +24,8 @@ import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -31,6 +37,47 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SlotSearchPanelTest {
+
+    @Test
+    void marksTheExactSlotAsBookedBeforeTheServerRefreshCompletes() {
+        SlotView before = new SlotView(
+                "schedule-1", "dept-1", "测试科室", "doctor-1", "测试医生", "医师",
+                LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusMinutes(30),
+                1200, 10, 10, SlotAvailability.AVAILABLE, false);
+
+        SlotView after = SlotSearchPanel.bookedByCurrentUser(before);
+
+        assertTrue(after.isBookedByCurrentUser());
+        assertEquals(9, after.getRemaining());
+        assertEquals(SlotAvailability.AVAILABLE, after.getAvailability());
+        assertEquals(before.getScheduleId(), after.getScheduleId());
+    }
+
+    @Test
+    void keepsTheSelectedDayWhenItsOnlySlotHasJustBeenBooked() {
+        LocalDate selectedDate = LocalDate.now().plusDays(1);
+        SlotView bookedToday = slot(
+                "booked", selectedDate.atTime(9, 30), 9, true);
+        SlotView availableTomorrow = slot(
+                "available", selectedDate.plusDays(1).atTime(9, 30), 10, false);
+
+        LocalDate retained = SlotSearchPanel.retainedOrFirstScheduledDate(
+                selectedDate, List.of(bookedToday, availableTomorrow));
+
+        assertEquals(selectedDate, retained);
+    }
+
+    private static SlotView slot(
+            String scheduleId,
+            LocalDateTime start,
+            int remaining,
+            boolean booked) {
+        return new SlotView(
+                scheduleId, "dept-1", "测试科室", "doctor-1", "测试医生", "医师",
+                start, start.plusMinutes(30), 1200, 10, remaining,
+                remaining == 0 ? SlotAvailability.FULL : SlotAvailability.AVAILABLE,
+                booked);
+    }
 
     @Test
     void ordinaryFollowUpModeButtonOpensConsultationSelector() throws Exception {
@@ -49,7 +96,8 @@ class SlotSearchPanelTest {
 
     @Test
     void opensOrdinaryFollowUpSchedulesFromCompletedConsultation() throws Exception {
-        try (CampusServer server = new CampusServer(0, 2)) {
+        TestClock clock = TestClock.startingNow();
+        try (CampusServer server = new CampusServer(0, 2, ServerModules.createRouter(clock))) {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
@@ -60,6 +108,7 @@ class SlotSearchPanelTest {
                             HospitalActions.BOOK_APPOINTMENT,
                             BookAppointmentRequest.firstVisit("slot-general-1"))
                             .getData());
+            clock.advanceToFirstSeedSchedule();
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login("20260029", "123456".toCharArray()).isSuccess());
             ConsultationRecordView consultation = assertInstanceOf(

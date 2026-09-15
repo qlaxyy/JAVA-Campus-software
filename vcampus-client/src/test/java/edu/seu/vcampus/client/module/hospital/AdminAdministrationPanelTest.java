@@ -101,6 +101,9 @@ class AdminAdministrationPanelTest {
                     directory[0], JPanel.class, "adminDoctorDepartmentGroup").size());
             assertEquals(doctorCount, namedComponents(
                     directory[0], JPanel.class, "adminDoctorDirectoryCard").size());
+            assertTrue(namedComponents(directory[0], JPanel.class,
+                    "adminDoctorDirectoryCard").stream()
+                    .allMatch(card -> card.getPreferredSize().height >= 78));
             List<String> departmentNames = namedComponents(
                     directory[0], JLabel.class, "adminDoctorDepartmentName").stream()
                     .map(JLabel::getText)

@@ -114,6 +114,7 @@ final class CourseCenterPanel
         JLabel title =
             CourseTheme.title(
                 "选课中心");
+        title.putClientProperty("module.pageTitle", true);
 
         JLabel subtitle =
             CourseTheme.pageSubtitle(

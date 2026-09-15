@@ -16,6 +16,79 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class StudentViewTest {
+    @Test void cardActionButtonsUseTheSameNeutralBackground() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            try {
+                StudentView view = new StudentView(new ClientContext(new CampusClient("127.0.0.1", 1, 100)));
+                for (String name : new String[]{"btnApplyModify", "btnOpenChange", "btnDownloadCert", "btnOpenAudit"}) {
+                    var field = StudentView.class.getDeclaredField(name); field.setAccessible(true);
+                    assertEquals(new Color(241, 245, 249), ((JButton) field.get(view)).getBackground());
+                }
+            } catch (ReflectiveOperationException exception) { throw new AssertionError(exception); }
+        });
+    }
+
+    @Test void changeApplicationButtonsStayVisibleButDisabledBeforeStudentQuery() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            try {
+                ClientContext context = new ClientContext(new CampusClient("127.0.0.1", 1, 100));
+                var sessionField = ClientContext.class.getDeclaredField("session");
+                sessionField.setAccessible(true);
+                ((edu.seu.vcampus.client.application.ClientSession) sessionField.get(context)).set(
+                        new SessionInfo("test", "U-TEST", "20260006", "吴尚扬", Role.USER));
+                StudentView view = new StudentView(context);
+                var visibility = StudentView.class.getDeclaredMethod("updateButtonVisibility", StudentProfileDto.class);
+                visibility.setAccessible(true);
+                for (String name : new String[]{"btnApplyModify", "btnOpenChange"}) {
+                    var field = StudentView.class.getDeclaredField(name); field.setAccessible(true);
+                    JButton button = (JButton) field.get(view);
+                    visibility.invoke(view, (Object) null);
+                    assertTrue(button.isVisible()); assertFalse(button.isEnabled());
+                    StudentProfileDto own = new StudentProfileDto(); own.setStudentId("20260006");
+                    visibility.invoke(view, own);
+                    assertTrue(button.isVisible()); assertTrue(button.isEnabled());
+                    own.setStudentId("20260007"); visibility.invoke(view, own);
+                    assertFalse(button.isVisible()); assertFalse(button.isEnabled());
+                }
+            } catch (ReflectiveOperationException exception) { throw new AssertionError(exception); }
+        });
+    }
+
+    @Test void certificateAndGraduationButtonsRemainVisibleButDisabledBeforeQuery() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            try {
+                for (Role role : new Role[]{Role.USER, Role.SUPER_ADMIN}) {
+                    ClientContext context = new ClientContext(new CampusClient("127.0.0.1", 1, 100));
+                    var sessionField = ClientContext.class.getDeclaredField("session");
+                    sessionField.setAccessible(true);
+                    ((edu.seu.vcampus.client.application.ClientSession) sessionField.get(context)).set(
+                            new SessionInfo("test", "U-TEST", "20260006", "测试姓名", role));
+                    StudentView view = new StudentView(context);
+                    var visibility = StudentView.class.getDeclaredMethod(
+                            "updateButtonVisibility", StudentProfileDto.class);
+                    visibility.setAccessible(true);
+                    for (String name : new String[]{"btnDownloadCert", "btnOpenAudit"}) {
+                        var buttonField = StudentView.class.getDeclaredField(name);
+                        buttonField.setAccessible(true);
+                        JButton button = (JButton) buttonField.get(view);
+                        assertTrue(button.isVisible());
+                        assertFalse(button.isEnabled());
+                        StudentProfileDto profile = new StudentProfileDto();
+                        profile.setStudentId("20260006");
+                        visibility.invoke(view, profile);
+                        assertTrue(button.isVisible()); assertTrue(button.isEnabled());
+                        profile.setStudentId("20260007");
+                        visibility.invoke(view, profile);
+                        assertEquals(role == Role.SUPER_ADMIN, button.isVisible());
+                        assertEquals(role == Role.SUPER_ADMIN, button.isEnabled());
+                        visibility.invoke(view, (Object) null);
+                        assertTrue(button.isVisible()); assertFalse(button.isEnabled());
+                    }
+                }
+            } catch (ReflectiveOperationException e) { throw new AssertionError(e); }
+        });
+    }
+
     @Test void onlyActualStudentProfilePrefillsTheLoggedInCardNumber() throws Exception {
         verify("20260009", "U-STUDENT-004", true, "20260009");
         verify("20260001", "U-STUDENT-ADMIN-001", false, "");

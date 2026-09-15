@@ -1,6 +1,7 @@
 package edu.seu.vcampus.client.module.library;
 
 import edu.seu.vcampus.client.application.ClientContext;
+import edu.seu.vcampus.client.view.ResponsiveLayout;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
 import edu.seu.vcampus.common.library.CopyInspectionDTO;
 import edu.seu.vcampus.common.library.CopyInspectionRequest;
@@ -78,7 +79,6 @@ public final class SelfServicePanel extends JPanel {
         JPanel form = new JPanel(new GridBagLayout());
         form.setName("library.selfService.card");
         LibraryUiTheme.styleCard(form);
-        form.setPreferredSize(new Dimension(680, 365));
         GridBagConstraints c = new GridBagConstraints();
         c.insets = new Insets(8, 8, 8, 8);
         c.fill = GridBagConstraints.HORIZONTAL;
@@ -118,7 +118,7 @@ public final class SelfServicePanel extends JPanel {
         JPanel center = new JPanel(new BorderLayout());
         center.setOpaque(false);
         center.setBorder(BorderFactory.createEmptyBorder(0, 50, 0, 50));
-        center.add(form, BorderLayout.CENTER);
+        center.add(ResponsiveLayout.compact(form, 720), BorderLayout.CENTER);
         add(center, BorderLayout.CENTER);
 
         inspectionTimer = new Timer(350, event -> inspectBarcode(true));

@@ -37,7 +37,7 @@ final class HospitalModePanel extends JPanel {
 
         add(HospitalResponsiveLayout.constrainWidth(createHeader(refreshAccess)),
                 BorderLayout.NORTH);
-        add(HospitalResponsiveLayout.verticalScroll(
+        add(edu.seu.vcampus.client.view.ResponsiveLayout.verticalScroll(
                 createModes(openPatient, openDoctor, openAdmin)), BorderLayout.CENTER);
 
         statusLabel.setForeground(HospitalTheme.MUTED);
@@ -86,7 +86,8 @@ final class HospitalModePanel extends JPanel {
         JPanel copy = new JPanel();
         copy.setOpaque(false);
         copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
-        JLabel title = new JLabel("选择校医院使用模式");
+        JLabel title = new JLabel("校医院");
+        title.putClientProperty("module.pageTitle", true);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 26F));
         title.setForeground(HospitalTheme.TEXT);
         JLabel subtitle = new JLabel("同一账号可以拥有多个身份，但一次只进入一个工作台");
@@ -106,7 +107,7 @@ final class HospitalModePanel extends JPanel {
             Runnable openPatient,
             Runnable openDoctor,
             Runnable openAdmin) {
-        JPanel modes = HospitalResponsiveLayout.grid(3, 245, 16, 16);
+        JPanel modes = edu.seu.vcampus.client.view.ResponsiveLayout.entranceRows(16);
         modes.setOpaque(false);
         patientButton.addActionListener(event -> openPatient.run());
         doctorButton.addActionListener(event -> openDoctor.run());
@@ -135,7 +136,8 @@ final class HospitalModePanel extends JPanel {
             String features,
             JButton action) {
         HospitalTheme.SurfacePanel card = new HospitalTheme.SurfacePanel();
-        card.setLayout(new BorderLayout(0, 16));
+        card.setLayout(new BorderLayout(24, 0));
+        card.setPreferredSize(new Dimension(800, 130));
         card.setBorder(BorderFactory.createEmptyBorder(22, 20, 20, 20));
 
         JPanel heading = new JPanel();
@@ -149,12 +151,13 @@ final class HospitalModePanel extends JPanel {
         heading.add(title);
 
         JLabel featureList = new JLabel(
-                "<html><body style='line-height:1.8'>" + features + "</body></html>");
+                features.replace("<br>", " · "));
         featureList.setForeground(HospitalTheme.TEXT);
-        action.setPreferredSize(new Dimension(0, 42));
-        card.add(heading, BorderLayout.NORTH);
-        card.add(featureList, BorderLayout.CENTER);
-        card.add(action, BorderLayout.SOUTH);
+        action.setPreferredSize(new Dimension(230, 48));
+        heading.add(Box.createVerticalStrut(10));
+        heading.add(featureList);
+        card.add(heading, BorderLayout.CENTER);
+        card.add(action, BorderLayout.EAST);
         return card;
     }
 
@@ -181,7 +184,6 @@ final class HospitalModePanel extends JPanel {
     }
 
     private static String accountText(SessionInfo session) {
-        String accountType = session.canManageUsers() ? "超级管理员" : "普通账号";
-        return "当前账号：" + session.getDisplayName() + "（" + accountType + "）";
+        return session.getDisplayName();
     }
 }

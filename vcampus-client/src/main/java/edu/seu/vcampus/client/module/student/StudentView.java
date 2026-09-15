@@ -1,6 +1,7 @@
 package edu.seu.vcampus.client.module.student;
 
 import edu.seu.vcampus.client.application.ClientContext;
+import edu.seu.vcampus.client.view.ResponsiveLayout;
 import edu.seu.vcampus.common.protocol.ModuleNames;
 import edu.seu.vcampus.common.protocol.Response;
 import edu.seu.vcampus.common.student.ApplyStatusChangeRequest;
@@ -131,9 +132,13 @@ public class StudentView extends JPanel {
             btnEdit.setVisible(profile != null);
             btnEdit.setEnabled(profile != null);
             btnApplyModify.setVisible(true);
+            btnApplyModify.setEnabled(true);
             btnOpenChange.setVisible(true);
-            btnDownloadCert.setVisible(profile != null);
-            btnOpenAudit.setVisible(profile != null); // 管理员可查任意学生毕业审核
+            btnOpenChange.setEnabled(true);
+            btnDownloadCert.setVisible(true);
+            btnDownloadCert.setEnabled(profile != null);
+            btnOpenAudit.setVisible(true);
+            btnOpenAudit.setEnabled(profile != null); // 管理员可查任意学生毕业审核
             return;
         }
 
@@ -141,10 +146,14 @@ public class StudentView extends JPanel {
 
         btnEdit.setVisible(isSelf);
         btnEdit.setEnabled(isSelf);
-        btnApplyModify.setVisible(isSelf);
-        btnOpenChange.setVisible(isSelf);
-        btnDownloadCert.setVisible(isSelf);
-        btnOpenAudit.setVisible(isSelf); // 学生仅可查阅自己的毕业审核
+        btnApplyModify.setVisible(profile == null || isSelf);
+        btnApplyModify.setEnabled(isSelf);
+        btnOpenChange.setVisible(profile == null || isSelf);
+        btnOpenChange.setEnabled(isSelf);
+        btnDownloadCert.setVisible(profile == null || isSelf);
+        btnDownloadCert.setEnabled(isSelf);
+        btnOpenAudit.setVisible(profile == null || isSelf);
+        btnOpenAudit.setEnabled(isSelf); // 学生仅可查阅自己的毕业审核
     }
 
     private void initUI() {
@@ -153,10 +162,10 @@ public class StudentView extends JPanel {
 
         boolean admin = isStudentAdmin();
 
-        JPanel mainContainer = new JPanel();
+        JPanel mainContainer = ResponsiveLayout.verticalContent(null);
         mainContainer.setLayout(new BoxLayout(mainContainer, BoxLayout.Y_AXIS));
         mainContainer.setBackground(new Color(248, 249, 250));
-        mainContainer.setBorder(new EmptyBorder(20, 25, 20, 25));
+        mainContainer.setBorder(new EmptyBorder(12, 25, 12, 25));
 
         JPanel headerPanel = new JPanel();
         headerPanel.setLayout(new BoxLayout(headerPanel, BoxLayout.Y_AXIS));
@@ -164,6 +173,7 @@ public class StudentView extends JPanel {
         headerPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JLabel lblTitle = new JLabel("学生学籍");
+        lblTitle.putClientProperty("module.pageTitle", true);
         lblTitle.setFont(FONT_HEADER);
         lblTitle.setForeground(TEXT_MAIN);
 
@@ -174,8 +184,8 @@ public class StudentView extends JPanel {
         lblSubtitle.setForeground(TEXT_MUTED);
 
         headerPanel.add(lblTitle);
+        headerPanel.add(Box.createVerticalStrut(8));
         mainContainer.add(headerPanel);
-        mainContainer.add(Box.createVerticalStrut(15));
 
         JPanel bannerPanel = new JPanel(new BorderLayout(15, 0)) {
             @Override
@@ -188,7 +198,7 @@ public class StudentView extends JPanel {
             }
         };
         bannerPanel.setOpaque(false);
-        bannerPanel.setBorder(new EmptyBorder(18, 22, 18, 22));
+        bannerPanel.setBorder(new EmptyBorder(10, 18, 10, 18));
         bannerPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 90));
         bannerPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -230,7 +240,7 @@ public class StudentView extends JPanel {
         bannerPanel.add(bannerRightPanel, BorderLayout.EAST);
 
         mainContainer.add(bannerPanel);
-        mainContainer.add(Box.createVerticalStrut(15));
+        mainContainer.add(Box.createVerticalStrut(8));
 
         lblStatus.setFont(FONT_SUB);
         lblStatus.setForeground(TEXT_MUTED);
@@ -238,13 +248,14 @@ public class StudentView extends JPanel {
         mainContainer.add(lblStatus);
         mainContainer.add(Box.createVerticalStrut(10));
 
-        JPanel cardsGrid = new JPanel(new GridLayout(2, 3, 14, 14));
+        JPanel cardsGrid = ResponsiveLayout.equalGrid(3, 340, 14);
+        cardsGrid.setName("student.profileCards");
         cardsGrid.setOpaque(false);
         cardsGrid.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         // 卡片 1：基本身份信息
         JPanel cardIdentity = createCardPanel("基本身份信息", "身份证登记与法定户籍信息");
-        JPanel idBody = new JPanel(new GridLayout(4, 2, 8, 6));
+        JPanel idBody = new JPanel(new GridLayout(0, 1, 0, 4));
         idBody.setOpaque(false);
         addField(idBody, "学  号", valId);
         addField(idBody, "姓  名", valName);
@@ -253,7 +264,7 @@ public class StudentView extends JPanel {
         addField(idBody, "出生日期", valBirth);
         addField(idBody, "籍  贯", valNative);
         addField(idBody, "身份证号", valIdCard);
-        cardIdentity.add(idBody, BorderLayout.CENTER);
+        cardIdentity.add(ResponsiveLayout.compact(idBody, 1280), BorderLayout.CENTER);
 
         btnApplyModify.setText(admin ? "查看信息更正审批" : "申请更正基本信息");
         btnApplyModify.setFont(FONT_SUB);
@@ -265,7 +276,7 @@ public class StudentView extends JPanel {
 
         // 卡片 2：在读学业状态
         JPanel cardStudy = createCardPanel("在读学业信息", "院系, 专业, 学期与选课基准");
-        JPanel studyBody = new JPanel(new GridLayout(5, 2, 8, 5));
+        JPanel studyBody = new JPanel(new GridLayout(0, 1, 0, 3));
         studyBody.setOpaque(false);
 
         setupContainer(deptContainer, valDeptLabel, txtDept);
@@ -282,12 +293,12 @@ public class StudentView extends JPanel {
         addField(studyBody, "培养方案", valPlanId);
         addField(studyBody, "建议学期", valCurrentTerm);
         addField(studyBody, "就读校区", valCampus);
-        cardStudy.add(studyBody, BorderLayout.CENTER);
+        cardStudy.add(ResponsiveLayout.compact(studyBody, 1280), BorderLayout.CENTER);
         cardsGrid.add(cardStudy);
 
         // 卡片 3：联络补充
         JPanel cardContact = createCardPanel("联络与补充信息", "学生本人自主维护非关键联系方式");
-        JPanel contactBody = new JPanel(new GridLayout(6, 1, 0, 4));
+        JPanel contactBody = new JPanel(new GridLayout(6, 1, 0, 3));
         contactBody.setOpaque(false);
         addFormWidget(contactBody, "政治面貌", cmbPolitical);
         addFormWidget(contactBody, "联系电话", txtPhone);
@@ -295,7 +306,7 @@ public class StudentView extends JPanel {
         addFormWidget(contactBody, "家庭住址", txtHomeAddress);
         addFormWidget(contactBody, "紧急联系人", txtEmergencyContact);
         addFormWidget(contactBody, "紧急电话", txtEmergencyPhone);
-        cardContact.add(contactBody, BorderLayout.CENTER);
+        cardContact.add(ResponsiveLayout.compact(contactBody, 1280), BorderLayout.CENTER);
 
         JPanel contactAction = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         contactAction.setOpaque(false);
@@ -315,7 +326,7 @@ public class StudentView extends JPanel {
         );
         btnOpenChange.setText(admin ? "全校异动与更正审批" : "办理/查看我的申请");
         btnOpenChange.setFont(FONT_SUB);
-        btnOpenChange.setBackground(new Color(224, 231, 255));
+        btnOpenChange.setBackground(new Color(241, 245, 249));
         btnOpenChange.setForeground(Color.BLACK);
         btnOpenChange.setFocusPainted(false);
         btnOpenChange.setBorder(BorderFactory.createCompoundBorder(
@@ -329,7 +340,7 @@ public class StudentView extends JPanel {
         // 卡片 5：学籍证明下载
         JPanel cardCert = createCardPanel("学籍证明开具", "在线开具并打印中英文在读证明");
         btnDownloadCert.setFont(FONT_SUB);
-        btnDownloadCert.setBackground(new Color(224, 231, 255));
+        btnDownloadCert.setBackground(new Color(241, 245, 249));
         btnDownloadCert.setForeground(Color.BLACK);
         btnDownloadCert.setFocusPainted(false);
         btnDownloadCert.setBorder(BorderFactory.createCompoundBorder(
@@ -350,7 +361,7 @@ public class StudentView extends JPanel {
         // 卡片 6：学业毕业审核（带权限控制）
         JPanel cardAudit = createCardPanel("学业毕业审核", "培养方案完成度与学分绩点核算");
         btnOpenAudit.setFont(FONT_SUB);
-        btnOpenAudit.setBackground(new Color(224, 231, 255));
+        btnOpenAudit.setBackground(new Color(241, 245, 249));
         btnOpenAudit.setForeground(Color.BLACK);
         btnOpenAudit.setFocusPainted(false);
         btnOpenAudit.setBorder(BorderFactory.createCompoundBorder(
@@ -372,7 +383,7 @@ public class StudentView extends JPanel {
 
         mainContainer.add(cardsGrid);
 
-        JScrollPane scrollPane = new JScrollPane(mainContainer);
+        JScrollPane scrollPane = ResponsiveLayout.verticalScroll(mainContainer);
         scrollPane.setBorder(null);
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
         add(scrollPane, BorderLayout.CENTER);
@@ -434,6 +445,7 @@ public class StudentView extends JPanel {
         container.setOpaque(false);
         container.setLayout(new CardLayout());
         viewComp.setFont(FONT_BODY);
+        editComp.setPreferredSize(new Dimension(150, 24));
         if (viewComp instanceof JLabel) {
             ((JLabel) viewComp).setForeground(ACCENT_BLUE);
         }
@@ -482,7 +494,7 @@ public class StudentView extends JPanel {
     }
 
     private JPanel createCardPanel(String title, String desc) {
-        JPanel card = new JPanel(new BorderLayout(0, 10)) {
+        JPanel card = new JPanel(new BorderLayout(0, 6)) {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
@@ -495,7 +507,7 @@ public class StudentView extends JPanel {
             }
         };
         card.setOpaque(false);
-        card.setBorder(new EmptyBorder(14, 16, 14, 16));
+        card.setBorder(new EmptyBorder(10, 14, 10, 14));
 
         JPanel head = new JPanel(new GridLayout(1, 1));
         head.setOpaque(false);
@@ -529,10 +541,11 @@ public class StudentView extends JPanel {
         JPanel box = new JPanel(new BorderLayout(6, 0));
         box.setOpaque(false);
         JLabel l = new JLabel(label + "：");
-        l.setPreferredSize(new Dimension(65, 22));
+        l.setPreferredSize(new Dimension(80, 26));
         l.setFont(FONT_SUB);
         l.setForeground(TEXT_MUTED);
         comp.setFont(FONT_BODY);
+        comp.setPreferredSize(new Dimension(150, 26));
         box.add(l, BorderLayout.WEST);
         box.add(comp, BorderLayout.CENTER);
         parent.add(box);

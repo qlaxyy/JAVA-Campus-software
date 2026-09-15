@@ -1,5 +1,7 @@
 package edu.seu.vcampus.client.module.shop;
 
+import edu.seu.vcampus.client.view.ResponsiveLayout;
+
 import edu.seu.vcampus.common.protocol.ModuleNames;
 import edu.seu.vcampus.common.user.SessionInfo;
 
@@ -13,7 +15,6 @@ import javax.swing.SwingConstants;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Font;
-import java.awt.GridLayout;
 
 /**
  * Entry page that splits shopping and merchant workbenches, like the hospital mode chooser.
@@ -30,7 +31,8 @@ final class ShopModePanel extends JPanel {
         setBackground(ShopPalette.PAGE);
         setBorder(BorderFactory.createEmptyBorder(24, 28, 24, 28));
         add(createHeader(refreshAccess), BorderLayout.NORTH);
-        add(createModes(openShopping, openManage), BorderLayout.CENTER);
+        add(ResponsiveLayout.verticalScroll(ResponsiveLayout.compact(
+                createModes(openShopping, openManage), 1080)), BorderLayout.CENTER);
         statusLabel.setForeground(ShopPalette.MUTED);
         add(statusLabel, BorderLayout.SOUTH);
     }
@@ -42,7 +44,7 @@ final class ShopModePanel extends JPanel {
         manageButton.setEnabled(canManage);
         manageButton.setText(canManage ? "进入管理" : "无权限");
         statusLabel.setForeground(ShopPalette.MUTED);
-        statusLabel.setText("一次只进入一个工作台。购物处理下单与校园卡，管理处理后台上架。");
+        statusLabel.setText(" ");
     }
 
     void showLoginRequired() {
@@ -63,6 +65,7 @@ final class ShopModePanel extends JPanel {
         copy.setOpaque(false);
         copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
         JLabel title = new JLabel("选择商店使用方式");
+        title.putClientProperty("module.pageTitle", true);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 26F));
         title.setForeground(ShopPalette.TEXT);
         JLabel subtitle = new JLabel("商店管理员可进入购物或管理；一次只打开其中一个工作台");
@@ -81,7 +84,7 @@ final class ShopModePanel extends JPanel {
     }
 
     private JPanel createModes(Runnable openShopping, Runnable openManage) {
-        JPanel modes = new JPanel(new GridLayout(1, 2, 16, 0));
+        JPanel modes = ResponsiveLayout.grid(1, 320, 16);
         modes.setOpaque(false);
         shopButton.addActionListener(event -> openShopping.run());
         manageButton.addActionListener(event -> openManage.run());
@@ -100,7 +103,8 @@ final class ShopModePanel extends JPanel {
 
     private JPanel modeCard(String titleText, String requirement, String features, JButton action) {
         ShopPalette.SurfacePanel card = new ShopPalette.SurfacePanel();
-        card.setLayout(new BorderLayout(0, 16));
+        card.setLayout(new BorderLayout(24, 0));
+        card.setPreferredSize(new Dimension(800, 130));
         card.setBorder(BorderFactory.createEmptyBorder(22, 20, 20, 20));
 
         JPanel heading = new JPanel();
@@ -114,22 +118,20 @@ final class ShopModePanel extends JPanel {
         heading.add(title);
 
         JLabel featureList = new JLabel(
-                "<html><body style='line-height:1.8'>" + features + "</body></html>");
+                features.replace("<br>", " · "));
         featureList.setForeground(ShopPalette.TEXT);
-        action.setPreferredSize(new Dimension(0, 42));
-        card.add(heading, BorderLayout.NORTH);
-        card.add(featureList, BorderLayout.CENTER);
-        card.add(action, BorderLayout.SOUTH);
+        action.setPreferredSize(new Dimension(230, 48));
+        heading.add(Box.createVerticalStrut(10));
+        heading.add(featureList);
+        card.add(heading, BorderLayout.CENTER);
+        JPanel actions = new JPanel(new java.awt.GridBagLayout());
+        actions.setOpaque(false);
+        actions.add(action);
+        card.add(actions, BorderLayout.EAST);
         return card;
     }
 
     private static String accountText(SessionInfo session) {
-        String accountType = session.canAdminister(ModuleNames.SHOP)
-                ? "商店管理员"
-                : "顾客";
-        if (session.canManageUsers()) {
-            accountType = "超级管理员";
-        }
-        return "当前账号：" + session.getDisplayName() + "（" + accountType + "）";
+        return session.getDisplayName();
     }
 }

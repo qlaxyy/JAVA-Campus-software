@@ -32,6 +32,7 @@ final class HospitalPageHeader {
         copy.setOpaque(false);
         copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
         JLabel title = new JLabel(titleText);
+        title.putClientProperty("module.pageTitle", true);
         title.setFont(HospitalTheme.uiFont(Font.BOLD, 26F));
         title.setForeground(HospitalTheme.TEXT);
         JTextArea subtitle = HospitalResponsiveLayout.wrappingText(

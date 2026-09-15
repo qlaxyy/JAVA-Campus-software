@@ -39,11 +39,13 @@ final class UserUiTheme {
         JPanel panel = new JPanel(new BorderLayout(12, 2));
         panel.setOpaque(false);
         JLabel titleLabel = new JLabel(title);
+        if ("账号名单".equals(title)) { titleLabel.putClientProperty("module.pageTitle", true); }
         titleLabel.setForeground(TEXT);
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 20F));
         panel.add(titleLabel, BorderLayout.WEST);
 
         detail.setForeground(MUTED);
+        detail.putClientProperty("module.keepInPage", true);
         detail.setFont(detail.getFont().deriveFont(13F));
         detail.setHorizontalAlignment(SwingConstants.RIGHT);
         panel.add(detail, BorderLayout.EAST);

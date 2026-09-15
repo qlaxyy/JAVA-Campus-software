@@ -141,6 +141,7 @@ final class HospitalHomePanel extends JPanel {
         copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
 
         JLabel title = new JLabel("校医院");
+        title.putClientProperty("module.pageTitle", true);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 26F));
         title.setForeground(HospitalTheme.TEXT);
         JLabel subtitle = new JLabel("校园医疗服务 · 从预约、候诊到诊疗记录");

@@ -26,6 +26,10 @@ public final class HospitalActions {
             ActionNames.of(ModuleNames.HOSPITAL, "GET_ADMIN_SCHEDULE_WORKSPACE");
     public static final String CREATE_SCHEDULE =
             ActionNames.of(ModuleNames.HOSPITAL, "CREATE_SCHEDULE");
+    public static final String CREATE_SCHEDULES =
+            ActionNames.of(ModuleNames.HOSPITAL, "CREATE_SCHEDULES");
+    public static final String GENERATE_WEEKLY_SCHEDULES =
+            ActionNames.of(ModuleNames.HOSPITAL, "GENERATE_WEEKLY_SCHEDULES");
     public static final String SET_SCHEDULE_PUBLICATION =
             ActionNames.of(ModuleNames.HOSPITAL, "SET_SCHEDULE_PUBLICATION");
     public static final String GET_ADMIN_DEPARTMENT_WORKSPACE =

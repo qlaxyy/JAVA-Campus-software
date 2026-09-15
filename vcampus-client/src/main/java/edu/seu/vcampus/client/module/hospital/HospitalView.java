@@ -31,6 +31,7 @@ public final class HospitalView extends JPanel {
     private static final String CONSULTATION_RECORDS = "consultation-records";
     private static final String HEALTH_RECORD = "health-record";
     private static final String PATIENT_BILLS = "patient-bills";
+    private static final String PATIENT_CARE_TASKS = "patient-care-tasks";
     private static final String PATIENT_CARE_GUIDE = "patient-care-guide";
     private static final String DOCTOR_HOME = "doctor-home";
     private static final String ADMIN_HOME = "admin-home";
@@ -50,6 +51,7 @@ public final class HospitalView extends JPanel {
     private final ConsultationRecordsPanel consultationRecordsPanel;
     private final PatientHealthRecordPanel patientHealthRecordPanel;
     private final PatientBillsPanel patientBillsPanel;
+    private final PatientCareTasksPanel patientCareTasksPanel;
     private final PatientCareGuidePanel patientCareGuidePanel;
     private final DoctorWorkspacePanel doctorWorkspacePanel;
     private final HospitalStaffHomePanel adminHomePanel;
@@ -83,6 +85,7 @@ public final class HospitalView extends JPanel {
                 this::openOrdinaryFollowUpSelection,
                 this::openCareGuide,
                 this::openFollowUp,
+                this::openCareTasks,
                 this::openModeSelector);
         slotSearchPanel = new SlotSearchPanel(
                 context,
@@ -105,6 +108,9 @@ public final class HospitalView extends JPanel {
                 this::openOrdinaryFollowUp,
                 this::openBills);
         patientBillsPanel = new PatientBillsPanel(context, this::openPatientHome);
+        patientCareTasksPanel = new PatientCareTasksPanel(
+                context, this::openPatientHome, this::openFollowUp,
+                this::openMyAppointments);
         patientCareGuidePanel = new PatientCareGuidePanel(
                 this::openPatientHome,
                 this::openSlotSearch,
@@ -157,6 +163,7 @@ public final class HospitalView extends JPanel {
         add(consultationRecordsPanel, CONSULTATION_RECORDS);
         add(patientHealthRecordPanel, HEALTH_RECORD);
         add(patientBillsPanel, PATIENT_BILLS);
+        add(patientCareTasksPanel, PATIENT_CARE_TASKS);
         add(patientCareGuidePanel, PATIENT_CARE_GUIDE);
         add(doctorWorkspacePanel, DOCTOR_HOME);
         add(adminHomePanel, ADMIN_HOME);
@@ -247,6 +254,16 @@ public final class HospitalView extends JPanel {
         homePanel.showMessage(" ");
         cards.show(this, PATIENT_BILLS);
         patientBillsPanel.activate();
+    }
+
+    private void openCareTasks() {
+        if (!canOpen(HospitalMode.PATIENT)) {
+            homePanel.showMessage("请先登录，再查看诊疗待办。");
+            return;
+        }
+        homePanel.showMessage(" ");
+        cards.show(this, PATIENT_CARE_TASKS);
+        patientCareTasksPanel.activate();
     }
 
     private void openCareGuide() {

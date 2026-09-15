@@ -23,10 +23,12 @@ final class HospitalServerProcess implements AutoCloseable {
 
     private final Process process;
     private final int port;
+    private final Path serverLockPath;
 
-    private HospitalServerProcess(Process process, int port) {
+    private HospitalServerProcess(Process process, int port, Path serverLockPath) {
         this.process = process;
         this.port = port;
+        this.serverLockPath = serverLockPath;
     }
 
     static HospitalServerProcess start(Path databasePath, Path logPath) throws Exception {
@@ -61,7 +63,10 @@ final class HospitalServerProcess implements AutoCloseable {
             while (System.nanoTime() < deadline) {
                 Matcher started = STARTED_PORT.matcher(readLog(absoluteLogPath));
                 if (started.find() && process.isAlive()) {
-                    return new HospitalServerProcess(process, Integer.parseInt(started.group(1)));
+                    Path serverLockPath = absoluteDatabasePath.resolveSibling(
+                            absoluteDatabasePath.getFileName() + ".server.lock");
+                    return new HospitalServerProcess(
+                            process, Integer.parseInt(started.group(1)), serverLockPath);
                 }
                 if (!process.isAlive()) {
                     throw startupFailure(absoluteLogPath, null);
@@ -89,7 +94,13 @@ final class HospitalServerProcess implements AutoCloseable {
 
     @Override
     public void close() throws Exception {
-        stop(process);
+        try {
+            stop(process);
+        } finally {
+            if (!process.isAlive()) {
+                Files.deleteIfExists(serverLockPath);
+            }
+        }
     }
 
     private static String javaExecutable() {

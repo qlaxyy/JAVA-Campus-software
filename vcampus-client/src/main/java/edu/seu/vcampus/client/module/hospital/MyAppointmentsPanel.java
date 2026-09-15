@@ -20,11 +20,13 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.Point;
 import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -49,6 +51,8 @@ final class MyAppointmentsPanel extends JPanel {
     private final Runnable openSlotSearch;
     private final Predicate<AppointmentView> confirmCancellation;
     private final JPanel appointmentList = new JPanel();
+    private final JScrollPane appointmentScroll =
+            HospitalResponsiveLayout.verticalScroll(appointmentList);
     private final JComboBox<String> sortOrder = new JComboBox<>(new String[]{
             TIME_ASCENDING,
             TIME_DESCENDING
@@ -83,8 +87,7 @@ final class MyAppointmentsPanel extends JPanel {
 
         appointmentList.setOpaque(false);
         appointmentList.setLayout(new BoxLayout(appointmentList, BoxLayout.Y_AXIS));
-        add(HospitalResponsiveLayout.verticalScroll(appointmentList),
-                BorderLayout.CENTER);
+        add(appointmentScroll, BorderLayout.CENTER);
     }
 
     void activate() {
@@ -94,14 +97,18 @@ final class MyAppointmentsPanel extends JPanel {
     private JPanel createHeader(Runnable openPatientHome) {
         JPanel sorting = new JPanel(new BorderLayout(0, 5));
         sorting.setOpaque(false);
-        JLabel sortingLabel = new JLabel("按就诊时间排序");
+        JLabel sortingLabel = new JLabel("按预约的就诊时间排序");
         sortingLabel.setFont(HospitalTheme.uiFont(Font.PLAIN, 12F));
         sortingLabel.setForeground(HospitalTheme.MUTED);
         sortOrder.setName("appointmentSortOrder");
         sortOrder.setFont(HospitalTheme.uiFont(Font.PLAIN, 13F));
         sortOrder.setBackground(HospitalTheme.SURFACE);
         sortOrder.setPreferredSize(new Dimension(168, 34));
-        sortOrder.addActionListener(event -> renderAppointments());
+        sortOrder.addActionListener(event -> {
+            renderAppointments();
+            SwingUtilities.invokeLater(() ->
+                    appointmentScroll.getViewport().setViewPosition(new Point(0, 0)));
+        });
         sorting.add(sortingLabel, BorderLayout.NORTH);
         sorting.add(sortOrder, BorderLayout.CENTER);
 
@@ -203,12 +210,12 @@ final class MyAppointmentsPanel extends JPanel {
     }
 
     private Comparator<AppointmentView> appointmentComparator() {
-        Comparator<AppointmentView> comparator = Comparator
+        Comparator<AppointmentView> chronological = Comparator
                 .comparing(AppointmentView::getStartTime)
                 .thenComparing(AppointmentView::getAppointmentId);
         return TIME_DESCENDING.equals(sortOrder.getSelectedItem())
-                ? comparator.reversed()
-                : comparator;
+                ? chronological.reversed()
+                : chronological;
     }
 
     private JPanel createAppointmentCard(AppointmentView appointment) {

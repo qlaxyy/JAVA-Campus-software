@@ -49,6 +49,10 @@ class MyAppointmentsPanelTest {
                     .format(list.getAppointments().getFirst().getStartTime());
             String farDate = DateTimeFormatter.ofPattern("M月d日")
                     .format(list.getAppointments().getLast().getStartTime());
+            String nearTime = DateTimeFormatter.ofPattern("HH:mm")
+                    .format(list.getAppointments().getFirst().getStartTime());
+            String farTime = DateTimeFormatter.ofPattern("HH:mm")
+                    .format(list.getAppointments().getLast().getStartTime());
 
             MyAppointmentsPanel[] panel = new MyAppointmentsPanel[1];
             SwingUtilities.invokeAndWait(() -> {
@@ -71,6 +75,8 @@ class MyAppointmentsPanelTest {
                     .count());
             assertTrue(labelTexts(appointmentCards(panel[0]).getFirst())
                     .contains(nearDate));
+            assertTrue(labelTexts(appointmentCards(panel[0]).getFirst()).stream()
+                    .anyMatch(text -> text.startsWith(nearTime)));
 
             @SuppressWarnings("unchecked")
             JComboBox<String> sortOrder = (JComboBox<String>) components(
@@ -82,10 +88,14 @@ class MyAppointmentsPanelTest {
                     sortOrder.setSelectedItem("时间从远到近"));
             assertTrue(awaitCondition(() -> labelTexts(
                     appointmentCards(panel[0]).getFirst()).contains(farDate)));
+            assertTrue(labelTexts(appointmentCards(panel[0]).getFirst()).stream()
+                    .anyMatch(text -> text.startsWith(farTime)));
             SwingUtilities.invokeAndWait(() ->
                     sortOrder.setSelectedItem("时间从近到远"));
             assertTrue(awaitCondition(() -> labelTexts(
                     appointmentCards(panel[0]).getFirst()).contains(nearDate)));
+            assertTrue(labelTexts(appointmentCards(panel[0]).getFirst()).stream()
+                    .anyMatch(text -> text.startsWith(nearTime)));
 
             JButton cancel = components(panel[0], JButton.class).stream()
                     .filter(button -> "cancelAppointmentButton".equals(button.getName()))

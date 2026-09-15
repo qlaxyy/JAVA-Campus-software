@@ -20,6 +20,7 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridLayout;
 import java.util.Comparator;
+import java.util.List;
 
 /** Patient-facing hospital landing page. */
 final class HospitalHomePanel extends JPanel {
@@ -28,6 +29,7 @@ final class HospitalHomePanel extends JPanel {
     private final Runnable openSlotSearch;
     private final Runnable openMyAppointments;
     private final Runnable openFollowUp;
+    private final Runnable openCareTasks;
     private final Runnable openCareGuide;
     private final JPanel careTaskPanel = new JPanel(new BorderLayout());
     private final JPanel billingTaskPanel = new JPanel(new BorderLayout());
@@ -42,10 +44,12 @@ final class HospitalHomePanel extends JPanel {
             Runnable openOrdinaryFollowUp,
             Runnable openCareGuide,
             Runnable openFollowUp,
+            Runnable openCareTasks,
             Runnable switchMode) {
         this.openSlotSearch = openSlotSearch;
         this.openMyAppointments = openMyAppointments;
         this.openFollowUp = openFollowUp;
+        this.openCareTasks = openCareTasks;
         this.openCareGuide = openCareGuide;
         setLayout(new BorderLayout(0, 18));
         setBackground(HospitalTheme.BACKGROUND);
@@ -103,18 +107,18 @@ final class HospitalHomePanel extends JPanel {
 
     void showCareTasks(PatientHealthRecordView record) {
         careTaskPanel.removeAll();
-        ExaminationOrderView task = record.getExaminations().stream()
+        List<ExaminationOrderView> tasks = record.getExaminations().stream()
                 .filter(examination -> examination.getStatus() != ExaminationStatus.REVIEWED
                         && examination.getStatus() != ExaminationStatus.CANCELLED)
-                .sorted(Comparator.comparingInt(HospitalHomePanel::followUpPriority))
-                .findFirst()
-                .orElse(null);
-        if (task == null) {
+                .sorted(Comparator.comparingInt(HospitalHomePanel::followUpPriority)
+                        .thenComparing(ExaminationOrderView::getOrderedAt))
+                .toList();
+        if (tasks.isEmpty()) {
             careTaskPanel.setVisible(false);
             refresh(careTaskPanel);
             return;
         }
-        careTaskPanel.add(careTaskCard(task), BorderLayout.CENTER);
+        careTaskPanel.add(careTaskCard(tasks.getFirst(), tasks.size()), BorderLayout.CENTER);
         careTaskPanel.setVisible(true);
         refresh(careTaskPanel);
     }
@@ -190,6 +194,8 @@ final class HospitalHomePanel extends JPanel {
                 openMyAppointments));
         services.add(serviceCard("普通复诊", "从一次已完成的诊疗记录继续预约", true,
                 openOrdinaryFollowUp));
+        services.add(serviceCard("诊疗待办", "逐条查看检查进度与结果回诊", true,
+                openCareTasks));
         services.add(serviceCard("智能导诊", "描述主要不适，获得可解释的科室建议", true,
                 openSmartTriage));
         services.add(serviceCard("问诊记录", "查看医生签署的诊断、处置和复诊建议", true,
@@ -228,7 +234,7 @@ final class HospitalHomePanel extends JPanel {
         return card;
     }
 
-    private JPanel careTaskCard(ExaminationOrderView task) {
+    private JPanel careTaskCard(ExaminationOrderView task, int count) {
         boolean needsBooking = task.getStatus() == ExaminationStatus.RESULT_READY
                 && !task.isResultReviewBooked();
         HospitalTheme.SurfacePanel card = new HospitalTheme.SurfacePanel(
@@ -240,7 +246,7 @@ final class HospitalHomePanel extends JPanel {
         JPanel copy = new JPanel();
         copy.setOpaque(false);
         copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
-        JLabel eyebrow = new JLabel("当前诊疗待办");
+        JLabel eyebrow = new JLabel("诊疗待办 · 共 " + count + " 项");
         eyebrow.setFont(HospitalTheme.uiFont(Font.BOLD, 12F));
         eyebrow.setForeground(needsBooking
                 ? new Color(218, 247, 243) : HospitalTheme.MUTED);
@@ -261,17 +267,10 @@ final class HospitalHomePanel extends JPanel {
         copy.add(Box.createVerticalStrut(5));
         copy.add(detail);
         JButton action = needsBooking
-                ? HospitalTheme.quietButton("立即安排回诊")
-                : HospitalTheme.primaryButton(task.isResultReviewBooked()
-                        ? "查看我的预约" : "查看检查进度");
+                ? HospitalTheme.quietButton("查看诊疗待办")
+                : HospitalTheme.primaryButton("查看诊疗待办");
         action.setName("patientHomeFollowUpButton");
-        action.addActionListener(event -> {
-            if (task.isResultReviewBooked()) {
-                openMyAppointments.run();
-            } else {
-                openFollowUp.run();
-            }
-        });
+        action.addActionListener(event -> openCareTasks.run());
         card.add(copy, BorderLayout.CENTER);
         card.add(action, BorderLayout.EAST);
         return card;

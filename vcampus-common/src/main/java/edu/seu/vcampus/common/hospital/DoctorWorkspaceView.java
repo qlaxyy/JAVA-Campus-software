@@ -16,7 +16,10 @@ public final class DoctorWorkspaceView implements Serializable {
     private final String doctorTitle;
     private final String departmentId;
     private final String departmentName;
+    /** Schedules active at the current instant and available to the reception desk. */
     private final List<DoctorScheduleView> schedules;
+    /** Published work schedules from today through the following six days. */
+    private final List<DoctorScheduleView> weeklySchedules;
     private final List<DoctorFollowUpView> followUps;
     private final List<DoctorClinicalRecordView> signedRecords;
 
@@ -29,7 +32,7 @@ public final class DoctorWorkspaceView implements Serializable {
             List<DoctorScheduleView> schedules,
             List<DoctorFollowUpView> followUps) {
         this(doctorId, doctorName, doctorTitle, departmentId, departmentName,
-                schedules, followUps, List.of());
+                schedules, schedules, followUps, List.of());
     }
 
     public DoctorWorkspaceView(
@@ -41,6 +44,20 @@ public final class DoctorWorkspaceView implements Serializable {
             List<DoctorScheduleView> schedules,
             List<DoctorFollowUpView> followUps,
             List<DoctorClinicalRecordView> signedRecords) {
+        this(doctorId, doctorName, doctorTitle, departmentId, departmentName,
+                schedules, schedules, followUps, signedRecords);
+    }
+
+    public DoctorWorkspaceView(
+            String doctorId,
+            String doctorName,
+            String doctorTitle,
+            String departmentId,
+            String departmentName,
+            List<DoctorScheduleView> schedules,
+            List<DoctorScheduleView> weeklySchedules,
+            List<DoctorFollowUpView> followUps,
+            List<DoctorClinicalRecordView> signedRecords) {
         this.doctorId = requireText(doctorId, "doctorId");
         this.doctorName = requireText(doctorName, "doctorName");
         this.doctorTitle = requireText(doctorTitle, "doctorTitle");
@@ -48,6 +65,8 @@ public final class DoctorWorkspaceView implements Serializable {
         this.departmentName = requireText(departmentName, "departmentName");
         this.schedules = List.copyOf(Objects.requireNonNull(
                 schedules, "schedules must not be null"));
+        this.weeklySchedules = List.copyOf(Objects.requireNonNull(
+                weeklySchedules, "weeklySchedules must not be null"));
         this.followUps = List.copyOf(Objects.requireNonNull(
                 followUps, "followUps must not be null"));
         this.signedRecords = List.copyOf(Objects.requireNonNull(
@@ -76,6 +95,10 @@ public final class DoctorWorkspaceView implements Serializable {
 
     public List<DoctorScheduleView> getSchedules() {
         return schedules;
+    }
+
+    public List<DoctorScheduleView> getWeeklySchedules() {
+        return weeklySchedules == null ? List.of() : weeklySchedules;
     }
 
     public List<DoctorFollowUpView> getFollowUps() {

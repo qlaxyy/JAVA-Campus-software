@@ -12,10 +12,12 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -345,6 +347,19 @@ final class InMemoryHospitalRepository implements HospitalRepository {
     }
 
     @Override
+    public synchronized void insertSlots(List<HospitalSlot> generated) {
+        Objects.requireNonNull(generated, "generated schedules must not be null");
+        Set<String> ids = new HashSet<>();
+        for (HospitalSlot slot : generated) {
+            if (slot == null || !ids.add(slot.scheduleId())
+                    || findSlotById(slot.scheduleId()).isPresent()) {
+                throw new IllegalStateException("generated schedule IDs must be unique");
+            }
+        }
+        slots.addAll(generated);
+    }
+
+    @Override
     public void updateSlot(HospitalSlot slot) {
         Objects.requireNonNull(slot, "slot must not be null");
         boolean removed = slots.removeIf(existing -> existing.scheduleId()
@@ -610,11 +625,11 @@ final class InMemoryHospitalRepository implements HospitalRepository {
             HospitalConsultation consultation,
             HospitalBooking completedBooking,
             HospitalEpisode completedEpisode,
-            HospitalPatientBill treatmentBill) {
+            List<HospitalPatientBill> clinicalBills) {
         Objects.requireNonNull(consultation, "consultation must not be null");
         Objects.requireNonNull(completedBooking, "completedBooking must not be null");
         Objects.requireNonNull(completedEpisode, "completedEpisode must not be null");
-        validateClinicalBill(treatmentBill, completedBooking);
+        validateClinicalBills(clinicalBills, completedBooking, false);
         String appointmentId = consultation.appointmentId();
         if (!appointmentId.equals(completedBooking.appointment().appointmentId())) {
             throw new IllegalArgumentException(
@@ -633,13 +648,17 @@ final class InMemoryHospitalRepository implements HospitalRepository {
         if (!episodes.containsKey(completedEpisode.episodeId())) {
             throw new IllegalStateException("episode does not exist");
         }
-        if (clinicalBills.containsKey(treatmentBill.billId())) {
-            throw new IllegalStateException("bill already exists");
+        for (HospitalPatientBill bill : clinicalBills) {
+            if (this.clinicalBills.containsKey(bill.billId())) {
+                throw new IllegalStateException("bill already exists");
+            }
         }
         consultations.put(consultation.consultationId(), consultation);
         bookings.put(appointmentId, completedBooking);
         episodes.put(completedEpisode.episodeId(), completedEpisode);
-        clinicalBills.put(treatmentBill.billId(), treatmentBill);
+        for (HospitalPatientBill bill : clinicalBills) {
+            this.clinicalBills.put(bill.billId(), bill);
+        }
     }
 
     @Override
@@ -745,15 +764,25 @@ final class InMemoryHospitalRepository implements HospitalRepository {
             HospitalConsultation consultation,
             HospitalBooking completedBooking,
             HospitalEpisode completedEpisode,
-            HospitalExaminationOrder reviewedOrder) {
+            HospitalExaminationOrder reviewedOrder,
+            List<HospitalPatientBill> clinicalBills) {
         validateClinicalSave(consultation, completedBooking, completedEpisode);
+        validateClinicalBills(clinicalBills, completedBooking, true);
         if (!reviewedOrder.episodeId().equals(completedEpisode.episodeId())) {
             throw new IllegalArgumentException("reviewed order episode does not match");
+        }
+        for (HospitalPatientBill bill : clinicalBills) {
+            if (this.clinicalBills.containsKey(bill.billId())) {
+                throw new IllegalStateException("bill already exists");
+            }
         }
         consultations.put(consultation.consultationId(), consultation);
         bookings.put(consultation.appointmentId(), completedBooking);
         episodes.put(completedEpisode.episodeId(), completedEpisode);
         examinationOrders.put(reviewedOrder.orderId(), reviewedOrder);
+        for (HospitalPatientBill bill : clinicalBills) {
+            this.clinicalBills.put(bill.billId(), bill);
+        }
     }
 
     private void validateClinicalSave(
@@ -786,6 +815,34 @@ final class InMemoryHospitalRepository implements HospitalRepository {
                 || bill.billType() == HospitalBillType.REGISTRATION
                 || bill.paymentStatus() != PaymentStatus.UNPAID) {
             throw new IllegalArgumentException("clinical bill does not match appointment");
+        }
+    }
+
+    private static void validateClinicalBills(
+            List<HospitalPatientBill> bills,
+            HospitalBooking booking,
+            boolean resultReview) {
+        Objects.requireNonNull(bills, "clinicalBills must not be null");
+        boolean treatmentSeen = false;
+        boolean medicationSeen = false;
+        for (HospitalPatientBill bill : bills) {
+            validateClinicalBill(bill, booking);
+            if (bill.billType() == HospitalBillType.TREATMENT) {
+                if (resultReview || treatmentSeen) {
+                    throw new IllegalArgumentException("invalid treatment bill");
+                }
+                treatmentSeen = true;
+            } else if (bill.billType() == HospitalBillType.MEDICATION) {
+                if (medicationSeen) {
+                    throw new IllegalArgumentException("duplicate medication bill");
+                }
+                medicationSeen = true;
+            } else {
+                throw new IllegalArgumentException("unexpected clinical bill type");
+            }
+        }
+        if (!resultReview && !treatmentSeen) {
+            throw new IllegalArgumentException("treatment bill is required");
         }
     }
 

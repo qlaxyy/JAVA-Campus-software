@@ -4,5 +4,6 @@ package edu.seu.vcampus.common.hospital;
 public enum HospitalBillType {
     REGISTRATION,
     EXAMINATION,
-    TREATMENT
+    TREATMENT,
+    MEDICATION
 }

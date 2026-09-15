@@ -1,6 +1,7 @@
 package edu.seu.vcampus.server.module.hospital;
 
 import edu.seu.vcampus.common.hospital.AppointmentBookingView;
+import edu.seu.vcampus.common.hospital.BatchCreateSchedulesRequest;
 import edu.seu.vcampus.common.hospital.AdminAppointmentListResponse;
 import edu.seu.vcampus.common.hospital.AdminAppointmentView;
 import edu.seu.vcampus.common.hospital.AdminCancelAppointmentRequest;
@@ -20,6 +21,8 @@ import edu.seu.vcampus.common.hospital.ConsultationListResponse;
 import edu.seu.vcampus.common.hospital.ConsultationRecordView;
 import edu.seu.vcampus.common.hospital.ConsultationOutcome;
 import edu.seu.vcampus.common.hospital.CreateScheduleRequest;
+import edu.seu.vcampus.common.hospital.GenerateWeeklySchedulesRequest;
+import edu.seu.vcampus.common.hospital.WeeklyScheduleGenerationView;
 import edu.seu.vcampus.common.hospital.CreateDepartmentRequest;
 import edu.seu.vcampus.common.hospital.EpisodeStatus;
 import edu.seu.vcampus.common.hospital.ExaminationOrderView;
@@ -70,12 +73,16 @@ import edu.seu.vcampus.server.security.UserDirectory;
 import edu.seu.vcampus.server.security.UserIdentity;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -87,6 +94,7 @@ final class HospitalService {
     private static final int SEARCH_DAYS = 7;
     private static final long DEMO_TREATMENT_FEE_CENTS = 1_800;
     private static final long DEMO_EXAMINATION_FEE_CENTS = 3_000;
+    private static final long DEMO_MEDICATION_FEE_CENTS = 2_000;
 
     private final HospitalRepository repository;
     private final Clock clock;
@@ -481,6 +489,12 @@ final class HospitalService {
     }
 
     AdminScheduleWorkspaceView getAdminScheduleWorkspace(SessionInfo session) {
+        return getAdminScheduleWorkspace(session, null);
+    }
+
+    AdminScheduleWorkspaceView getAdminScheduleWorkspace(
+            SessionInfo session,
+            UserDirectory users) {
         requireHospitalAdmin(session);
         List<HospitalDepartment> departments = repository.findAllDepartments();
         List<AdminDoctorView> doctors = repository.findAllDoctors().stream()
@@ -497,11 +511,14 @@ final class HospitalService {
                                 .map(HospitalDepartment::departmentName)
                                 .findFirst()
                                 .orElse(doctor.departmentId()),
+                        users == null ? "" : users.findByUserId(doctor.userId())
+                                .map(UserIdentity::campusCardNumber)
+                                .orElse(""),
                         doctor.active()))
                 .toList();
         LocalDateTime now = LocalDateTime.now(clock);
         List<SlotView> schedules = repository.findAllSlots().stream()
-                .filter(slot -> slot.endTime().isAfter(now))
+                .filter(slot -> slot.startTime().isAfter(now))
                 .sorted(Comparator.comparing(HospitalSlot::startTime)
                         .thenComparing(HospitalSlot::doctorName))
                 .map(slot -> toView(slot, null))
@@ -516,6 +533,10 @@ final class HospitalService {
             throw businessFailure(
                     ErrorCodes.HOSPITAL_SCHEDULE_STARTED,
                     "A new schedule must start in the future.");
+        }
+        if (!Duration.between(request.getStartTime(), request.getEndTime())
+                .equals(Duration.ofMinutes(30))) {
+            throw new IllegalArgumentException("每个排班固定为 30 分钟，请按工作起止时间生成多个排班。");
         }
         HospitalDepartment department = requireDepartment(request.getDepartmentId());
         if (!department.bookable()) {
@@ -559,6 +580,157 @@ final class HospitalService {
                     false);
             repository.insertSlot(slot);
             return toView(slot, null);
+        }
+    }
+
+    List<SlotView> createSchedules(
+            SessionInfo session,
+            BatchCreateSchedulesRequest request) {
+        requireHospitalAdmin(session);
+        Objects.requireNonNull(request, "request must not be null");
+        List<CreateScheduleRequest> requests = request.getSchedules();
+        CreateScheduleRequest first = requests.getFirst();
+        HospitalDepartment department = requireDepartment(first.getDepartmentId());
+        if (!department.bookable()) {
+            throw new IllegalArgumentException("a bookable department is required");
+        }
+        HospitalDoctor doctor = repository.findActiveDoctors().stream()
+                .filter(candidate -> candidate.doctorId().equals(first.getDoctorId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("doctorId does not exist"));
+        if (!doctor.departmentId().equals(department.departmentId())) {
+            throw new IllegalArgumentException(
+                    "the doctor does not belong to the selected department");
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        List<CreateScheduleRequest> ordered = requests.stream()
+                .sorted(Comparator.comparing(CreateScheduleRequest::getStartTime))
+                .toList();
+        LocalDateTime previousEnd = null;
+        for (CreateScheduleRequest candidate : ordered) {
+            if (!candidate.getDoctorId().equals(doctor.doctorId())
+                    || !candidate.getDepartmentId().equals(department.departmentId())) {
+                throw new IllegalArgumentException(
+                        "a batch can only contain one doctor and one department");
+            }
+            if (!candidate.getStartTime().isAfter(now)
+                    || !Duration.between(candidate.getStartTime(), candidate.getEndTime())
+                    .equals(Duration.ofMinutes(30))) {
+                throw new IllegalArgumentException(
+                        "每个手动排班须为未来的 30 分钟时段。");
+            }
+            if (previousEnd != null && candidate.getStartTime().isBefore(previousEnd)) {
+                throw scheduleConflict();
+            }
+            previousEnd = candidate.getEndTime();
+        }
+
+        Object doctorLock = doctorScheduleLocks.computeIfAbsent(
+                doctor.doctorId(), ignored -> new Object());
+        synchronized (doctorLock) {
+            if (repository.findActiveDoctors().stream()
+                    .noneMatch(candidate -> candidate.doctorId().equals(doctor.doctorId()))) {
+                throw scheduleConflict();
+            }
+            List<HospitalSlot> existing = repository.findSlotsByDoctorId(doctor.doctorId());
+            if (ordered.stream().anyMatch(candidate -> existing.stream().anyMatch(slot ->
+                    slot.startTime().isBefore(candidate.getEndTime())
+                            && candidate.getStartTime().isBefore(slot.endTime())))) {
+                throw scheduleConflict();
+            }
+            List<HospitalSlot> drafts = ordered.stream()
+                    .map(candidate -> new HospitalSlot(
+                            UUID.randomUUID().toString(),
+                            department.departmentId(),
+                            department.departmentName(),
+                            doctor.doctorId(),
+                            doctor.doctorName(),
+                            doctor.doctorTitle(),
+                            candidate.getStartTime(),
+                            candidate.getEndTime(),
+                            candidate.getRegistrationFeeCents(),
+                            candidate.getCapacity(),
+                            0,
+                            false))
+                    .toList();
+            repository.insertSlots(drafts);
+            return drafts.stream().map(slot -> toView(slot, null)).toList();
+        }
+    }
+
+    WeeklyScheduleGenerationView generateWeeklySchedules(
+            SessionInfo session,
+            GenerateWeeklySchedulesRequest request) {
+        requireHospitalAdmin(session);
+        Objects.requireNonNull(request, "request must not be null");
+        if (request.getStartDate().isBefore(LocalDate.now(clock))) {
+            throw new IllegalArgumentException("排班起始日期不能早于今天。");
+        }
+        HospitalDoctor doctor = repository.findActiveDoctors().stream()
+                .filter(candidate -> candidate.doctorId().equals(request.getDoctorId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("所选医生不存在或已停用。"));
+        HospitalDepartment department = requireDepartment(doctor.departmentId());
+        if (!department.bookable()) {
+            throw new IllegalArgumentException("所选医生不属于可挂号科室。");
+        }
+
+        Object doctorLock = doctorScheduleLocks.computeIfAbsent(
+                doctor.doctorId(), ignored -> new Object());
+        synchronized (doctorLock) {
+            if (repository.findActiveDoctors().stream()
+                    .noneMatch(candidate -> candidate.doctorId().equals(doctor.doctorId()))) {
+                throw scheduleConflict();
+            }
+            List<HospitalSlot> existing = new ArrayList<>(
+                    repository.findSlotsByDoctorId(doctor.doctorId()));
+            LocalDateTime now = LocalDateTime.now(clock);
+            int created = 0;
+            int skippedExisting = 0;
+            int elapsed = 0;
+            List<HospitalSlot> generated = new ArrayList<>();
+            for (int dayOffset = 0; dayOffset < 7; dayOffset++) {
+                LocalDate day = request.getStartDate().plusDays(dayOffset);
+                if (!request.getWorkdays().contains(day.getDayOfWeek())) {
+                    continue;
+                }
+                for (LocalTime time = LocalTime.of(9, 0);
+                     time.isBefore(LocalTime.of(18, 0));
+                     time = time.plusMinutes(30)) {
+                    LocalDateTime start = LocalDateTime.of(day, time);
+                    LocalDateTime end = start.plusMinutes(30);
+                    if (!start.isAfter(now)) {
+                        elapsed++;
+                        continue;
+                    }
+                    // Preserve old, closed and booked slots. Re-running this request is safe.
+                    boolean overlaps = existing.stream().anyMatch(slot ->
+                            slot.startTime().isBefore(end)
+                                    && start.isBefore(slot.endTime()));
+                    if (overlaps) {
+                        skippedExisting++;
+                        continue;
+                    }
+                    HospitalSlot slot = new HospitalSlot(
+                            UUID.randomUUID().toString(),
+                            department.departmentId(),
+                            department.departmentName(),
+                            doctor.doctorId(),
+                            doctor.doctorName(),
+                            doctor.doctorTitle(),
+                            start, end,
+                            request.getRegistrationFeeCents(),
+                            request.getCapacity(),
+                            0, true);
+                    generated.add(slot);
+                    existing.add(slot);
+                    created++;
+                }
+            }
+            repository.insertSlots(generated);
+            return new WeeklyScheduleGenerationView(
+                    created, skippedExisting, elapsed);
         }
     }
 
@@ -889,6 +1061,7 @@ final class HospitalService {
 
     AppointmentListResponse listMyAppointments(SessionInfo session) {
         Objects.requireNonNull(session, "session must not be null");
+        expireElapsedPatientAppointments(session.getUserId(), LocalDateTime.now(clock));
         List<AppointmentView> appointments = repository
                 .findBookingsByPatientUserId(session.getUserId()).stream()
                 .map(this::toAppointmentView)
@@ -977,14 +1150,25 @@ final class HospitalService {
                 .orElseThrow(() -> new IllegalStateException(
                         "doctor department does not exist: " + doctor.departmentId()));
         LocalDateTime now = LocalDateTime.now(clock);
+        expireUnattendedAppointments(doctor, now);
         List<DoctorScheduleView> schedules = repository
                 .findSlotsByDoctorId(doctor.doctorId()).stream()
                 .filter(HospitalSlot::published)
+                .filter(slot -> isActiveAt(slot, now))
                 .sorted(Comparator.comparing(HospitalSlot::startTime)
                         .thenComparing(HospitalSlot::scheduleId))
                 .map(slot -> toDoctorScheduleView(slot, users))
-                .filter(schedule -> schedule.getEndTime().isAfter(now)
-                        || !schedule.getPendingAppointments().isEmpty())
+                .toList();
+        LocalDate today = now.toLocalDate();
+        LocalDate weekEnd = today.plusDays(6);
+        List<DoctorScheduleView> weeklySchedules = repository
+                .findSlotsByDoctorId(doctor.doctorId()).stream()
+                .filter(HospitalSlot::published)
+                .filter(slot -> !slot.startTime().toLocalDate().isBefore(today))
+                .filter(slot -> !slot.startTime().toLocalDate().isAfter(weekEnd))
+                .sorted(Comparator.comparing(HospitalSlot::startTime)
+                        .thenComparing(HospitalSlot::scheduleId))
+                .map(slot -> toDoctorScheduleView(slot, users))
                 .toList();
         List<DoctorFollowUpView> followUps = repository
                 .findExaminationOrdersByDoctorId(doctor.doctorId()).stream()
@@ -1008,6 +1192,7 @@ final class HospitalService {
                 doctor.departmentId(),
                 department.departmentName(),
                 schedules,
+                weeklySchedules,
                 followUps,
                 signedRecords);
     }
@@ -1158,13 +1343,14 @@ final class HospitalService {
                         ErrorCodes.HOSPITAL_APPOINTMENT_NOT_CONSULTABLE,
                         "Only a pending appointment can be completed.");
             }
+            LocalDateTime now = LocalDateTime.now(clock);
+            requireActiveConsultationSlot(appointment, now);
             if (repository.findConsultationByAppointmentId(
                     appointment.appointmentId()).isPresent()) {
                 throw businessFailure(
                         ErrorCodes.HOSPITAL_CONSULTATION_ALREADY_EXISTS,
                         "A consultation already exists for this appointment.");
             }
-            LocalDateTime now = LocalDateTime.now(clock);
             HospitalConsultation consultation = new HospitalConsultation(
                     "consultation-" + UUID.randomUUID(),
                     appointment.appointmentId(),
@@ -1225,16 +1411,23 @@ final class HospitalService {
                         order.orderedAt(),
                         now);
                 repository.saveResultReviewConsultation(
-                        consultation, completedBooking, completedEpisode, reviewedOrder);
+                        consultation,
+                        completedBooking,
+                        completedEpisode,
+                        reviewedOrder,
+                        medicationBillIfRequested(appointment, request.getMedicationAdvice(), now));
             } else {
-                HospitalPatientBill treatmentBill = unpaidClinicalBill(
+                List<HospitalPatientBill> clinicalBills = new ArrayList<>();
+                clinicalBills.add(unpaidClinicalBill(
                         appointment,
                         HospitalBillType.TREATMENT,
                         "诊疗处置服务（课程演示）",
                         DEMO_TREATMENT_FEE_CENTS,
-                        now);
+                        now));
+                clinicalBills.addAll(medicationBillIfRequested(
+                        appointment, request.getMedicationAdvice(), now));
                 repository.saveConsultationAndUpdateBooking(
-                        consultation, completedBooking, completedEpisode, treatmentBill);
+                        consultation, completedBooking, completedEpisode, clinicalBills);
             }
             return toConsultationView(consultation);
         }
@@ -1269,6 +1462,8 @@ final class HospitalService {
                         ErrorCodes.HOSPITAL_APPOINTMENT_NOT_CONSULTABLE,
                         "Only a pending appointment can open an examination.");
             }
+            LocalDateTime now = LocalDateTime.now(clock);
+            requireActiveConsultationSlot(appointment, now);
             if (repository.findConsultationByAppointmentId(
                     appointment.appointmentId()).isPresent()) {
                 throw businessFailure(
@@ -1287,7 +1482,6 @@ final class HospitalService {
                         ErrorCodes.HOSPITAL_EXAMINATION_STATE_INVALID,
                         "The clinical episode cannot open an examination now.");
             }
-            LocalDateTime now = LocalDateTime.now(clock);
             HospitalExaminationOrder reviewedOrder = null;
             if (resultReview) {
                 HospitalExaminationOrder previousOrder = repository
@@ -1452,24 +1646,18 @@ final class HospitalService {
                         ErrorCodes.HOSPITAL_EXAMINATION_STATE_INVALID,
                         "The clinical episode is not ready for result review.");
             }
-            boolean alreadyBooked = repository
+            Optional<HospitalBooking> existingBooking = repository
                     .findBookingsByPatientUserId(session.getUserId()).stream()
-                    .map(HospitalBooking::appointment)
-                    .filter(appointment -> appointment.status()
+                    .filter(booking -> booking.appointment().status()
                             == AppointmentStatus.BOOKED)
-                    .anyMatch(appointment -> appointment.visitType()
+                    .filter(booking -> booking.appointment().visitType()
                             == VisitType.RESULT_REVIEW
-                            && appointment.episodeId().equals(order.episodeId()));
-            if (alreadyBooked) {
-                throw businessFailure(
-                        ErrorCodes.HOSPITAL_RESULT_REVIEW_ALREADY_BOOKED,
-                        "A result-review visit is already booked for this episode.");
+                            && booking.appointment().episodeId().equals(order.episodeId()))
+                    .findFirst();
+            if (existingBooking.isPresent()) {
+                return toBookingView(existingBooking.get());
             }
-            String patientDoctorId = repository
-                    .findActiveDoctorByUserId(session.getUserId())
-                    .map(HospitalDoctor::doctorId)
-                    .orElse(null);
-            HospitalSlot selectedSlot = selectResultReviewSlot(order, patientDoctorId);
+            HospitalSlot selectedSlot = selectResultReviewSlot(order);
             Object scheduleLock = scheduleLocks.computeIfAbsent(
                     selectedSlot.scheduleId(), ignored -> new Object());
             synchronized (scheduleLock) {
@@ -1478,11 +1666,16 @@ final class HospitalService {
                         .orElseThrow(() -> businessFailure(
                                 ErrorCodes.HOSPITAL_SCHEDULE_NOT_FOUND,
                                 "The selected result-review schedule no longer exists."));
-                validateBookableSlot(confirmedSlot);
+                LocalDateTime now = LocalDateTime.now(clock);
+                if (!confirmedSlot.published()
+                        || !confirmedSlot.doctorId().equals(order.doctorId())
+                        || !confirmedSlot.endTime().isAfter(now)) {
+                    throw resultReviewScheduleUnavailable();
+                }
                 List<HospitalAppointment> appointments = repository
                         .findAppointmentsByScheduleId(confirmedSlot.scheduleId());
-                int queueNumber = allocateQueueNumber(confirmedSlot, appointments);
-                LocalDateTime now = LocalDateTime.now(clock);
+                int queueNumber = allocateResultReviewQueueNumber(
+                        confirmedSlot, appointments);
                 String appointmentId = "appointment-" + UUID.randomUUID();
                 String billId = "bill-" + UUID.randomUUID();
                 HospitalAppointment appointment = new HospitalAppointment(
@@ -1592,7 +1785,7 @@ final class HospitalService {
                         appointment.createdAt()))
                 .toList();
         int dynamicBookings = (int) appointments.stream()
-                .filter(HospitalAppointment::occupiesSlot)
+                .filter(HospitalAppointment::countsAgainstCapacity)
                 .count();
         int remaining = Math.max(
                 0, slot.capacity() - slot.bookedCount() - dynamicBookings);
@@ -1606,6 +1799,89 @@ final class HospitalService {
                 remaining,
                 slot.published(),
                 pendingAppointments);
+    }
+
+    private void expireUnattendedAppointments(
+            HospitalDoctor doctor,
+            LocalDateTime now) {
+        repository.findSlotsByDoctorId(doctor.doctorId()).stream()
+                .filter(slot -> !slot.endTime().isAfter(now))
+                .forEach(slot -> {
+                    Object scheduleLock = scheduleLocks.computeIfAbsent(
+                            slot.scheduleId(), ignored -> new Object());
+                    synchronized (scheduleLock) {
+                        repository.findAppointmentsByScheduleId(slot.scheduleId()).stream()
+                                .filter(appointment -> appointment.status()
+                                        == AppointmentStatus.BOOKED)
+                                .filter(appointment -> repository
+                                        .findConsultationByAppointmentId(
+                                                appointment.appointmentId())
+                                        .isEmpty())
+                                .forEach(this::expireUnattendedAppointment);
+                    }
+                });
+    }
+
+    /**
+     * A missed slot must not remain displayed as pending merely because its doctor has not
+     * reopened the workspace yet.  Patient-facing reads reconcile that patient's elapsed
+     * bookings as well; the appointment-level recheck keeps this safe if a consultation wins
+     * the race.
+     */
+    private void expireElapsedPatientAppointments(String patientUserId, LocalDateTime now) {
+        repository.findBookingsByPatientUserId(patientUserId).stream()
+                .map(HospitalBooking::appointment)
+                .filter(appointment -> appointment.status() == AppointmentStatus.BOOKED)
+                .filter(appointment -> repository.findSlotById(appointment.scheduleId())
+                        .map(slot -> !slot.endTime().isAfter(now))
+                        .orElse(false))
+                .forEach(appointment -> {
+                    Object scheduleLock = scheduleLocks.computeIfAbsent(
+                            appointment.scheduleId(), ignored -> new Object());
+                    synchronized (scheduleLock) {
+                        expireUnattendedAppointment(appointment);
+                    }
+                });
+    }
+
+    private void expireUnattendedAppointment(HospitalAppointment appointment) {
+        HospitalBooking booking = repository.findBookingById(appointment.appointmentId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "appointment booking does not exist: "
+                                + appointment.appointmentId()));
+        if (booking.appointment().status() != AppointmentStatus.BOOKED
+                || repository.findConsultationByAppointmentId(
+                        appointment.appointmentId()).isPresent()) {
+            return;
+        }
+        HospitalAppointment noShowAppointment = new HospitalAppointment(
+                appointment.appointmentId(),
+                appointment.patientUserId(),
+                appointment.scheduleId(),
+                appointment.queueNumber(),
+                appointment.createdAt(),
+                null,
+                null,
+                AppointmentStatus.NO_SHOW,
+                appointment.visitType(),
+                appointment.episodeId(),
+                appointment.sourceFirstVisitAppointmentId());
+        HospitalEpisode episode = repository.findEpisodeById(appointment.episodeId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "appointment episode does not exist: "
+                                + appointment.episodeId()));
+        HospitalEpisode updatedEpisode = appointment.visitType() == VisitType.RESULT_REVIEW
+                ? episode
+                : new HospitalEpisode(
+                        episode.episodeId(),
+                        episode.patientUserId(),
+                        episode.departmentId(),
+                        EpisodeStatus.CANCELLED,
+                        episode.openedAt(),
+                        null);
+        repository.updateBookingAndEpisode(
+                new HospitalBooking(noShowAppointment, booking.bill(), booking.billItem()),
+                updatedEpisode);
     }
 
     private static DoctorAppointmentView toDoctorAppointmentView(
@@ -1803,51 +2079,47 @@ final class HospitalService {
         return order;
     }
 
-    private HospitalSlot selectResultReviewSlot(
-            HospitalExaminationOrder order, String excludedDoctorId) {
-        HospitalAppointment sourceAppointment = repository.findAppointmentById(
-                        order.orderedAppointmentId())
-                .orElseThrow(() -> new IllegalStateException(
-                        "examination source appointment does not exist"));
-        HospitalSlot sourceSlot = repository.findSlotById(sourceAppointment.scheduleId())
-                .orElseThrow(() -> new IllegalStateException(
-                        "examination source appointment or schedule does not exist"));
+    private HospitalSlot selectResultReviewSlot(HospitalExaminationOrder order) {
         LocalDateTime now = LocalDateTime.now(clock);
-        LocalDate endDate = now.toLocalDate().plusDays(7);
-        java.util.Set<String> usedScheduleIds = sourceAppointment.visitType()
-                == VisitType.RESULT_REVIEW
-                ? repository.findBookingsByPatientUserId(order.patientUserId()).stream()
-                        .map(HospitalBooking::appointment)
-                        .filter(appointment -> appointment.episodeId().equals(order.episodeId()))
-                        .map(HospitalAppointment::scheduleId)
-                        .collect(java.util.stream.Collectors.toSet())
-                : java.util.Set.of();
-        List<HospitalSlot> eligible = repository.findSlots(now.toLocalDate(), endDate).stream()
+        return repository.findSlotsByDoctorId(order.doctorId()).stream()
                 .filter(HospitalSlot::published)
                 .filter(slot -> slot.endTime().isAfter(now))
-                .filter(slot -> slot.departmentId().equals(sourceSlot.departmentId()))
-                .filter(slot -> !usedScheduleIds.contains(slot.scheduleId()))
-                .filter(this::hasRemainingCapacity)
                 .sorted(Comparator
-                        .comparing((HospitalSlot slot) -> !slot.doctorId()
-                                .equals(sourceSlot.doctorId()))
-                        .thenComparing(HospitalSlot::startTime))
-                .toList();
-        if (eligible.isEmpty()) {
-            throw businessFailure(
-                    ErrorCodes.HOSPITAL_SLOT_FULL,
-                    "No continuation schedule is available within seven days.");
-        }
-        return eligible.stream()
-                .filter(slot -> excludedDoctorId == null
-                        || !slot.doctorId().equals(excludedDoctorId))
+                        .comparing((HospitalSlot slot) -> !isActiveAt(slot, now))
+                        .thenComparing(HospitalSlot::startTime)
+                        .thenComparing(HospitalSlot::scheduleId))
                 .findFirst()
-                .orElseThrow(HospitalService::selfBookingForbidden);
+                .orElseThrow(HospitalService::resultReviewScheduleUnavailable);
+    }
+
+    private static boolean isActiveAt(HospitalSlot slot, LocalDateTime now) {
+        return !now.isBefore(slot.startTime()) && now.isBefore(slot.endTime());
+    }
+
+    private HospitalSlot requireActiveConsultationSlot(
+            HospitalAppointment appointment,
+            LocalDateTime now) {
+        HospitalSlot slot = repository.findSlotById(appointment.scheduleId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "appointment schedule does not exist: "
+                                + appointment.scheduleId()));
+        if (!slot.published() || !isActiveAt(slot, now)) {
+            throw businessFailure(
+                    ErrorCodes.HOSPITAL_APPOINTMENT_NOT_CONSULTABLE,
+                    "当前不在该患者预约的接诊时段内，不能进行诊疗操作。");
+        }
+        return slot;
+    }
+
+    private static HospitalBusinessException resultReviewScheduleUnavailable() {
+        return businessFailure(
+                ErrorCodes.HOSPITAL_SLOT_FULL,
+                "原接诊医生当前及后续暂无已发布排班，请稍后重试或联系医院。");
     }
 
     private boolean hasRemainingCapacity(HospitalSlot slot) {
         long dynamic = repository.findAppointmentsByScheduleId(slot.scheduleId()).stream()
-                .filter(HospitalAppointment::occupiesSlot)
+                .filter(HospitalAppointment::countsAgainstCapacity)
                 .count();
         return slot.bookedCount() + dynamic < slot.capacity();
     }
@@ -2112,6 +2384,44 @@ final class HospitalService {
                         amountCents));
     }
 
+    private List<HospitalPatientBill> medicationBillIfRequested(
+            HospitalAppointment appointment,
+            String medicationAdvice,
+            LocalDateTime createdAt) {
+        if (!hasMedicationAdvice(medicationAdvice)) {
+            return List.of();
+        }
+        return List.of(unpaidClinicalBill(
+                appointment,
+                HospitalBillType.MEDICATION,
+                medicationBillItemName(medicationAdvice),
+                DEMO_MEDICATION_FEE_CENTS,
+                createdAt));
+    }
+
+    /** Access bill item names are limited to 100 characters; full advice stays in the consultation. */
+    private static String medicationBillItemName(String advice) {
+        String value = advice.trim();
+        return value.length() <= 100 ? value : value.substring(0, 97) + "...";
+    }
+
+    /**
+     * The consultation form is free text.  Doctors commonly enter "无" to record that no
+     * medication was prescribed, which must not turn into a medication charge.
+     */
+    private static boolean hasMedicationAdvice(String medicationAdvice) {
+        if (medicationAdvice == null || medicationAdvice.isBlank()) {
+            return false;
+        }
+        String normalized = medicationAdvice.trim()
+                .replace("。", "")
+                .replace(".", "")
+                .replaceAll("\\s+", "");
+        return !normalized.equals("无")
+                && !normalized.equals("无需用药")
+                && !normalized.equals("暂不需要用药");
+    }
+
     private PatientBillView toPatientBillView(HospitalPatientBill bill) {
         HospitalAppointment appointment = repository.findAppointmentById(bill.appointmentId())
                 .orElseThrow(() -> new IllegalStateException(
@@ -2123,7 +2433,12 @@ final class HospitalService {
                 bill.billId(),
                 bill.appointmentId(),
                 bill.billType(),
-                bill.item().itemName(),
+                bill.billType() == HospitalBillType.MEDICATION
+                        ? repository.findConsultationByAppointmentId(bill.appointmentId())
+                                .map(HospitalConsultation::medicationAdvice)
+                                .filter(advice -> !advice.isBlank())
+                                .orElse(bill.item().itemName())
+                        : bill.item().itemName(),
                 bill.amountCents(),
                 bill.paymentStatus(),
                 slot.departmentName(),
@@ -2163,11 +2478,32 @@ final class HospitalService {
                 booking.billItem().amountCents());
     }
 
+    private AppointmentBookingView toBookingView(HospitalBooking booking) {
+        HospitalAppointment appointment = booking.appointment();
+        HospitalSlot slot = repository.findSlotById(appointment.scheduleId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "appointment schedule does not exist: "
+                                + appointment.scheduleId()));
+        return new AppointmentBookingView(
+                appointment.appointmentId(),
+                appointment.queueNumber(),
+                appointment.status(),
+                booking.bill().billId(),
+                booking.bill().paymentStatus(),
+                booking.billItem().amountCents(),
+                slot.doctorName(),
+                slot.departmentName(),
+                slot.startTime(),
+                slot.endTime(),
+                appointment.createdAt(),
+                booking.bill().paidAt());
+    }
+
     private SlotView toView(HospitalSlot slot, String currentUserId) {
         List<HospitalAppointment> appointments =
                 repository.findAppointmentsByScheduleId(slot.scheduleId());
         int dynamicBookings = (int) appointments.stream()
-                .filter(HospitalAppointment::occupiesSlot)
+                .filter(HospitalAppointment::countsAgainstCapacity)
                 .count();
         boolean bookedByCurrentUser = currentUserId != null && appointments.stream()
                 .filter(HospitalAppointment::occupiesSlot)
@@ -2302,13 +2638,23 @@ final class HospitalService {
             HospitalSlot slot,
             List<HospitalAppointment> appointments) {
         long activeAppointments = appointments.stream()
-                .filter(HospitalAppointment::occupiesSlot)
+                .filter(HospitalAppointment::countsAgainstCapacity)
                 .count();
         if (slot.bookedCount() + activeAppointments >= slot.capacity()) {
             throw businessFailure(
                     ErrorCodes.HOSPITAL_SLOT_FULL,
                     "The selected schedule is full.");
         }
+        int historicalMaximum = appointments.stream()
+                .mapToInt(HospitalAppointment::queueNumber)
+                .max()
+                .orElse(0);
+        return Math.max(slot.bookedCount(), historicalMaximum) + 1;
+    }
+
+    private static int allocateResultReviewQueueNumber(
+            HospitalSlot slot,
+            List<HospitalAppointment> appointments) {
         int historicalMaximum = appointments.stream()
                 .mapToInt(HospitalAppointment::queueNumber)
                 .max()

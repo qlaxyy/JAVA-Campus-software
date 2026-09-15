@@ -2,11 +2,13 @@ package edu.seu.vcampus.client.module.hospital;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.infrastructure.CampusClient;
+import edu.seu.vcampus.client.TestClock;
 import edu.seu.vcampus.common.hospital.AppointmentBookingView;
 import edu.seu.vcampus.common.hospital.BookAppointmentRequest;
 import edu.seu.vcampus.common.hospital.HospitalActions;
 import edu.seu.vcampus.common.hospital.SubmitConsultationRequest;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
+import edu.seu.vcampus.server.module.ServerModules;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.JButton;
@@ -27,7 +29,8 @@ class ConsultationRecordsPanelTest {
 
     @Test
     void patientOpensCompletedConsultationAsReadOnlyRecord() throws Exception {
-        try (CampusServer server = new CampusServer(0, 2)) {
+        TestClock clock = TestClock.startingNow();
+        try (CampusServer server = new CampusServer(0, 2, ServerModules.createRouter(clock))) {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
@@ -39,6 +42,7 @@ class ConsultationRecordsPanelTest {
                             HospitalActions.BOOK_APPOINTMENT,
                             BookAppointmentRequest.firstVisit("slot-general-1"))
                             .getData());
+            clock.advanceToFirstSeedSchedule();
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login(
                     "20260029", "123456".toCharArray()).isSuccess());

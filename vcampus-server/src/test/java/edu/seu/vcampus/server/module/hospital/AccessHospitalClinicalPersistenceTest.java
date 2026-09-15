@@ -38,6 +38,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -51,6 +52,10 @@ class AccessHospitalClinicalPersistenceTest {
     private static final Clock CLOCK = Clock.fixed(
             Instant.parse("2026-09-04T00:00:00Z"), ZoneOffset.UTC);
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 4, 0, 0);
+    private static final Clock ACTIVE_CLOCK = Clock.fixed(
+            Instant.parse("2026-09-05T08:31:00Z"), ZoneOffset.UTC);
+    private static final LocalDateTime ACTIVE_NOW =
+            LocalDateTime.of(2026, 9, 5, 8, 31);
     private static final SessionInfo DOCTOR = session("U-DOCTOR-001");
     private static final SessionInfo OTHER_DOCTOR = session("U-DOCTOR-002");
 
@@ -103,7 +108,7 @@ class AccessHospitalClinicalPersistenceTest {
         String treatment = "建议充分休息、补充温水并记录体温；".repeat(22)
                 + "若出现呼吸困难应及时就医。";
 
-        ConsultationRecordView written = service.submitConsultation(
+        ConsultationRecordView written = activeService(path).submitConsultation(
                 DOCTOR,
                 new SubmitConsultationRequest(
                         booking.getAppointmentId(), diagnosis, "", treatment, "", ""));
@@ -119,7 +124,7 @@ class AccessHospitalClinicalPersistenceTest {
         assertEquals("", stored.medicationAdvice());
         assertEquals("", stored.followUpAdvice());
         assertEquals(ConsultationOutcome.COMPLETED, stored.outcome());
-        assertEquals(NOW, stored.createdAt());
+        assertEquals(ACTIVE_NOW, stored.createdAt());
         assertEquals(AppointmentStatus.COMPLETED,
                 reopenedRepository.findAppointmentById(booking.getAppointmentId())
                         .orElseThrow().status());
@@ -154,6 +159,31 @@ class AccessHospitalClinicalPersistenceTest {
     }
 
     @Test
+    void longMedicationAdviceCreatesTwentyYuanBillAndRemainsFullyVisibleAfterReopen() {
+        Path path = temporaryDirectory.resolve("medication-advice.accdb");
+        SessionInfo patient = session("U-ACCESS-MEDICATION-001");
+        AppointmentBookingView booking = service(path).bookAppointment(
+                patient, BookAppointmentRequest.firstVisit("slot-general-1"));
+        String advice = "按医嘱使用课程演示药物，出现不适请联系医生。".repeat(8);
+
+        activeService(path).submitConsultation(DOCTOR,
+                new SubmitConsultationRequest(booking.getAppointmentId(),
+                        "课程演示诊断", "", "课程演示处置", advice, ""));
+
+        HospitalService reopened = service(path);
+        var medication = reopened.listMyBills(patient).getBills().stream()
+                .filter(bill -> bill.getBillType() == HospitalBillType.MEDICATION)
+                .findFirst().orElseThrow();
+        assertEquals(2_000, medication.getAmountCents());
+        assertEquals(advice, medication.getItemName());
+        assertEquals(PaymentStatus.UNPAID, medication.getPaymentStatus());
+        var stored = repository(path).findBillsByPatientUserId(patient.getUserId()).stream()
+                .filter(bill -> bill.billType() == HospitalBillType.MEDICATION)
+                .findFirst().orElseThrow();
+        assertTrue(stored.item().itemName().length() <= 100);
+    }
+
+    @Test
     void examinationEpisodeSurvivesEveryRepositoryRecreationAndFinishesReviewed()
             throws Exception {
         Path path = temporaryDirectory.resolve("examination-lifecycle.accdb");
@@ -165,7 +195,7 @@ class AccessHospitalClinicalPersistenceTest {
         String examinationItem = "血常规与炎症指标联合检查（课程演示）";
         String instructions = "检查前可正常饮水，完成采样后在校园医院系统等待报告；".repeat(18);
 
-        ExaminationOrderView ordered = first.submitExaminationPlan(
+        ExaminationOrderView ordered = activeService(path).submitExaminationPlan(
                 DOCTOR,
                 new SubmitExaminationPlanRequest(
                         firstVisit.getAppointmentId(), preliminaryDiagnosis,
@@ -197,7 +227,7 @@ class AccessHospitalClinicalPersistenceTest {
         assertNull(waitingView.getReportedAt());
 
         payExaminationBill(service(path), patient, firstVisit.getAppointmentId());
-        service(path).publishDemoExaminationReport(
+        activeService(path).publishDemoExaminationReport(
                 patient, new PublishDemoExaminationReportRequest(ordered.getOrderId()));
 
         AccessHospitalRepository afterReportRepository = repository(path);
@@ -206,7 +236,7 @@ class AccessHospitalClinicalPersistenceTest {
         String expectedSummary = examinationItem + "演示结果：指标已完成采集，"
                 + "请由接诊医生结合病情解读。本内容仅用于课程流程演示。";
         assertEquals(expectedSummary, report.resultSummary());
-        assertEquals(NOW, report.reportedAt());
+        assertEquals(ACTIVE_NOW, report.reportedAt());
         assertEquals(ExaminationStatus.RESULT_READY,
                 afterReportRepository.findExaminationOrderById(ordered.getOrderId())
                         .orElseThrow().status());
@@ -225,7 +255,7 @@ class AccessHospitalClinicalPersistenceTest {
         assertEquals(report.reportId(), afterDuplicateReport.reportId());
         assertEquals(expectedSummary, afterDuplicateReport.resultSummary());
 
-        AppointmentBookingView review = service(path).bookResultReview(
+        AppointmentBookingView review = activeService(path).bookResultReview(
                 patient, new BookResultReviewRequest(ordered.getOrderId()));
 
         AccessHospitalRepository afterReviewBookingRepository = repository(path);
@@ -245,7 +275,7 @@ class AccessHospitalClinicalPersistenceTest {
         String finalDiagnosis = "结合检查结果，支持病毒性上呼吸道感染；".repeat(20)
                 + "本结论仅用于课程流程演示。";
         String finalTreatment = "继续休息并观察症状，保持规律作息。";
-        service(path).submitConsultation(
+        activeService(path).submitConsultation(
                 DOCTOR,
                 new SubmitConsultationRequest(
                         review.getAppointmentId(), finalDiagnosis, "",
@@ -264,9 +294,9 @@ class AccessHospitalClinicalPersistenceTest {
         assertEquals("", reviewConsultation.medicationAdvice());
         assertEquals("", reviewConsultation.followUpAdvice());
         assertEquals(ExaminationStatus.REVIEWED, reviewed.status());
-        assertEquals(NOW, reviewed.reviewedAt());
+        assertEquals(ACTIVE_NOW, reviewed.reviewedAt());
         assertEquals(EpisodeStatus.COMPLETED, completedEpisode.status());
-        assertEquals(NOW, completedEpisode.completedAt());
+        assertEquals(ACTIVE_NOW, completedEpisode.completedAt());
         assertEquals(AppointmentStatus.COMPLETED,
                 completedRepository.findAppointmentById(review.getAppointmentId())
                         .orElseThrow().status());
@@ -288,17 +318,17 @@ class AccessHospitalClinicalPersistenceTest {
         HospitalService firstService = service(path);
         AppointmentBookingView firstVisit = firstService.bookAppointment(
                 patient, BookAppointmentRequest.firstVisit("slot-general-1"));
-        ExaminationOrderView firstOrder = firstService.submitExaminationPlan(
+        ExaminationOrderView firstOrder = activeService(path).submitExaminationPlan(
                 DOCTOR,
                 new SubmitExaminationPlanRequest(
                         firstVisit.getAppointmentId(), "发热待查", "血常规", "", ""));
         payExaminationBill(service(path), patient, firstVisit.getAppointmentId());
-        service(path).publishDemoExaminationReport(
+        activeService(path).publishDemoExaminationReport(
                 patient, new PublishDemoExaminationReportRequest(firstOrder.getOrderId()));
-        AppointmentBookingView firstReview = service(path).bookResultReview(
+        AppointmentBookingView firstReview = activeService(path).bookResultReview(
                 patient, new BookResultReviewRequest(firstOrder.getOrderId()));
 
-        ExaminationOrderView secondOrder = service(path).submitExaminationPlan(
+        ExaminationOrderView secondOrder = activeService(path).submitExaminationPlan(
                 DOCTOR,
                 new SubmitExaminationPlanRequest(
                         firstReview.getAppointmentId(),
@@ -319,12 +349,12 @@ class AccessHospitalClinicalPersistenceTest {
                         .orElseThrow().status());
 
         payExaminationBill(service(path), patient, firstReview.getAppointmentId());
-        service(path).publishDemoExaminationReport(
+        activeService(path).publishDemoExaminationReport(
                 patient, new PublishDemoExaminationReportRequest(secondOrder.getOrderId()));
-        AppointmentBookingView secondReview = service(path).bookResultReview(
+        AppointmentBookingView secondReview = activeService(path).bookResultReview(
                 patient, new BookResultReviewRequest(secondOrder.getOrderId()));
         assertFalse(firstReview.getAppointmentId().equals(secondReview.getAppointmentId()));
-        service(path).submitConsultation(
+        activeService(path).submitConsultation(
                 DOCTOR,
                 new SubmitConsultationRequest(
                         secondReview.getAppointmentId(),
@@ -374,7 +404,7 @@ class AccessHospitalClinicalPersistenceTest {
                         otherPatient,
                         new DoctorConsultationContextRequest(booking.getAppointmentId())));
 
-        ExaminationOrderView order = service.submitExaminationPlan(
+        ExaminationOrderView order = activeService(path).submitExaminationPlan(
                 DOCTOR,
                 new SubmitExaminationPlanRequest(
                         booking.getAppointmentId(), "待查", "血常规", "", ""));
@@ -410,10 +440,11 @@ class AccessHospitalClinicalPersistenceTest {
         String appointmentId = service.bookAppointment(
                 patient, BookAppointmentRequest.firstVisit("slot-general-1")).getAppointmentId();
         String care = "检查期间适量饮水，留意体温变化（虚构演示）。";
-        ExaminationOrderView order = service.submitExaminationPlan(DOCTOR,
+        HospitalService activeService = activeService(path);
+        ExaminationOrderView order = activeService.submitExaminationPlan(DOCTOR,
                 new SubmitExaminationPlanRequest(appointmentId, "病因待查", "血常规", "", care));
-        payExaminationBill(service, patient, appointmentId);
-        service.publishDemoExaminationReport(patient,
+        payExaminationBill(activeService, patient, appointmentId);
+        activeService.publishDemoExaminationReport(patient,
                 new PublishDemoExaminationReportRequest(order.getOrderId()));
 
         // Read the physical file independently of UCanAccess's in-process mirror.
@@ -463,9 +494,9 @@ class AccessHospitalClinicalPersistenceTest {
         assertLateSqlFailure(
                 () -> repository.saveConsultationAndUpdateBooking(
                         consultation, completedBooking(current), completion,
-                        clinicalBill(
+                        List.of(clinicalBill(
                                 "rollback-treatment-bill", current,
-                                HospitalBillType.TREATMENT, 1_800)));
+                                HospitalBillType.TREATMENT, 1_800))));
 
         AccessHospitalRepository reopened = repository(path);
         assertFalse(reopened.findConsultationByAppointmentId(
@@ -578,7 +609,8 @@ class AccessHospitalClinicalPersistenceTest {
                         consultation,
                         completedBooking(review),
                         completedEpisode(episode),
-                        withStatus(order, ExaminationStatus.REVIEWED, NOW)));
+                        withStatus(order, ExaminationStatus.REVIEWED, NOW),
+                        List.of()));
 
         AccessHospitalRepository reopened = repository(path);
         assertFalse(reopened.findConsultationByAppointmentId(
@@ -605,7 +637,7 @@ class AccessHospitalClinicalPersistenceTest {
         HospitalService service = service(path);
         AppointmentBookingView appointment = service.bookAppointment(
                 patient, BookAppointmentRequest.firstVisit("slot-general-1"));
-        ExaminationOrderView order = service.submitExaminationPlan(
+        ExaminationOrderView order = activeService(path).submitExaminationPlan(
                 DOCTOR,
                 new SubmitExaminationPlanRequest(
                         appointment.getAppointmentId(), "原阶段诊断", "原检查项目", "", ""));
@@ -774,6 +806,10 @@ class AccessHospitalClinicalPersistenceTest {
 
     private HospitalService service(Path path) {
         return new HospitalService(repository(path), CLOCK);
+    }
+
+    private HospitalService activeService(Path path) {
+        return new HospitalService(repository(path), ACTIVE_CLOCK);
     }
 
     private AccessHospitalRepository repository(Path path) {

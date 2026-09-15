@@ -415,6 +415,34 @@ final class AccessHospitalRepository implements HospitalRepository {
     }
 
     @Override
+    public synchronized void insertSlots(List<HospitalSlot> generated) {
+        Objects.requireNonNull(generated, "generated schedules must not be null");
+        if (generated.isEmpty()) {
+            return;
+        }
+        String sql = "INSERT INTO tblHospitalSchedule "
+                + "(scheduleId, departmentId, doctorId, startTime, endTime, "
+                + "registrationFeeCents, capacity, status, createdAt, updatedAt) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        LocalDateTime now = LocalDateTime.now(clock);
+        try (Connection connection = database.openConnection()) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                for (HospitalSlot slot : generated) {
+                    bindSlot(statement, slot, now, false);
+                    statement.executeUpdate();
+                }
+                connection.commit();
+            } catch (SQLException | RuntimeException exception) {
+                connection.rollback();
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            throw failure("Cannot atomically create weekly hospital schedules.", exception);
+        }
+    }
+
+    @Override
     public synchronized void updateSlot(HospitalSlot slot) {
         String sql = "UPDATE tblHospitalSchedule SET departmentId = ?, doctorId = ?, "
                 + "startTime = ?, endTime = ?, registrationFeeCents = ?, capacity = ?, "
@@ -741,17 +769,19 @@ final class AccessHospitalRepository implements HospitalRepository {
             HospitalConsultation consultation,
             HospitalBooking completedBooking,
             HospitalEpisode completedEpisode,
-            HospitalPatientBill treatmentBill) {
+            List<HospitalPatientBill> clinicalBills) {
         clinicalTransaction(connection -> {
             validateClinicalTransition(connection, consultation, completedBooking,
                     completedEpisode, EpisodeStatus.IN_PROGRESS, ConsultationOutcome.COMPLETED);
             if (completedBooking.appointment().visitType() == VisitType.RESULT_REVIEW) {
                 throw new IllegalArgumentException("result review requires its examination order");
             }
-            validateClinicalBill(treatmentBill, completedBooking, HospitalBillType.TREATMENT);
+            validateClinicalBills(clinicalBills, completedBooking, false);
             insertConsultation(connection, consultation);
             completeAppointment(connection, completedBooking.appointment());
-            insertPatientBill(connection, treatmentBill);
+            for (HospitalPatientBill bill : clinicalBills) {
+                insertPatientBill(connection, bill);
+            }
             transitionEpisode(connection, completedEpisode, EpisodeStatus.IN_PROGRESS);
         });
     }
@@ -854,7 +884,8 @@ final class AccessHospitalRepository implements HospitalRepository {
             HospitalConsultation consultation,
             HospitalBooking completedBooking,
             HospitalEpisode completedEpisode,
-            HospitalExaminationOrder reviewedOrder) {
+            HospitalExaminationOrder reviewedOrder,
+            List<HospitalPatientBill> clinicalBills) {
         clinicalTransaction(connection -> {
             validateClinicalTransition(connection, consultation, completedBooking,
                     completedEpisode, EpisodeStatus.RESULT_READY, ConsultationOutcome.COMPLETED);
@@ -867,9 +898,13 @@ final class AccessHospitalRepository implements HospitalRepository {
                             + "WHERE orderId = ?", reviewedOrder.orderId())) {
                 throw new IllegalArgumentException("result review does not match reported examination");
             }
+            validateClinicalBills(clinicalBills, completedBooking, true);
             insertConsultation(connection, consultation);
             completeAppointment(connection, completedBooking.appointment());
             transitionOrder(connection, reviewedOrder, ExaminationStatus.RESULT_READY);
+            for (HospitalPatientBill bill : clinicalBills) {
+                insertPatientBill(connection, bill);
+            }
             transitionEpisode(connection, completedEpisode, EpisodeStatus.RESULT_READY);
         });
     }
@@ -2132,6 +2167,39 @@ final class AccessHospitalRepository implements HospitalRepository {
                 || !bill.appointmentId().equals(booking.appointment().appointmentId())
                 || !bill.patientUserId().equals(booking.appointment().patientUserId())) {
             throw new IllegalArgumentException("clinical bill does not match appointment");
+        }
+    }
+
+    private static void validateClinicalBills(
+            List<HospitalPatientBill> bills,
+            HospitalBooking booking,
+            boolean resultReview) {
+        if (bills == null) {
+            throw new IllegalArgumentException("clinical bills must not be null");
+        }
+        boolean treatmentSeen = false;
+        boolean medicationSeen = false;
+        for (HospitalPatientBill bill : bills) {
+            if (bill == null) {
+                throw new IllegalArgumentException("clinical bill must not be null");
+            }
+            if (bill.billType() == HospitalBillType.TREATMENT) {
+                if (resultReview || treatmentSeen) {
+                    throw new IllegalArgumentException("invalid treatment bill");
+                }
+                treatmentSeen = true;
+            } else if (bill.billType() == HospitalBillType.MEDICATION) {
+                if (medicationSeen) {
+                    throw new IllegalArgumentException("duplicate medication bill");
+                }
+                medicationSeen = true;
+            } else {
+                throw new IllegalArgumentException("unexpected clinical bill type");
+            }
+            validateClinicalBill(bill, booking, bill.billType());
+        }
+        if (!resultReview && !treatmentSeen) {
+            throw new IllegalArgumentException("treatment bill is required");
         }
     }
 

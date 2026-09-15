@@ -2,6 +2,7 @@ package edu.seu.vcampus.client.module.hospital;
 
 import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.client.infrastructure.CampusClient;
+import edu.seu.vcampus.client.TestClock;
 import edu.seu.vcampus.common.hospital.AppointmentBookingView;
 import edu.seu.vcampus.common.hospital.BookAppointmentRequest;
 import edu.seu.vcampus.common.hospital.HospitalActions;
@@ -18,10 +19,12 @@ import edu.seu.vcampus.common.user.SessionInfo;
 import edu.seu.vcampus.common.user.UserActions;
 import edu.seu.vcampus.server.infrastructure.ActionRouter;
 import edu.seu.vcampus.server.infrastructure.CampusServer;
+import edu.seu.vcampus.server.module.ServerModules;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.AbstractButton;
 import javax.swing.JLabel;
+import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
@@ -33,10 +36,62 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PatientBillsPanelTest {
+
+    @Test
+    void showsDoctorsMedicationAdviceAndTwentyYuanPayment() throws Exception {
+        TestClock clock = TestClock.startingNow();
+        try (CampusServer server = new CampusServer(0, 2, ServerModules.createRouter(clock))) {
+            server.start();
+            ClientContext context = new ClientContext(
+                    new CampusClient("127.0.0.1", server.getPort()));
+            assertTrue(context.login("20260006", "123456".toCharArray()).isSuccess());
+            AppointmentBookingView booking = assertInstanceOf(
+                    AppointmentBookingView.class,
+                    context.send(HospitalActions.BOOK_APPOINTMENT,
+                            BookAppointmentRequest.firstVisit("slot-general-1")).getData());
+            clock.advanceToFirstSeedSchedule();
+            assertTrue(context.logout().isSuccess());
+            assertTrue(context.login("20260029", "123456".toCharArray()).isSuccess());
+            String advice = "按医嘱使用课程演示药物，出现不适请联系医生。";
+            assertTrue(context.send(HospitalActions.SUBMIT_CONSULTATION,
+                    new SubmitConsultationRequest(booking.getAppointmentId(),
+                            "课程演示诊断", "", "课程演示处置", advice, "必要时复诊"))
+                    .isSuccess());
+            assertTrue(context.logout().isSuccess());
+            assertTrue(context.login("20260006", "123456".toCharArray()).isSuccess());
+
+            PatientBillListResponse bills = assertInstanceOf(PatientBillListResponse.class,
+                    context.send(HospitalActions.LIST_MY_BILLS, null).getData());
+            PatientBillView medication = bills.getBills().stream()
+                    .filter(bill -> bill.getBillType() == HospitalBillType.MEDICATION)
+                    .findFirst().orElseThrow();
+            assertEquals(2_000, medication.getAmountCents());
+            assertEquals(advice, medication.getItemName());
+
+            PatientBillsPanel[] panel = new PatientBillsPanel[1];
+            SwingUtilities.invokeAndWait(() -> {
+                panel[0] = new PatientBillsPanel(context, () -> { });
+                panel[0].activate();
+            });
+            assertTrue(awaitCondition(() -> components(panel[0], JTextArea.class).stream()
+                    .filter(area -> "patientMedicationAdvice".equals(area.getName()))
+                    .anyMatch(area -> advice.equals(area.getText()))));
+            assertTrue(namedButtons(panel[0], "payHospitalBillButton").stream()
+                    .anyMatch(button -> medication.getBillId().equals(button.getActionCommand())));
+
+            assertTrue(context.send(HospitalActions.PAY_BILL,
+                    new PayHospitalBillRequest(medication.getBillId())).isSuccess());
+            SwingUtilities.invokeAndWait(panel[0]::activate);
+            assertTrue(awaitCondition(() -> namedButtons(panel[0], "payHospitalBillButton")
+                    .stream().noneMatch(button -> medication.getBillId()
+                            .equals(button.getActionCommand()))));
+        }
+    }
 
     @Test
     void ignoresAnOldAccountResponseThatArrivesAfterReactivation() throws Exception {
@@ -96,7 +151,8 @@ class PatientBillsPanelTest {
 
     @Test
     void displaysDoctorGeneratedFeeAndReloadsPaidState() throws Exception {
-        try (CampusServer server = new CampusServer(0, 2)) {
+        TestClock clock = TestClock.startingNow();
+        try (CampusServer server = new CampusServer(0, 2, ServerModules.createRouter(clock))) {
             server.start();
             ClientContext context = new ClientContext(
                     new CampusClient("127.0.0.1", server.getPort()));
@@ -107,6 +163,7 @@ class PatientBillsPanelTest {
                             HospitalActions.BOOK_APPOINTMENT,
                             BookAppointmentRequest.firstVisit("slot-general-1"))
                             .getData());
+            clock.advanceToFirstSeedSchedule();
             assertTrue(context.logout().isSuccess());
             assertTrue(context.login("20260029", "123456".toCharArray()).isSuccess());
             assertTrue(context.send(

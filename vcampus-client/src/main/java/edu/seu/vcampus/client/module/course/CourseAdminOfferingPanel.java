@@ -156,7 +156,7 @@ final class CourseAdminOfferingPanel
                 5));
 
         topPanel.add(
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "查看课程教学班、容量和当前状态"));
 
         topPanel.add(

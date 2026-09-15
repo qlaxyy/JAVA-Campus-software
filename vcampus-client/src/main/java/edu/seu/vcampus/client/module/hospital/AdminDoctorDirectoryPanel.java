@@ -49,7 +49,7 @@ final class AdminDoctorDirectoryPanel extends JPanel {
     private JPanel header(Runnable back) {
         JPanel header = HospitalPageHeader.create(
                 "医生名单",
-                "名单来自当前数据库，并按所属科室自动分组",
+                "",
                 "管理首页",
                 back,
                 null);
@@ -107,7 +107,7 @@ final class AdminDoctorDirectoryPanel extends JPanel {
     private void render(List<AdminDoctorView> doctors) {
         directory.removeAll();
         if (doctors.isEmpty()) {
-            directory.add(note("当前数据库中没有医生档案。可返回管理首页提交新增医生申请。"));
+            directory.add(note("暂无医生档案。"));
         } else {
             List<AdminDoctorView> ordered = new ArrayList<>(doctors);
             ordered.sort(Comparator

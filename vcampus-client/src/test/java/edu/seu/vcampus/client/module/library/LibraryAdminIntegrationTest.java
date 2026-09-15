@@ -24,7 +24,7 @@ class LibraryAdminIntegrationTest {
             ClientContext shopAdmin = login(server, "20260004");
 
             AddBookRequest addBook = new AddBookRequest("9787111000000", "阶段三测试", "测试作者",
-                    "C001", "东南大学出版社", 2026, "中文");
+                    "C001", "东南大学出版社", 2026, "中文", 6_800);
             assertEquals(ErrorCodes.AUTH_FORBIDDEN, reader.send(LibraryActions.ADD_BOOK, addBook).getCode());
             assertEquals(ErrorCodes.AUTH_FORBIDDEN, shopAdmin.send(LibraryActions.ADD_BOOK, addBook).getCode());
             BookDTO book = data(librarian.send(LibraryActions.ADD_BOOK, addBook), BookDTO.class);
@@ -39,7 +39,7 @@ class LibraryAdminIntegrationTest {
                     librarian.send(LibraryActions.ADD_BOOK_COPY, addCopy).getCode());
 
             UpdateBookRequest update = new UpdateBookRequest(book.getBookId(), book.getIsbn(), "阶段三测试（修订）",
-                    "测试作者", "C002", "东南大学出版社", 2026, "中文");
+                    "测试作者", "C002", "东南大学出版社", 2026, "中文", 6_800);
             BookDTO edited = data(librarian.send(LibraryActions.UPDATE_BOOK, update), BookDTO.class);
             assertEquals("文学", edited.getCategoryName());
             BookCopyDTO moved = data(librarian.send(LibraryActions.UPDATE_BOOK_COPY,

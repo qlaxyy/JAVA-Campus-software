@@ -39,11 +39,13 @@ final class UserUiTheme {
         JPanel panel = new JPanel(new BorderLayout(12, 2));
         panel.setOpaque(false);
         JLabel titleLabel = new JLabel(title);
+        if ("账号名单".equals(title)) { titleLabel.putClientProperty("module.pageTitle", true); }
         titleLabel.setForeground(TEXT);
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 20F));
         panel.add(titleLabel, BorderLayout.WEST);
 
         detail.setForeground(MUTED);
+        detail.putClientProperty("module.keepInPage", true);
         detail.setFont(detail.getFont().deriveFont(13F));
         detail.setHorizontalAlignment(SwingConstants.RIGHT);
         panel.add(detail, BorderLayout.EAST);
@@ -123,16 +125,15 @@ final class UserUiTheme {
             Color background,
             Color foreground,
             Color border) {
-        button.setUI(new BasicButtonUI());
+        button.setUI(new edu.seu.vcampus.client.view.RoundedButtonUI());
         button.setBackground(background);
         button.setForeground(foreground);
         button.setFont(button.getFont().deriveFont(Font.BOLD, 13F));
-        button.setBorder(BorderFactory.createCompoundBorder(
-                new LineBorder(border, 1, true),
-                BorderFactory.createEmptyBorder(8, 14, 8, 14)));
+        button.setBorder(BorderFactory.createEmptyBorder(8, 14, 8, 14));
         button.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         button.setFocusPainted(false);
-        button.setOpaque(true);
+        button.setOpaque(false);
+        button.setRolloverEnabled(true);
     }
 
     private static final class AdministrationCellRenderer

@@ -22,9 +22,49 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LoginPanelTest {
+    @Test void loginCompositionStaysCenteredAndCompactAtEveryWindowSize() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            LoginPanel panel = new LoginPanel(new ClientContext(new CampusClient("127.0.0.1", 1)));
+            try { java.nio.file.Files.createDirectories(java.nio.file.Path.of("target", "ui-review")); }
+            catch (java.io.IOException exception) { throw new AssertionError(exception); }
+            for (int[] size : new int[][]{{900, 560}, {1150, 650}, {1920, 1080}, {900, 560}}) {
+                panel.setSize(size[0], size[1]);
+                for (int pass = 0; pass < 4; pass++) { layoutTree(panel); }
+                Component composition = descendants(panel).stream()
+                        .filter(c -> "login.composition".equals(c.getName())).findFirst().orElseThrow();
+                assertTrue(composition.getWidth() <= 1100);
+                assertTrue(composition.getHeight() <= 600);
+                assertTrue(Math.abs(composition.getX() * 2 + composition.getWidth() - size[0]) <= 1);
+                assertTrue(Math.abs(composition.getY() * 2 + composition.getHeight() - size[1]) <= 1);
+                JLabel brand = (JLabel) descendants(panel).stream()
+                        .filter(c -> "login.brandTitle".equals(c.getName())).findFirst().orElseThrow();
+                assertEquals(javax.swing.SwingConstants.CENTER, brand.getHorizontalAlignment());
+                assertTrue(Math.abs(brand.getX() * 2 + brand.getWidth() - brand.getParent().getWidth()) <= 1);
+                Component username = descendants(panel).stream()
+                        .filter(c -> "login.username".equals(c.getName())).findFirst().orElseThrow();
+                assertTrue(username.getWidth() >= 280 && username.getWidth() <= 420);
+                assertEquals(42, username.getHeight());
+                java.awt.Point inputPosition = SwingUtilities.convertPoint(username.getParent(), username.getLocation(), composition);
+                assertTrue(inputPosition.x > composition.getWidth() / 2, "login inputs belong on the right");
+                assertEquals(0, brand.getParent().getX(), "campus illustration belongs on the left");
+                java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(size[0], size[1], java.awt.image.BufferedImage.TYPE_INT_RGB);
+                java.awt.Graphics2D graphics = image.createGraphics(); panel.paint(graphics); graphics.dispose();
+                try { javax.imageio.ImageIO.write(image, "png", java.nio.file.Path.of("target", "ui-review", "login-new-" + size[0] + ".png").toFile()); }
+                catch (java.io.IOException exception) { throw new AssertionError(exception); }
+            }
+        });
+    }
+
+    private static void layoutTree(Container container) {
+        container.doLayout();
+        for (Component component : container.getComponents()) {
+            if (component instanceof Container child && child.isVisible()) { layoutTree(child); }
+        }
+    }
+
 
     @Test
-    void initialViewOffersCredentialFieldsLoginActionAndTestAccounts() throws Exception {
+    void initialViewOffersCredentialsWithoutPublicDemoAccounts() throws Exception {
         AtomicReference<LoginPanel> panelReference = new AtomicReference<>();
         SwingUtilities.invokeAndWait(() -> panelReference.set(new LoginPanel(
                 new ClientContext(new CampusClient("127.0.0.1", 1)))));
@@ -43,31 +83,11 @@ class LoginPanelTest {
 
         assertEquals(List.of("登录"), buttons);
         assertTrue(labels.contains("欢迎登录"));
-        assertTrue(labels.contains("开发阶段测试账号"));
-        assertTrue(labels.contains("以下账号统一密码：123456"));
+        assertFalse(labels.contains("开发阶段测试账号"));
+        assertFalse(labels.contains("以下账号统一密码：123456"));
         assertFalse(labels.contains("用户登录"));
         assertFalse(labels.contains("开发期基础登录"));
-        assertTrue(labels.contains("超级管理员  20260000"));
-        assertTrue(labels.contains("学生账号  20260006"));
-        assertTrue(labels.contains("医生账号  20260030"));
-        assertTrue(labels.contains("学籍管理员  20260001"));
-        assertTrue(labels.contains("选课管理员  20260002"));
-        assertTrue(labels.contains("图书馆管理员  20260003"));
-        assertTrue(labels.contains("商店管理员  20260004"));
-        assertTrue(labels.contains("医院管理员  20260005"));
-        assertTrue(labels.contains("教师账号  20260021"));
-        assertEquals(List.of(
-                "超级管理员  20260000",
-                "学籍管理员  20260001",
-                "选课管理员  20260002",
-                "图书馆管理员  20260003",
-                "商店管理员  20260004",
-                "医院管理员  20260005",
-                "学生账号  20260006",
-                "教师账号  20260021",
-                "医生账号  20260030"),
-                labels.stream().filter(text -> text.matches(".*2026\\d{4}"))
-                        .toList());
+        assertTrue(labels.stream().noneMatch(text -> text.matches(".*2026\\d{4}")));
     }
 
     @Test

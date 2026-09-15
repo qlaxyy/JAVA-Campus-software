@@ -4,7 +4,7 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
-/** Read-only description of one account-management operation. */
+/** Read-only description of an account-management operation or database write. */
 public final class UserAuditLogEntry implements Serializable {
 
     @Serial

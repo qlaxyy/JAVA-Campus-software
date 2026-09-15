@@ -90,7 +90,7 @@ final class SelectedCoursePanel extends JPanel {
                 "已选课程");
 
         JLabel subtitle =
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "查看当前学期已经选择的教学班，并在允许时退课");
 
         header.add(

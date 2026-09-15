@@ -128,7 +128,7 @@ public final class HospitalView extends JPanel {
                                 this::openAdminDepartments),
                         new HospitalStaffHomePanel.WorkspaceFeature(
                                 "医生名单",
-                                "按科室查看当前数据库中的在岗与已停用医生。",
+                                "在岗与已停用医生",
                                 "查看医生名单",
                                 this::openAdminDoctorDirectory),
                         new HospitalStaffHomePanel.WorkspaceFeature(

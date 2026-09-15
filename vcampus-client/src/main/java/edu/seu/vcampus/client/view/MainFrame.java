@@ -52,7 +52,7 @@ public final class MainFrame extends JFrame {
     private static final String LOGIN_CARD = "login";
     private static final String WORKSPACE_CARD = "workspace";
     private static final String MODULE_HOME_CARD = "module-home";
-    private static final Color NAVY = new Color(18, 59, 74);
+    private static final Color NAVY = new Color(24, 40, 59);
     private static final Color PRIMARY = new Color(15, 118, 110);
     private static final Color SURFACE = new Color(244, 248, 247);
     private static final Color TEXT = new Color(30, 41, 59);
@@ -143,30 +143,33 @@ public final class MainFrame extends JFrame {
         workspace.setBackground(SURFACE);
 
         JPanel headerPanel = createWorkspaceHeader();
-        JPanel statusPanel = createStatusBar();
 
         List<ClientModule> modules = ClientModules.all().stream()
                 .filter(module -> ModuleAccessPolicy.isVisible(session, module.id()))
                 .toList();
         CardLayout moduleLayout = new CardLayout();
         JPanel modulePanel = new JPanel(moduleLayout);
-        modulePanel.add(createModuleHome(modules, modulePanel, moduleLayout), MODULE_HOME_CARD);
+        JPanel home = new JPanel(new BorderLayout());
+        home.add(headerPanel, BorderLayout.NORTH);
+        home.add(ResponsiveLayout.constrain(
+                createModuleHome(modules, modulePanel, moduleLayout)), BorderLayout.CENTER);
+        modulePanel.add(home, MODULE_HOME_CARD);
         for (ClientModule module : modules) {
             modulePanel.add(createModulePage(module, modulePanel, moduleLayout), module.id());
         }
         moduleLayout.show(modulePanel, MODULE_HOME_CARD);
 
-        workspace.add(headerPanel, BorderLayout.NORTH);
         workspace.add(modulePanel, BorderLayout.CENTER);
-        workspace.add(statusPanel, BorderLayout.SOUTH);
         return workspace;
     }
 
     private JPanel createWorkspaceHeader() {
         GradientHeader header = new GradientHeader();
-        header.setLayout(new BorderLayout(24, 0));
-        header.setBorder(BorderFactory.createEmptyBorder(15, 30, 15, 30));
+        header.setLayout(new BorderLayout());
         header.setPreferredSize(new Dimension(0, 82));
+        JPanel content = new JPanel(new BorderLayout(24, 0));
+        content.setOpaque(false);
+        content.setBorder(BorderFactory.createEmptyBorder(15, 30, 15, 30));
 
         JLabel logo = new JLabel("V", SwingConstants.CENTER);
         logo.setOpaque(true);
@@ -185,7 +188,7 @@ public final class MainFrame extends JFrame {
         title.setForeground(Color.WHITE);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 20F));
         JLabel subtitle = new JLabel("VIRTUAL CAMPUS");
-        subtitle.setForeground(new Color(167, 243, 208));
+        subtitle.setForeground(new Color(216, 193, 143));
         subtitle.setFont(subtitle.getFont().deriveFont(Font.BOLD, 11F));
         titles.add(title);
         titles.add(subtitle);
@@ -204,24 +207,27 @@ public final class MainFrame extends JFrame {
         account.add(sessionLabel, BorderLayout.CENTER);
         account.add(accountActions, BorderLayout.EAST);
 
-        header.add(brand, BorderLayout.WEST);
-        header.add(account, BorderLayout.EAST);
+        content.add(brand, BorderLayout.WEST);
+        content.add(account, BorderLayout.EAST);
+        header.add(ResponsiveLayout.constrain(content), BorderLayout.CENTER);
         return header;
     }
 
     private JPanel createStatusBar() {
-        JPanel status = new JPanel(new BorderLayout(16, 0));
+        JPanel status = new JPanel(new BorderLayout());
         status.setBackground(Color.WHITE);
-        status.setBorder(BorderFactory.createCompoundBorder(
-                new MatteBorder(1, 0, 0, 0, BORDER),
-                BorderFactory.createEmptyBorder(10, 30, 10, 30)));
+        status.setBorder(new MatteBorder(1, 0, 0, 0, BORDER));
+        JPanel content = new JPanel(new BorderLayout(16, 0));
+        content.setOpaque(false);
+        content.setBorder(BorderFactory.createEmptyBorder(10, 30, 10, 30));
 
         statusLabel.setHorizontalAlignment(SwingConstants.LEFT);
         statusLabel.setForeground(MUTED);
         statusLabel.setFont(statusLabel.getFont().deriveFont(13F));
         styleOutlineButton(pingButton);
-        status.add(statusLabel, BorderLayout.CENTER);
-        status.add(pingButton, BorderLayout.EAST);
+        content.add(statusLabel, BorderLayout.CENTER);
+        content.add(pingButton, BorderLayout.EAST);
+        status.add(ResponsiveLayout.constrain(content), BorderLayout.CENTER);
         return status;
     }
 
@@ -245,7 +251,7 @@ public final class MainFrame extends JFrame {
         introduction.add(hint);
         home.add(introduction, BorderLayout.NORTH);
 
-        JPanel tiles = new JPanel(new GridLayout(0, 3, 18, 18));
+        JPanel tiles = ResponsiveLayout.grid(3, 250, 18);
         tiles.setOpaque(false);
 
         for (ClientModule module : modules) {
@@ -255,17 +261,11 @@ public final class MainFrame extends JFrame {
             tiles.add(button);
         }
 
-        JPanel tileArea = new JPanel(new GridBagLayout());
+        JPanel tileArea = new JPanel(new BorderLayout());
         tileArea.setOpaque(false);
-        GridBagConstraints constraints = new GridBagConstraints();
-        constraints.gridx = 0;
-        constraints.gridy = 0;
-        constraints.weightx = 1.0;
-        constraints.weighty = 1.0;
-        constraints.fill = GridBagConstraints.HORIZONTAL;
-        constraints.anchor = GridBagConstraints.NORTH;
-        constraints.insets = new Insets(24, 0, 0, 0);
-        tileArea.add(tiles, constraints);
+        tileArea.setBorder(BorderFactory.createEmptyBorder(24, 0, 0, 0));
+        tileArea.add(ResponsiveLayout.verticalScroll(
+                ResponsiveLayout.compact(tiles, ResponsiveLayout.CONTENT_WIDTH)), BorderLayout.CENTER);
         home.add(tileArea, BorderLayout.CENTER);
         return home;
     }
@@ -274,42 +274,22 @@ public final class MainFrame extends JFrame {
             ClientModule module,
             JPanel modulePanel,
             CardLayout moduleLayout) {
-        JPanel page = new JPanel(new BorderLayout());
-        page.setBackground(SURFACE);
         JComponent moduleView = module.createView(context);
-        JButton backButton = new JButton("←  返回校园服务");
-        backButton.setName("module.back." + module.id());
-        backButton.addActionListener(event -> {
+        return new ModulePage(module.id(), module.displayName(),
+                () -> context.currentSession().map(SessionInfo::getDisplayName).orElse(""), moduleView, () -> {
             if (moduleView instanceof ModuleViewLifecycle lifecycle) {
                 lifecycle.onModuleExit();
             }
             moduleLayout.show(modulePanel, MODULE_HOME_CARD);
         });
-        styleOutlineButton(backButton);
-
-        JPanel toolbar = new JPanel(new BorderLayout());
-        toolbar.setBackground(Color.WHITE);
-        toolbar.setBorder(BorderFactory.createCompoundBorder(
-                new MatteBorder(0, 0, 1, 0, BORDER),
-                BorderFactory.createEmptyBorder(12, 30, 12, 30)));
-        toolbar.add(backButton, BorderLayout.WEST);
-        JLabel moduleTitle = new JLabel(module.displayName(), SwingConstants.RIGHT);
-        moduleTitle.setForeground(TEXT);
-        moduleTitle.setFont(moduleTitle.getFont().deriveFont(Font.BOLD, 18F));
-        toolbar.add(moduleTitle, BorderLayout.EAST);
-
-        page.add(toolbar, BorderLayout.NORTH);
-        page.add(moduleView, BorderLayout.CENTER);
-        return page;
     }
 
     private static void styleHeaderButton(JButton button) {
-        button.setUI(new BasicButtonUI());
+        button.setUI(new RoundedButtonUI());
+        button.setBackground(new Color(19, 104, 101));
         button.setForeground(Color.WHITE);
         button.setFont(button.getFont().deriveFont(Font.BOLD, 13F));
-        button.setBorder(BorderFactory.createCompoundBorder(
-                new MatteBorder(1, 1, 1, 1, new Color(121, 191, 184)),
-                BorderFactory.createEmptyBorder(8, 15, 8, 15)));
+        button.setBorder(BorderFactory.createEmptyBorder(8, 15, 8, 15));
         button.setFocusPainted(false);
         button.setContentAreaFilled(false);
         button.setOpaque(false);
@@ -503,8 +483,13 @@ public final class MainFrame extends JFrame {
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
                     statusLabel.setText("密码修改已中断");
+                    JOptionPane.showMessageDialog(MainFrame.this, "密码修改已中断，请重试。",
+                            "修改密码", JOptionPane.WARNING_MESSAGE);
                 } catch (ExecutionException exception) {
                     statusLabel.setText("密码修改失败，请确认服务器已经启动");
+                    JOptionPane.showMessageDialog(MainFrame.this,
+                            "密码修改失败，请确认服务器连接正常。", "修改密码",
+                            JOptionPane.ERROR_MESSAGE);
                 } finally {
                     changePasswordButton.setEnabled(true);
                     logoutButton.setEnabled(true);
@@ -575,8 +560,11 @@ public final class MainFrame extends JFrame {
                     ? new Color(94, 190, 176)
                     : BORDER);
             copy.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 18, 18);
-            copy.setColor(PRIMARY);
-            copy.fillRoundRect(0, 0, 5, getHeight(), 5, 5);
+            copy.setColor(getModel().isRollover() ? new Color(191, 163, 105) : PRIMARY);
+            copy.fillRoundRect(0, 14, 4, getHeight() - 28, 4, 4);
+            copy.setFont(getFont().deriveFont(Font.PLAIN, 24F));
+            copy.setColor(new Color(147, 161, 170));
+            copy.drawString("›", getWidth() - 30, getHeight() / 2 + 8);
             copy.dispose();
             super.paintComponent(graphics);
         }

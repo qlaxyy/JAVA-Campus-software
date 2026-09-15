@@ -3,8 +3,15 @@ package edu.seu.vcampus.server.module.library;
 import edu.seu.vcampus.common.library.AddBookCopyRequest;
 import edu.seu.vcampus.common.library.AddBookCategoryRequest;
 import edu.seu.vcampus.common.library.AddBookRequest;
+import edu.seu.vcampus.common.library.AddLocationRequest;
 import edu.seu.vcampus.common.library.AdminBorrowQueryRequest;
 import edu.seu.vcampus.common.library.AdminBorrowRecordDTO;
+import edu.seu.vcampus.common.library.AdminReservationDTO;
+import edu.seu.vcampus.common.library.AdminReservationQueryRequest;
+import edu.seu.vcampus.common.library.CategoryStatisticDTO;
+import edu.seu.vcampus.common.library.LibraryLocationDTO;
+import edu.seu.vcampus.common.library.LibraryStatisticsDTO;
+import edu.seu.vcampus.common.library.PopularBookDTO;
 import edu.seu.vcampus.common.library.BookCategoryDTO;
 import edu.seu.vcampus.common.library.BookCopyDTO;
 import edu.seu.vcampus.common.library.BookCopyIdRequest;
@@ -28,6 +35,8 @@ import edu.seu.vcampus.common.library.UpdateBookRequest;
 import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.ModuleNames;
 import edu.seu.vcampus.common.user.SessionInfo;
+import edu.seu.vcampus.server.module.card.CampusCardWallet;
+import edu.seu.vcampus.server.module.card.CardBusinessException;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -52,6 +61,12 @@ final class LibraryService {
     private static final int MAX_ACTIVE_RESERVATIONS = 3;
     private static final int RESERVATION_HOLD_HOURS = 24;
     private static final int RESERVATION_COOLDOWN_DAYS = 7;
+    private static final int FINE_PER_DAY_FEN = 50;
+    private static final int MAX_FINE_FEN = 5_000;
+    private static final int MIN_BOOK_PRICE_FEN = 1;
+    private static final int MAX_BOOK_PRICE_FEN = 999_999;
+    private static final int LOST_HANDLING_FEE_FEN = 500;
+    private static final int POPULAR_BOOK_LIMIT = 5;
 
     private final BookRepository bookRepository;
     private final BorrowRecordRepository borrowRecordRepository;
@@ -63,6 +78,8 @@ final class LibraryService {
     private final ReservationRepository reservationRepository;
     private final LibraryTransactionManager transactionManager;
     private final Supplier<String> reservationIdSupplier;
+    private final CampusCardWallet campusCards;
+    private final BookLocationRepository locationRepository;
 
     LibraryService(
             BookRepository bookRepository,
@@ -104,6 +121,35 @@ final class LibraryService {
             ReservationRepository reservationRepository,
             LibraryTransactionManager transactionManager,
             Supplier<String> reservationIdSupplier) {
+        this(bookRepository, borrowRecordRepository, clock, recordIdSupplier,
+                categoryRepository, bookCopyRepository, reservationRepository,
+                transactionManager, reservationIdSupplier, null);
+    }
+
+    /**
+     * @param campusCards campus-card wallet used to settle fees,
+     *        or {@code null} when the module runs without payment (unit tests, memory router)
+     */
+    LibraryService(BookRepository bookRepository, BorrowRecordRepository borrowRecordRepository,
+            Clock clock, Supplier<String> recordIdSupplier,
+            BookCategoryRepository categoryRepository, BookCopyRepository bookCopyRepository,
+            ReservationRepository reservationRepository,
+            LibraryTransactionManager transactionManager,
+            Supplier<String> reservationIdSupplier,
+            CampusCardWallet campusCards) {
+        this(bookRepository, borrowRecordRepository, clock, recordIdSupplier, categoryRepository,
+                bookCopyRepository, reservationRepository, transactionManager,
+                reservationIdSupplier, campusCards, new InMemoryBookLocationRepository());
+    }
+
+    LibraryService(BookRepository bookRepository, BorrowRecordRepository borrowRecordRepository,
+            Clock clock, Supplier<String> recordIdSupplier,
+            BookCategoryRepository categoryRepository, BookCopyRepository bookCopyRepository,
+            ReservationRepository reservationRepository,
+            LibraryTransactionManager transactionManager,
+            Supplier<String> reservationIdSupplier,
+            CampusCardWallet campusCards,
+            BookLocationRepository locationRepository) {
         this.bookRepository = Objects.requireNonNull(
                 bookRepository, "bookRepository must not be null");
         this.borrowRecordRepository = Objects.requireNonNull(
@@ -120,46 +166,144 @@ final class LibraryService {
                 transactionManager, "transactionManager must not be null");
         this.reservationIdSupplier = Objects.requireNonNull(
                 reservationIdSupplier, "reservationIdSupplier must not be null");
+        this.campusCards = campusCards;
+        this.locationRepository = Objects.requireNonNull(
+                locationRepository, "locationRepository must not be null");
     }
 
     BookSearchResult searchBooks(BookSearchRequest request) {
-        Objects.requireNonNull(request, "request must not be null");
-        String keyword = request.getKeyword() == null ? "" : request.getKeyword().strip();
-        if (keyword.length() > MAX_KEYWORD_LENGTH) {
-            throw new IllegalArgumentException("搜索关键词不能超过 50 个字符");
-        }
-        String categoryId = request.getCategoryId();
-        synchronized (circulationLock) {
-            cleanExpiredReservations();
-            if (categoryId != null) { categoryId = requireCategory(categoryId).getCategoryId(); }
-            String filter = categoryId;
-            return new BookSearchResult(bookRepository.search(keyword).stream()
-                    .filter(book -> filter == null || book.getCategoryId().equals(filter))
-                    .map(this::withInventorySummary)
-                    .toList());
-        }
+        return searchCatalog(request, false);
     }
 
     BookSearchResult searchBooksForAdmin(SessionInfo actor, BookSearchRequest request) {
         requireAdministrator(actor);
+        return searchCatalog(request, true);
+    }
+
+    /**
+     * Runs one catalog query and returns a single page of it.
+     *
+     * <p>The searchable fields span two tables, so neither repository can answer a query alone:
+     * the catalog row supplies title, author, ISBN, category, publisher, language and year through
+     * {@link BookDTO#matchesKeyword}, while the physical copies supply the shelf mark and barcode.
+     * Both halves are matched here so they stay one predicate that cannot drift apart.
+     *
+     * <p>Paging happens before the inventory summary, so a query only reads the copies of the page
+     * it actually returns rather than every match.
+     *
+     * @param request keyword, category filter and page to return
+     * @param includeInactive whether withdrawn catalog rows stay visible; administrators only
+     */
+    private BookSearchResult searchCatalog(BookSearchRequest request, boolean includeInactive) {
         Objects.requireNonNull(request, "request must not be null");
         String keyword = request.getKeyword() == null ? "" : request.getKeyword().strip();
         if (keyword.length() > MAX_KEYWORD_LENGTH) {
             throw new IllegalArgumentException("搜索关键词不能超过 50 个字符");
         }
+        int page = request.getPage();
+        int pageSize = request.getPageSize();
+        if (page < 1) {
+            throw new IllegalArgumentException("页码必须从 1 开始");
+        }
+        if (pageSize < 1 || pageSize > BookSearchRequest.MAX_PAGE_SIZE) {
+            throw new IllegalArgumentException(
+                    "每页数量只能是 1 到 " + BookSearchRequest.MAX_PAGE_SIZE + " 条");
+        }
         synchronized (circulationLock) {
             cleanExpiredReservations();
-            String categoryId = request.getCategoryId();
-            if (categoryId != null) { categoryId = requireCategory(categoryId).getCategoryId(); }
-            String filter = categoryId;
-            return new BookSearchResult(bookRepository.searchAll(keyword).stream()
-                    .filter(book -> filter == null || book.getCategoryId().equals(filter))
+            String filter = request.getCategoryId() == null
+                    ? null : requireCategory(request.getCategoryId()).getCategoryId();
+            List<BookDTO> matched = matchCatalog(keyword, filter, includeInactive);
+            int total = matched.size();
+            long offset = (long) (page - 1) * pageSize;
+            int from = offset >= total ? total : (int) offset;
+            int to = Math.min(from + pageSize, total);
+            return new BookSearchResult(matched.subList(from, to).stream()
                     .map(this::withInventorySummary)
-                    .toList());
+                    .toList(), total, page, pageSize);
         }
     }
 
+    /**
+     * @return every catalog row matching the keyword and category, in repository order
+     */
+    private List<BookDTO> matchCatalog(String keyword, String categoryId, boolean includeInactive) {
+        String normalised = keyword.toLowerCase(java.util.Locale.ROOT);
+        java.util.Set<String> byShelfMark = normalised.isEmpty()
+                ? java.util.Set.of() : bookIdsMatchingCopies(normalised);
+        return (includeInactive ? bookRepository.searchAll("") : bookRepository.search(""))
+                .stream()
+                .filter(book -> normalised.isEmpty()
+                        || book.matchesKeyword(normalised)
+                        || byShelfMark.contains(book.getBookId()))
+                .filter(book -> categoryId == null || book.getCategoryId().equals(categoryId))
+                .toList();
+    }
+
+    /** @return identifiers of books with a copy whose shelf mark or barcode matches */
+    private java.util.Set<String> bookIdsMatchingCopies(String normalised) {
+        return bookCopyRepository.findAll().stream()
+                .filter(copy -> containsIgnoreCase(copy.callNumber(), normalised)
+                        || containsIgnoreCase(copy.barcode(), normalised))
+                .map(BookCopy::bookId)
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private static boolean containsIgnoreCase(String value, String normalised) {
+        return value != null && value.toLowerCase(java.util.Locale.ROOT).contains(normalised);
+    }
+
     List<BookCategoryDTO> listCategories() { return categoryRepository.findAll(); }
+
+    /**
+     * Lists the holding-location dictionary with how many copies sit at each place.
+     *
+     * @param actor must be a library administrator
+     */
+    List<LibraryLocationDTO> listLocations(SessionInfo actor) {
+        requireAdministrator(actor);
+        synchronized (circulationLock) {
+            Map<String, Integer> counts = new java.util.HashMap<>();
+            for (BookCopy copy : bookCopyRepository.findAll()) {
+                if (copy.status() != BookCopyStatus.WITHDRAWN) {
+                    counts.merge(copy.location(), 1, Integer::sum);
+                }
+            }
+            return locationRepository.findAll().stream()
+                    .map(name -> new LibraryLocationDTO(name, counts.getOrDefault(name, 0)))
+                    .toList();
+        }
+    }
+
+    LibraryLocationDTO addLocation(SessionInfo actor, AddLocationRequest request) {
+        requireAdministrator(actor);
+        Objects.requireNonNull(request, "request must not be null");
+        synchronized (circulationLock) {
+            String name = boundedText(request.getLocationName(), "馆藏地", 100);
+            if (locationRepository.findAll().stream().anyMatch(existing ->
+                    existing.equalsIgnoreCase(name))) {
+                throw failure(ErrorCodes.LIBRARY_DUPLICATE_LOCATION, "该馆藏地已经存在");
+            }
+            locationRepository.save(name);
+            return new LibraryLocationDTO(name, 0);
+        }
+    }
+
+    /**
+     * Accepts a location only if the dictionary knows it.
+     *
+     * <p>A copy is filed by room name, so a typo would silently strand it in a room that does not
+     * exist — it would disappear from every "<em>this book</em> is at" list an administrator or
+     * reader can enumerate. Requiring a dictionary entry makes a new room a deliberate act.
+     */
+    private String requireLocation(String value) {
+        String location = boundedText(value, "馆藏地", 100);
+        if (!locationRepository.exists(location)) {
+            throw failure(ErrorCodes.LIBRARY_LOCATION_NOT_FOUND,
+                    "馆藏地不在字典中，请先新增该馆藏地");
+        }
+        return location;
+    }
 
     BookCategoryDTO addCategory(SessionInfo actor, AddBookCategoryRequest request) {
         requireAdministrator(actor);
@@ -197,7 +341,8 @@ final class LibraryService {
             while (bookRepository.findIncludingInactive(id).isPresent());
             BookDTO book = new BookDTO(id, isbn, title, author,
                     category.getCategoryId(), category.getCategoryName(),
-                    publisher, publicationYear, language, "ACTIVE", List.of());
+                    publisher, publicationYear, language, "ACTIVE", List.of(),
+                    validatedPrice(request.getPriceFen()));
             bookRepository.insert(book);
             return withInventorySummary(book);
         }
@@ -218,7 +363,8 @@ final class LibraryService {
                     optionalText(request.getPublisher(), "出版社", 100),
                     publicationYear(request.getPublicationYear()),
                     optionalText(request.getLanguage(), "语种", 30),
-                    original.getStatus(), original.getLocations());
+                    original.getStatus(), original.getLocations(),
+                    validatedPrice(request.getPriceFen()));
             bookRepository.update(updated);
             return withInventorySummary(updated);
         }
@@ -260,14 +406,14 @@ final class LibraryService {
                 if (bookCopyRepository.findByBarcode(barcode).isPresent()) {
                     throw failure(ErrorCodes.LIBRARY_DUPLICATE_BARCODE, "馆藏条码已存在");
                 }
+                String location = requireLocation(request.getLocation());
+                String callNumber = boundedText(request.getCallNumber(), "索书号", 100);
                 String copyId;
                 do {
                     copyId = "CP-" + UUID.randomUUID().toString().replace("-", "");
                 } while (bookCopyRepository.findById(copyId).isPresent());
                 BookCopy copy = new BookCopy(copyId, barcode, book.getBookId(),
-                        boundedText(request.getLocation(), "馆藏地", 100),
-                        boundedText(request.getCallNumber(), "索书号", 100),
-                        BookCopyStatus.AVAILABLE);
+                        location, callNumber, BookCopyStatus.AVAILABLE);
                 bookCopyRepository.insert(copy);
                 return toBookCopyDTO(assignAvailableCopy(copy, now));
             });
@@ -303,7 +449,7 @@ final class LibraryService {
                             "预约保留中的单册不能修改");
                 }
                 BookCopy updated = original.withLocation(
-                        boundedText(request.getLocation(), "馆藏地", 100),
+                        requireLocation(request.getLocation()),
                         boundedText(request.getCallNumber(), "索书号", 100));
                 bookCopyRepository.update(updated);
                 return toBookCopyDTO(updated);
@@ -407,6 +553,18 @@ final class LibraryService {
         return value.strip();
     }
 
+    /**
+     * Validates a list price in fen. Every catalog record must be priced because lost-book
+     * compensation is derived from it, so an unpriced book would be unclaimable.
+     */
+    private int validatedPrice(int priceFen) {
+        if (priceFen < MIN_BOOK_PRICE_FEN || priceFen > MAX_BOOK_PRICE_FEN) {
+            throw new IllegalArgumentException(
+                    "定价须为 0.01 元至 9999.99 元");
+        }
+        return priceFen;
+    }
+
     private Integer publicationYear(Integer value) {
         if (value != null && (value < 1000 || value > 9999)) {
             throw new IllegalArgumentException("出版年须为 1000 至 9999，或留空");
@@ -417,7 +575,8 @@ final class LibraryService {
     private BookDTO copyBook(BookDTO book, String status) {
         return new BookDTO(book.getBookId(), book.getIsbn(), book.getTitle(), book.getAuthor(),
                 book.getCategoryId(), book.getCategoryName(), book.getPublisher(),
-                book.getPublicationYear(), book.getLanguage(), status, book.getLocations());
+                book.getPublicationYear(), book.getLanguage(), status, book.getLocations(),
+                book.getPriceFen());
     }
 
     private void requireUniqueIsbn(String isbn, String currentId) {
@@ -481,6 +640,10 @@ final class LibraryService {
         if (currentBorrows.stream().anyMatch(record -> record.isOverdueAt(now))) {
             throw failure(ErrorCodes.LIBRARY_OVERDUE_BORROW_EXISTS,
                     "存在逾期未还图书，请先归还后再预约");
+        }
+        if (!outstandingFeeRecords(userId).isEmpty()) {
+            throw failure(ErrorCodes.LIBRARY_OUTSTANDING_FEE,
+                    "存在未缴清的图书费用，请先结清后再预约");
         }
         if (currentBorrows.stream().map(this::requireCopyForRecord)
                 .anyMatch(copy -> copy.bookId().equals(bookId))) {
@@ -661,6 +824,10 @@ final class LibraryService {
             return BorrowDecision.denied(ErrorCodes.LIBRARY_OVERDUE_BORROW_EXISTS,
                     "你有逾期未还图书，请先归还后再借阅");
         }
+        if (!outstandingFeeRecords(userId).isEmpty()) {
+            return BorrowDecision.denied(ErrorCodes.LIBRARY_OUTSTANDING_FEE,
+                    "你有未缴清的图书费用，请先结清后再借阅");
+        }
         if (currentBorrows.size() >= MAX_ACTIVE_BORROWS) {
             return BorrowDecision.denied(ErrorCodes.LIBRARY_BORROW_LIMIT_REACHED,
                     "你已达到同时借阅 5 本的上限");
@@ -742,6 +909,139 @@ final class LibraryService {
         }
     }
 
+    /**
+     * Settles the outstanding fee of one record through the campus-card wallet.
+     *
+     * <p>Concurrency is already covered by {@code circulationLock}: two concurrent payments for
+     * the same record serialize, and the second sees {@code feeSettledAt} set and is rejected
+     * before any money moves. The wallet's own idempotency on {@code merchant + reference} is a
+     * second line of defence. If the local write fails after a successful debit, the charge is
+     * credited back so the reader is never left out of pocket.
+     *
+     * @param session authenticated reader; the record must belong to this user
+     * @param request identifies the borrow record
+     * @return the settled record
+     */
+    BorrowRecordDTO payFee(SessionInfo session, BorrowRecordIdRequest request) {
+        Objects.requireNonNull(session, "session must not be null");
+        Objects.requireNonNull(request, "request must not be null");
+        String recordId = requireText(request.getRecordId(), "recordId");
+        synchronized (circulationLock) {
+            return inTransaction(() -> {
+                LocalDateTime now = now();
+                BorrowRecord record = borrowRecordRepository.findById(recordId)
+                        .filter(value -> value.userId().equals(session.getUserId()))
+                        .orElseThrow(() -> failure(
+                                ErrorCodes.LIBRARY_BORROW_RECORD_NOT_FOUND,
+                                "借阅记录不存在，请刷新后重试"));
+                int feeFen = feeFenOf(record);
+                if (feeFen <= 0 || record.feeSettledAt() != null) {
+                    throw failure(ErrorCodes.LIBRARY_FEE_NOT_PAYABLE,
+                            "该记录没有待缴费用，或费用已经结清");
+                }
+                if (campusCards == null) {
+                    throw failure(ErrorCodes.LIBRARY_FEE_NOT_PAYABLE,
+                            "当前服务器未连接校园卡网关，暂时无法缴费");
+                }
+                boolean charged = false;
+                try {
+                    campusCards.debit(session, feeFen, ModuleNames.LIBRARY, "fee:" + recordId);
+                    charged = true;
+                } catch (CardBusinessException exception) {
+                    throw mapCardFailure(exception);
+                }
+                BorrowRecord settled = record.feeSettledAt(now);
+                try {
+                    borrowRecordRepository.update(settled);
+                } catch (RuntimeException exception) {
+                    if (charged) {
+                        campusCards.credit(session, feeFen, ModuleNames.LIBRARY,
+                                "fee-refund:" + recordId);
+                    }
+                    throw exception;
+                }
+                return toBorrowRecordDTO(settled, now);
+            });
+        }
+    }
+
+    /**
+     * Reports one active borrow as lost: the loan is closed and the physical copy is withdrawn in
+     * the same transaction, so the collection and the record never disagree. Compensation becomes
+     * payable immediately and is derived from the book price.
+     *
+     * @param session authenticated reader; the record must belong to this user
+     * @param request identifies the borrow record
+     * @return the closed record, now carrying lost-book compensation
+     */
+    BorrowRecordDTO reportLost(SessionInfo session, BorrowRecordIdRequest request) {
+        Objects.requireNonNull(session, "session must not be null");
+        Objects.requireNonNull(request, "request must not be null");
+        String recordId = requireText(request.getRecordId(), "recordId");
+        synchronized (circulationLock) {
+            return inTransaction(() -> {
+                LocalDateTime now = now();
+                expireReservations(now);
+                BorrowRecord record = borrowRecordRepository.findById(recordId)
+                        .filter(value -> value.userId().equals(session.getUserId()))
+                        .orElseThrow(() -> failure(
+                                ErrorCodes.LIBRARY_BORROW_RECORD_NOT_FOUND,
+                                "借阅记录不存在，请刷新后重试"));
+                if (record.status() != BorrowStatus.BORROWED || record.isLost()) {
+                    throw failure(ErrorCodes.LIBRARY_LOST_NOT_REPORTABLE,
+                            "只有当前在借的记录可以申报丢失");
+                }
+                BookCopy copy = requireCopyForRecord(record);
+                if (copy.status() != BookCopyStatus.LOANED) {
+                    throw failure(ErrorCodes.LIBRARY_LOST_NOT_REPORTABLE,
+                            "该单册当前不可申报丢失，请联系图书馆管理员");
+                }
+                bookCopyRepository.update(copy.withStatus(BookCopyStatus.WITHDRAWN));
+                BorrowRecord lost = record.lostAt(now);
+                borrowRecordRepository.update(lost);
+                return toBorrowRecordDTO(lost, now);
+            });
+        }
+    }
+
+    /**
+     * Fee owed by one record: lost-book compensation when the loan was reported lost, otherwise
+     * the overdue fine of a late return. The two are mutually exclusive — a lost loan produces no
+     * fine, which {@link BorrowRecord#overdueFineFen} already guarantees.
+     *
+     * <p>The amount is never stored: the inputs it derives from ({@code dueTime},
+     * {@code returnTime}, {@code lostReportedAt} and the book price) do not change once written,
+     * matching the module's "overdue is computed, not stored" design.
+     *
+     * <p>Missing lookup targets degrade to zero rather than throwing: this runs on query paths
+     * such as the borrow decision, which must not fail because of an orphaned record.
+     */
+    private int feeFenOf(BorrowRecord record) {
+        if (record.isLost()) {
+            return lostBookPriceFen(record) + LOST_HANDLING_FEE_FEN;
+        }
+        return record.overdueFineFen(FINE_PER_DAY_FEN, MAX_FINE_FEN);
+    }
+
+    private int lostBookPriceFen(BorrowRecord record) {
+        return bookCopyRepository.findById(record.copyId())
+                .flatMap(copy -> bookRepository.findIncludingInactive(copy.bookId()))
+                .map(BookDTO::getPriceFen)
+                .orElse(0);
+    }
+
+    /** Closed records that still owe money; settled fees and fee-free records are excluded. */
+    private List<BorrowRecord> outstandingFeeRecords(String userId) {
+        return borrowRecordRepository.findByUserId(userId).stream()
+                .filter(record -> record.feeSettledAt() == null)
+                .filter(record -> feeFenOf(record) > 0)
+                .toList();
+    }
+
+    private LibraryBusinessException mapCardFailure(CardBusinessException exception) {
+        return new LibraryBusinessException(exception.code(), exception.getMessage());
+    }
+
     List<AdminBorrowRecordDTO> queryBorrows(
             SessionInfo actor, AdminBorrowQueryRequest request) {
         requireAdministrator(actor);
@@ -753,9 +1053,13 @@ final class LibraryService {
                 || AdminBorrowQueryRequest.OVERDUE.equals(scope))) {
             throw new IllegalArgumentException("查询范围只能是 CURRENT、HISTORY 或 OVERDUE");
         }
+        // 可选的读者过滤：为空表示不限定读者
+        String userId = request.getUserId() == null || request.getUserId().isBlank()
+                ? null : boundedText(request.getUserId(), "读者编号", 36);
         synchronized (circulationLock) {
             LocalDateTime now = LocalDateTime.now(clock);
             return borrowRecordRepository.findAll().stream()
+                    .filter(record -> userId == null || record.userId().equals(userId))
                     .filter(record -> switch (scope) {
                         case AdminBorrowQueryRequest.CURRENT ->
                                 record.status() == BorrowStatus.BORROWED;
@@ -935,20 +1239,180 @@ final class LibraryService {
                 .findFirst();
     }
 
+    /**
+     * Lists reservations across every reader for the administrator workbench.
+     *
+     * <p>Read-only: administrators can see the queue but cannot reorder or force-cancel it, so the
+     * reader-facing cancellation rules stay the single way a reservation ends.
+     */
+    List<AdminReservationDTO> queryReservations(
+            SessionInfo actor, AdminReservationQueryRequest request) {
+        requireAdministrator(actor);
+        Objects.requireNonNull(request, "request must not be null");
+        String scope = boundedText(request.getScope(), "查询范围", 20)
+                .toUpperCase(java.util.Locale.ROOT);
+        if (!(AdminReservationQueryRequest.WAITING.equals(scope)
+                || AdminReservationQueryRequest.READY.equals(scope)
+                || AdminReservationQueryRequest.ALL.equals(scope))) {
+            throw new IllegalArgumentException("查询范围只能是 WAITING、READY 或 ALL");
+        }
+        synchronized (circulationLock) {
+            cleanExpiredReservations();
+            return reservationRepository.findAll().stream()
+                    .filter(reservation -> switch (scope) {
+                        case AdminReservationQueryRequest.WAITING ->
+                                reservation.status() == ReservationStatus.WAITING;
+                        case AdminReservationQueryRequest.READY ->
+                                reservation.status() == ReservationStatus.READY_FOR_PICKUP;
+                        default -> true;
+                    })
+                    // 进行中的排在前面，同组内按建立时间倒序
+                    .sorted(Comparator
+                            .comparingInt((Reservation reservation) ->
+                                    reservation.isActive() ? 0 : 1)
+                            .thenComparing(Reservation::createdAt, Comparator.reverseOrder())
+                            .thenComparing(Reservation::reservationId))
+                    .map(this::toAdminReservationDTO)
+                    .toList();
+        }
+    }
+
+    /**
+     * Builds the whole-library statistics snapshot.
+     *
+     * <p>Everything is derived at read time — no counter table exists — so the numbers can never
+     * disagree with the records they summarise. The snapshot is taken under the same
+     * {@code circulationLock} as every write, so a concurrent borrow cannot produce a torn view.
+     */
+    LibraryStatisticsDTO statistics(SessionInfo actor) {
+        requireAdministrator(actor);
+        synchronized (circulationLock) {
+            cleanExpiredReservations();
+            LocalDateTime now = now();
+
+            List<BookDTO> books = bookRepository.searchAll("");
+            Map<String, BookDTO> booksById = new java.util.HashMap<>();
+            books.forEach(book -> booksById.put(book.getBookId(), book));
+            List<BookCopy> copies = books.stream()
+                    .flatMap(book -> bookCopyRepository.findByBookId(book.getBookId()).stream())
+                    .toList();
+            List<BorrowRecord> borrowRecords = borrowRecordRepository.findAll();
+            List<Reservation> reservations = reservationRepository.findAll();
+
+            int copyCount = 0;
+            int withdrawnCount = 0;
+            int availableCount = 0;
+            Map<String, int[]> byCategory = new java.util.LinkedHashMap<>();
+            for (BookCopy copy : copies) {
+                BookDTO book = booksById.get(copy.bookId());
+                if (book == null) {
+                    continue;
+                }
+                if (copy.status() == BookCopyStatus.WITHDRAWN) {
+                    withdrawnCount++;
+                } else {
+                    copyCount++;
+                }
+                if (copy.status() == BookCopyStatus.AVAILABLE && "ACTIVE".equals(book.getStatus())) {
+                    availableCount++;
+                }
+                if (copy.status() != BookCopyStatus.WITHDRAWN) {
+                    byCategory.computeIfAbsent(book.getCategoryName(), ignored -> new int[1])[0]++;
+                }
+            }
+            Map<String, Integer> bookCountByCategory = new java.util.LinkedHashMap<>();
+            for (BookDTO book : books) {
+                bookCountByCategory.merge(book.getCategoryName(), 1, Integer::sum);
+            }
+            List<CategoryStatisticDTO> categories = bookCountByCategory.entrySet().stream()
+                    .map(entry -> new CategoryStatisticDTO(entry.getKey(), entry.getValue(),
+                            byCategory.getOrDefault(entry.getKey(), new int[1])[0]))
+                    .sorted(Comparator.comparingInt(CategoryStatisticDTO::getCopyCount).reversed()
+                            .thenComparing(CategoryStatisticDTO::getCategoryName))
+                    .toList();
+
+            int activeBorrowCount = 0;
+            int overdueCount = 0;
+            int historyBorrowCount = 0;
+            int unpaidFeeCount = 0;
+            int unpaidFeeFen = 0;
+            int settledFeeFen = 0;
+            Map<String, Integer> borrowsByBook = new java.util.LinkedHashMap<>();
+            for (BorrowRecord record : borrowRecords) {
+                if (record.status() == BorrowStatus.BORROWED) {
+                    activeBorrowCount++;
+                    if (record.isOverdueAt(now)) {
+                        overdueCount++;
+                    }
+                } else {
+                    historyBorrowCount++;
+                }
+                int feeFen = feeFenOf(record);
+                if (feeFen > 0) {
+                    if (record.feeSettledAt() == null) {
+                        unpaidFeeCount++;
+                        unpaidFeeFen += feeFen;
+                    } else {
+                        settledFeeFen += feeFen;
+                    }
+                }
+                bookCopyRepository.findById(record.copyId()).ifPresent(copy ->
+                        borrowsByBook.merge(copy.bookId(), 1, Integer::sum));
+            }
+
+            List<PopularBookDTO> popularBooks = borrowsByBook.entrySet().stream()
+                    .map(entry -> new PopularBookDTO(entry.getKey(),
+                            booksById.containsKey(entry.getKey())
+                                    ? booksById.get(entry.getKey()).getTitle() : entry.getKey(),
+                            entry.getValue()))
+                    .sorted(Comparator.comparingInt(PopularBookDTO::getBorrowCount).reversed()
+                            .thenComparing(PopularBookDTO::getBookId))
+                    .limit(POPULAR_BOOK_LIMIT)
+                    .toList();
+
+            return new LibraryStatisticsDTO(books.size(), copyCount, availableCount,
+                    withdrawnCount, activeBorrowCount, overdueCount, historyBorrowCount,
+                    (int) reservations.stream()
+                            .filter(value -> value.status() == ReservationStatus.WAITING).count(),
+                    (int) reservations.stream()
+                            .filter(value -> value.status() == ReservationStatus.READY_FOR_PICKUP)
+                            .count(),
+                    unpaidFeeCount, unpaidFeeFen, settledFeeFen, categories, popularBooks);
+        }
+    }
+
+    private AdminReservationDTO toAdminReservationDTO(Reservation reservation) {
+        BookDTO book = requireAnyBook(reservation.bookId());
+        return new AdminReservationDTO(reservation.reservationId(), reservation.userId(),
+                book.getBookId(), book.getTitle(), reservation.pickupLocation(),
+                assignedBarcodeOf(reservation), reservation.createdAt(), reservation.readyAt(),
+                reservation.expiresAt(), reservation.closedAt(),
+                reservation.status().name(), queuePositionOf(reservation));
+    }
+
+    private String assignedBarcodeOf(Reservation reservation) {
+        return reservation.assignedCopyId() == null ? null
+                : requireCopy(reservation.assignedCopyId()).barcode();
+    }
+
+    /** 1-based position within the same book and location queue while waiting, otherwise null. */
+    private Integer queuePositionOf(Reservation reservation) {
+        if (reservation.status() != ReservationStatus.WAITING) {
+            return null;
+        }
+        List<Reservation> queue = waitingReservations(
+                reservation.bookId(), reservation.pickupLocation());
+        int index = java.util.stream.IntStream.range(0, queue.size())
+                .filter(value -> queue.get(value).reservationId()
+                        .equals(reservation.reservationId()))
+                .findFirst().orElse(-1);
+        return index < 0 ? null : index + 1;
+    }
+
     private ReservationDTO toReservationDTO(Reservation reservation) {
         BookDTO book = requireAnyBook(reservation.bookId());
-        String barcode = reservation.assignedCopyId() == null ? null
-                : requireCopy(reservation.assignedCopyId()).barcode();
-        Integer queuePosition = null;
-        if (reservation.status() == ReservationStatus.WAITING) {
-            List<Reservation> queue = waitingReservations(
-                    reservation.bookId(), reservation.pickupLocation());
-            int index = java.util.stream.IntStream.range(0, queue.size())
-                    .filter(value -> queue.get(value).reservationId()
-                            .equals(reservation.reservationId()))
-                    .findFirst().orElse(-1);
-            queuePosition = index < 0 ? null : index + 1;
-        }
+        String barcode = assignedBarcodeOf(reservation);
+        Integer queuePosition = queuePositionOf(reservation);
         return new ReservationDTO(reservation.reservationId(), book.getBookId(),
                 book.getIsbn(), book.getTitle(), book.getAuthor(),
                 reservation.pickupLocation(), barcode, reservation.createdAt(),
@@ -990,7 +1454,8 @@ final class LibraryService {
                 .toList();
         return new BookDTO(book.getBookId(), book.getIsbn(), book.getTitle(), book.getAuthor(),
                 book.getCategoryId(), book.getCategoryName(), book.getPublisher(),
-                book.getPublicationYear(), book.getLanguage(), book.getStatus(), locations);
+                book.getPublicationYear(), book.getLanguage(), book.getStatus(), locations,
+                book.getPriceFen());
     }
 
     private BorrowRecordDTO toBorrowRecordDTO(BorrowRecord record, LocalDateTime now) {
@@ -1001,7 +1466,7 @@ final class LibraryService {
         return new BorrowRecordDTO(record.recordId(), copy.bookId(), title,
                 copy.copyId(), copy.barcode(), record.borrowTime(), record.dueTime(),
                 record.returnTime(), record.status().name(), record.isOverdueAt(now),
-                record.renewalCount());
+                record.renewalCount(), feeFenOf(record), record.feeSettledAt() != null);
     }
 
     private AdminBorrowRecordDTO toAdminBorrowRecordDTO(
@@ -1013,7 +1478,7 @@ final class LibraryService {
         return new AdminBorrowRecordDTO(record.recordId(), record.userId(), copy.bookId(),
                 title, copy.copyId(), copy.barcode(), record.borrowTime(), record.dueTime(),
                 record.returnTime(), record.status().name(), record.isOverdueAt(now),
-                record.renewalCount());
+                record.renewalCount(), feeFenOf(record), record.feeSettledAt() != null);
     }
 
     private BookCopy requireCopyForRecord(BorrowRecord record) {

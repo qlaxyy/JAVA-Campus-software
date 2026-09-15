@@ -251,7 +251,7 @@ final class DoctorWorkspacePanel extends JPanel {
         JPanel page = basePage();
         page.add(pageHeader("返回接诊台", this::openQueuePage,
                 new JLabel("我签署的诊疗记录"),
-                new JLabel("只读查看本人已保存的诊疗记录")), BorderLayout.NORTH);
+                new JLabel("已完成诊疗")), BorderLayout.NORTH);
         page.add(scroll(signedRecordList), BorderLayout.CENTER);
         return page;
     }
@@ -363,6 +363,7 @@ final class DoctorWorkspacePanel extends JPanel {
         header.setOpaque(false);
         JPanel copy = verticalList();
         JLabel title = new JLabel("医生工作台");
+        title.putClientProperty("module.pageTitle", true);
         title.setFont(HospitalTheme.uiFont(Font.BOLD, 28F));
         title.setForeground(HospitalTheme.TEXT);
         doctorIdentity.setFont(HospitalTheme.uiFont(Font.PLAIN, 13F));
@@ -382,6 +383,7 @@ final class DoctorWorkspacePanel extends JPanel {
             Runnable backAction,
             JLabel title,
             JLabel subtitle) {
+        title.putClientProperty("module.pageTitle", true);
         JPanel header = new JPanel(new BorderLayout(18, 0));
         header.setOpaque(false);
         JButton back = HospitalTheme.backButton(backText.replaceFirst("^返回", ""));
@@ -407,7 +409,7 @@ final class DoctorWorkspacePanel extends JPanel {
         currentAppointmentId = null;
         doctorIdentity.setText("正在读取医生档案和排班……");
         statusLabel.setForeground(HospitalTheme.MUTED);
-        statusLabel.setText("进入医生模式后自动读取最新数据。");
+        statusLabel.setText(" ");
         scheduleGrid.removeAll();
         scheduleGrid.add(message("正在加载排班……", HospitalTheme.MUTED, 260));
         refresh(scheduleGrid);
@@ -817,7 +819,7 @@ final class DoctorWorkspacePanel extends JPanel {
         patientList.removeAll();
         if (schedule.getPendingAppointments().isEmpty()) {
             patientList.add(message(
-                    "这个排班暂时没有待接诊患者。患者完成预约后，重新进入医生模式即可看到。",
+                    "该排班暂无待接诊患者。",
                     HospitalTheme.MUTED,
                     520));
         } else {

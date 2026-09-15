@@ -114,7 +114,7 @@ final class CourseAdminStudentPanel
                 5));
 
         topPanel.add(
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "查询学生已选课程，并执行强制选课或强制退课"));
 
         topPanel.add(

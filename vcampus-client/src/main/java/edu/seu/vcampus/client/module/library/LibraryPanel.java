@@ -51,6 +51,9 @@ public final class LibraryPanel extends JPanel {
     private final JComboBox<BookLocationDTO> reservationLocation = new JComboBox<>();
     private final JButton reservationButton = new JButton("预约");
     private final JLabel reservationHint = new JLabel("请先选择书目和取书馆藏地");
+    private final JButton previousPageButton = new JButton("上一页");
+    private final JButton nextPageButton = new JButton("下一页");
+    private final JLabel pageLabel = new JLabel();
     private final DefaultTableModel tableModel = new DefaultTableModel(COLUMNS, 0) {
         @Override
         public boolean isCellEditable(int row, int column) {
@@ -63,6 +66,8 @@ public final class LibraryPanel extends JPanel {
     private String lastSearchKeyword;
     private String lastCategoryId;
     private String locallyReservedBookId;
+    private int currentPage = 1;
+    private int totalPages = 1;
     private static final DateTimeFormatter TIME_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
@@ -152,6 +157,7 @@ public final class LibraryPanel extends JPanel {
         LibraryUiTheme.stylePrimaryButton(reservationButton);
         reservationHint.setName("library.reservation.hint");
         reservationHint.setForeground(LibraryUiTheme.MUTED);
+        reservationHint.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 2));
         JPanel reservationControls = new JPanel(new BorderLayout(8, 8));
         reservationControls.setOpaque(false);
         JPanel reservationInput = new JPanel(new BorderLayout(8, 0));
@@ -173,8 +179,9 @@ public final class LibraryPanel extends JPanel {
         detailsArea.add(detailTitle, BorderLayout.NORTH);
         detailsArea.add(holdingScroll, BorderLayout.CENTER);
         detailsArea.add(reservationControls, BorderLayout.SOUTH);
-        detailsArea.setMinimumSize(new java.awt.Dimension(275, 0));
-        detailsArea.setPreferredSize(new java.awt.Dimension(320, 0));
+        // 馆藏地名称较长，详情栏留出足够宽度，避免“可借 N 本 / 馆藏 N 本”被折行。
+        detailsArea.setMinimumSize(new java.awt.Dimension(300, 0));
+        detailsArea.setPreferredSize(new java.awt.Dimension(380, 0));
 
         JPanel resultArea = new JPanel(new BorderLayout(8, 8));
         resultArea.setName("library.catalog.results");
@@ -184,6 +191,7 @@ public final class LibraryPanel extends JPanel {
         resultTitle.setFont(resultTitle.getFont().deriveFont(java.awt.Font.BOLD, 16F));
         resultArea.add(resultTitle, BorderLayout.NORTH);
         resultArea.add(LibraryUiTheme.tableScrollPane(resultTable), BorderLayout.CENTER);
+        resultArea.add(buildPager(), BorderLayout.SOUTH);
 
         JPanel workspace = new JPanel(new BorderLayout(10, 0));
         workspace.setName("library.catalog.workspace");
@@ -203,27 +211,58 @@ public final class LibraryPanel extends JPanel {
         keywordField.addActionListener(event -> search());
         reservationLocation.addActionListener(event -> updateReservationControls());
         reservationButton.addActionListener(event -> createReservation());
+        previousPageButton.addActionListener(event -> changePage(-1));
+        nextPageButton.addActionListener(event -> changePage(1));
         updateReservationControls();
+    }
+
+    private JPanel buildPager() {
+        previousPageButton.setName("library.search.previousPage");
+        nextPageButton.setName("library.search.nextPage");
+        LibraryUiTheme.styleSecondaryButton(previousPageButton);
+        LibraryUiTheme.styleSecondaryButton(nextPageButton);
+        pageLabel.setName("library.search.page");
+        pageLabel.setForeground(LibraryUiTheme.MUTED);
+        pageLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        JPanel pager = new JPanel(new BorderLayout(8, 0));
+        pager.setName("library.search.pager");
+        pager.setOpaque(false);
+        JPanel buttons = new JPanel(new java.awt.GridLayout(1, 2, 8, 0));
+        buttons.setOpaque(false);
+        buttons.add(previousPageButton);
+        buttons.add(nextPageButton);
+        pager.add(buttons, BorderLayout.EAST);
+        pager.add(pageLabel, BorderLayout.CENTER);
+        pager.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
+        updatePager();
+        return pager;
     }
 
     private void search() {
         BookCategoryDTO category = (BookCategoryDTO) categoryFilter.getSelectedItem();
         lastCategoryId = category == null ? null : category.getCategoryId();
-        search(keywordField.getText().strip());
+        // A new keyword or category starts a new result set, so it also starts at its first page.
+        search(keywordField.getText().strip(), 1);
     }
 
     void refreshIfSearched() {
         if (lastSearchKeyword != null) {
-            search(lastSearchKeyword);
+            search(lastSearchKeyword, currentPage);
         }
     }
 
-    private void search(String keyword) {
+    private void changePage(int delta) {
+        search(lastSearchKeyword == null ? "" : lastSearchKeyword, currentPage + delta);
+    }
+
+    private void search(String keyword, int page) {
         if (working) {
             return;
         }
         lastSearchKeyword = keyword;
+        currentPage = Math.max(page, 1);
         String categoryId = lastCategoryId;
+        int requestedPage = currentPage;
         setWorking(true);
         clearResults();
         statusLabel.setText("正在搜索……");
@@ -231,7 +270,8 @@ public final class LibraryPanel extends JPanel {
             @Override
             protected Response doInBackground() throws Exception {
                 return context.send(LibraryActions.SEARCH_BOOKS,
-                        new BookSearchRequest(keyword, categoryId));
+                        new BookSearchRequest(keyword, categoryId, requestedPage,
+                                BookSearchRequest.DEFAULT_PAGE_SIZE));
             }
 
             @Override
@@ -269,8 +309,25 @@ public final class LibraryPanel extends JPanel {
                 book.getTotalCount(), book.getAvailableCount()
             });
         }
-        statusLabel.setText("找到 " + result.getBooks().size()
-                + " 本书目；选择书目和馆藏地后可预约，实体书借还在模拟终端登记");
+        // The server echoes the page it answered, so the pager reflects what is on screen rather
+        // than what was requested.
+        currentPage = result.getPage();
+        totalPages = result.getTotalPages();
+        updatePager();
+        if (result.getTotalCount() == 0) {
+            statusLabel.setText("没有匹配的书目；换个关键词，或清空关键词查看全部开放书目");
+        } else {
+            statusLabel.setText("共 " + result.getTotalCount() + " 本书目，本页显示 "
+                    + (books.isEmpty() ? 0
+                            : (currentPage - 1) * result.getPageSize() + 1)
+                    + "–" + ((currentPage - 1) * result.getPageSize() + books.size()));
+        }
+    }
+
+    private void updatePager() {
+        pageLabel.setText("第 " + currentPage + " / " + totalPages + " 页");
+        previousPageButton.setEnabled(!working && currentPage > 1);
+        nextPageButton.setEnabled(!working && currentPage < totalPages);
     }
 
     private static String publication(BookDTO book) {
@@ -295,8 +352,8 @@ public final class LibraryPanel extends JPanel {
                 ? "暂无馆藏"
                 : book.getLocations().stream()
                         .map(location -> location.getLocation() + "：可借 "
-                                + location.getAvailableCount() + " 本 / 馆藏 "
-                                + location.getTotalCount() + " 本")
+                                + location.getAvailableCount() + " / 馆藏 "
+                                + location.getTotalCount())
                         .collect(Collectors.joining(System.lineSeparator()));
         holdingDetails.setText("《" + book.getTitle() + "》" + System.lineSeparator() + locations);
         holdingDetails.setCaretPosition(0);
@@ -386,16 +443,17 @@ public final class LibraryPanel extends JPanel {
         reservationButton.setEnabled(!working && book != null && location != null
                 && !alreadyReserved);
         if (book == null) {
-            reservationHint.setText("请先选择书目和取书馆藏地");
+            // 上方馆藏详情区已经提示“请选择一条书目”，这里不再重复同一句话。
+            reservationHint.setText(" ");
         } else if (alreadyReserved) {
-            reservationHint.setText("该书目已预约；可到“我的图书馆”查看或取消");
+            reservationHint.setText("该书目已预约，可在“我的图书馆”取消");
         } else if (location == null) {
             reservationHint.setText("该书目暂无可预约的馆藏地");
         } else if (location.getAvailableCount() > 0) {
             reservationHint.setText("当前可借 " + location.getAvailableCount()
-                    + " 本；预约成功后立即保留 24 小时（1 天）");
+                    + " 本；预约后保留 24 小时");
         } else {
-            reservationHint.setText("当前无可借单册；提交后将进入预约队列并按顺序等待");
+            reservationHint.setText("当前无可借单册，提交后进入预约队列");
         }
     }
 
@@ -418,6 +476,7 @@ public final class LibraryPanel extends JPanel {
         holdingDetails.setText("请选择一条书目查看完整馆藏地和数量");
         reservationLocation.removeAllItems();
         updateReservationControls();
+        updatePager();
     }
 
     private void setWorking(boolean value) {
@@ -427,6 +486,7 @@ public final class LibraryPanel extends JPanel {
         searchButton.setEnabled(!value);
         resultTable.setEnabled(!value);
         updateReservationControls();
+        updatePager();
     }
 
     private void loadCategories() {

@@ -138,7 +138,7 @@ final class CourseAdminBatchPanel
                 "选课批次管理"));
 
         titlePanel.add(
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "修改批次时间、状态以及学生选课和退课权限"));
 
         header.add(

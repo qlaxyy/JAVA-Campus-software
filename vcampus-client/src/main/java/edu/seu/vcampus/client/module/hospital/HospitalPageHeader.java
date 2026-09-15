@@ -32,6 +32,7 @@ final class HospitalPageHeader {
         copy.setOpaque(false);
         copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
         JLabel title = new JLabel(titleText);
+        title.putClientProperty("module.pageTitle", true);
         title.setFont(HospitalTheme.uiFont(Font.BOLD, 26F));
         title.setForeground(HospitalTheme.TEXT);
         JTextArea subtitle = HospitalResponsiveLayout.wrappingText(
@@ -41,8 +42,11 @@ final class HospitalPageHeader {
         subtitle.setName("hospitalPageSubtitle");
         subtitle.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
         copy.add(title);
-        copy.add(Box.createVerticalStrut(3));
-        copy.add(subtitle);
+        // The triage safety notice is not redundant page narration.
+        if ("智能导诊".equals(titleText)) {
+            copy.add(Box.createVerticalStrut(3));
+            copy.add(subtitle);
+        }
         navigation.add(copy, BorderLayout.CENTER);
 
         JPanel header = new JPanel(new BorderLayout());

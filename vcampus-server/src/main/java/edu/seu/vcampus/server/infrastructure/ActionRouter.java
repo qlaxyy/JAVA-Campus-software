@@ -3,6 +3,8 @@ package edu.seu.vcampus.server.infrastructure;
 import edu.seu.vcampus.common.protocol.ErrorCodes;
 import edu.seu.vcampus.common.protocol.Request;
 import edu.seu.vcampus.common.protocol.Response;
+import edu.seu.vcampus.server.infrastructure.database.DatabaseAuditContext;
+import edu.seu.vcampus.server.security.SessionLookup;
 
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,6 +16,12 @@ import java.util.concurrent.ConcurrentMap;
 public final class ActionRouter {
 
     private final ConcurrentMap<String, RequestHandler> handlers = new ConcurrentHashMap<>();
+    private SessionLookup auditSessions = token -> java.util.Optional.empty();
+
+    /** Shares the server-authoritative identity with the JDBC audit boundary. */
+    public void configureDatabaseAudit(SessionLookup sessions) {
+        auditSessions = Objects.requireNonNull(sessions);
+    }
 
     /**
      * Registers the only handler allowed to own an action name.
@@ -48,7 +56,8 @@ public final class ActionRouter {
                     ErrorCodes.COMMON_UNKNOWN_ACTION,
                     "Unknown action: " + request.getAction());
         }
-        try {
+        try (var audit = DatabaseAuditContext.open(request,
+                auditSessions.findSession(request.getToken()).orElse(null))) {
             return Objects.requireNonNull(handler.handle(request), "handler response must not be null");
         } catch (RuntimeException exception) {
             System.err.printf("[%s] action %s failed: %s%n",

@@ -34,12 +34,17 @@ class LibraryServerModuleTest {
         assertEquals(Set.of(LibraryActions.SEARCH_BOOKS, LibraryActions.GET_BORROW_RECORDS,
                 LibraryActions.BORROW_COPY, LibraryActions.RETURN_COPY,
                 LibraryActions.INSPECT_COPY, LibraryActions.LIST_CATEGORIES,
-                LibraryActions.RENEW_BORROW, LibraryActions.ADD_BOOK_CATEGORY,
+                LibraryActions.RENEW_BORROW, LibraryActions.PAY_FEE,
+                LibraryActions.REPORT_LOST,
+                LibraryActions.ADD_BOOK_CATEGORY,
                 LibraryActions.ADMIN_SEARCH_BOOKS, LibraryActions.ADD_BOOK, LibraryActions.UPDATE_BOOK,
                 LibraryActions.SET_BOOK_STATUS, LibraryActions.ADD_BOOK_COPY, LibraryActions.LIST_BOOK_COPIES,
                 LibraryActions.UPDATE_BOOK_COPY, LibraryActions.SHELVE_BOOK_COPY,
                 LibraryActions.WITHDRAW_BOOK_COPY, LibraryActions.RESTORE_BOOK_COPY,
-                LibraryActions.ADMIN_QUERY_BORROWS, LibraryActions.CREATE_RESERVATION,
+                LibraryActions.ADMIN_QUERY_BORROWS, LibraryActions.ADMIN_QUERY_RESERVATIONS,
+                LibraryActions.ADMIN_STATISTICS,
+                LibraryActions.ADMIN_LIST_LOCATIONS, LibraryActions.ADMIN_ADD_LOCATION,
+                LibraryActions.CREATE_RESERVATION,
                 LibraryActions.GET_MY_RESERVATIONS,
                 LibraryActions.CANCEL_RESERVATION), actions);
     }
@@ -76,9 +81,25 @@ class LibraryServerModuleTest {
         assertTrue(dispatch(router, LibraryActions.ADD_BOOK_CATEGORY, ADMIN.getToken(),
                 new AddBookCategoryRequest("艺术")).isSuccess());
 
-        AddBookRequest add = new AddBookRequest("9787111000000", "测试", "作者", "C001", "", null, "");
+        AddBookRequest add = new AddBookRequest("9787111000000", "测试", "作者", "C001", "", null, "",
+                5_000);
         assertEquals(ErrorCodes.AUTH_FORBIDDEN,
                 dispatch(router, LibraryActions.ADD_BOOK, READER.getToken(), add).getCode());
+        assertEquals(ErrorCodes.AUTH_FORBIDDEN, dispatch(router,
+                LibraryActions.ADMIN_LIST_LOCATIONS, READER.getToken(), null).getCode());
+        assertEquals(ErrorCodes.AUTH_REQUIRED, dispatch(router,
+                LibraryActions.ADMIN_ADD_LOCATION, null,
+                new AddLocationRequest("丁家桥校区—医学书库")).getCode());
+        assertEquals(ErrorCodes.COMMON_INVALID_REQUEST, dispatch(router,
+                LibraryActions.ADMIN_ADD_LOCATION, ADMIN.getToken(),
+                new BookSearchRequest("", null)).getCode());
+        assertTrue(dispatch(router, LibraryActions.ADMIN_ADD_LOCATION, ADMIN.getToken(),
+                new AddLocationRequest("丁家桥校区—医学书库")).isSuccess());
+        assertEquals(ErrorCodes.LIBRARY_DUPLICATE_LOCATION, dispatch(router,
+                LibraryActions.ADMIN_ADD_LOCATION, ADMIN.getToken(),
+                new AddLocationRequest("丁家桥校区—医学书库")).getCode());
+        assertTrue(dispatch(router, LibraryActions.ADMIN_LIST_LOCATIONS,
+                ADMIN.getToken(), null).isSuccess());
         assertEquals(ErrorCodes.AUTH_REQUIRED,
                 dispatch(router, LibraryActions.ADMIN_QUERY_BORROWS, null,
                         new AdminBorrowQueryRequest(AdminBorrowQueryRequest.CURRENT)).getCode());

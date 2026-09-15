@@ -12,14 +12,12 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
-import javax.swing.SwingConstants;
 import javax.swing.border.Border;
 import javax.swing.border.LineBorder;
 import javax.swing.plaf.basic.BasicButtonUI;
 import javax.swing.plaf.basic.BasicGraphicsUtils;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableColumn;
-import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
@@ -53,28 +51,6 @@ final class LibraryUiTheme {
     static void installPage(JPanel page) {
         page.setBackground(PAGE);
         page.setForeground(TEXT);
-    }
-
-    static JPanel createPageHeader(String eyebrow, String title, String description) {
-        JPanel header = new JPanel(new BorderLayout(0, 5));
-        header.setOpaque(false);
-        JLabel eyebrowLabel = new JLabel(eyebrow.toUpperCase());
-        eyebrowLabel.setForeground(PRIMARY);
-        eyebrowLabel.setFont(eyebrowLabel.getFont().deriveFont(Font.BOLD, 11F));
-        JLabel titleLabel = new JLabel(title);
-        titleLabel.setForeground(TEXT);
-        titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 24F));
-        JLabel descriptionLabel = new JLabel(description);
-        descriptionLabel.setForeground(MUTED);
-        descriptionLabel.setFont(descriptionLabel.getFont().deriveFont(13F));
-
-        JPanel titles = new JPanel(new BorderLayout(0, 3));
-        titles.setOpaque(false);
-        titles.add(titleLabel, BorderLayout.NORTH);
-        titles.add(descriptionLabel, BorderLayout.CENTER);
-        header.add(eyebrowLabel, BorderLayout.NORTH);
-        header.add(titles, BorderLayout.CENTER);
-        return header;
     }
 
     static Border cardBorder(int vertical, int horizontal) {
@@ -135,10 +111,18 @@ final class LibraryUiTheme {
     }
 
     static void styleComboBox(JComboBox<?> comboBox) {
-        comboBox.setPreferredSize(new Dimension(comboBox.getPreferredSize().width, 38));
         comboBox.setBackground(SURFACE);
         comboBox.setForeground(TEXT);
         comboBox.setFont(comboBox.getFont().deriveFont(13F));
+        // Measure after applying the font, leaving space for the taller arrow button.
+        comboBox.setPreferredSize(null);
+        int contentWidth = 0;
+        for (int index = 0; index < comboBox.getItemCount(); index++) {
+            contentWidth = Math.max(contentWidth, comboBox.getFontMetrics(comboBox.getFont())
+                    .stringWidth(String.valueOf(comboBox.getItemAt(index))));
+        }
+        comboBox.setPreferredSize(new Dimension(
+                Math.max(comboBox.getPreferredSize().width, contentWidth + 60), 38));
     }
 
     static void styleTextArea(JTextArea area) {
@@ -202,20 +186,6 @@ final class LibraryUiTheme {
         label.setBorder(BorderFactory.createCompoundBorder(
                 new LineBorder(BORDER, 1, true),
                 BorderFactory.createEmptyBorder(9, 12, 9, 12)));
-    }
-
-    static JLabel createMutedLabel(String text) {
-        JLabel label = new JLabel(text);
-        label.setForeground(MUTED);
-        label.setFont(label.getFont().deriveFont(13F));
-        return label;
-    }
-
-    static JLabel createMetricValue() {
-        JLabel label = new JLabel("0", SwingConstants.LEFT);
-        label.setForeground(PRIMARY_DARK);
-        label.setFont(label.getFont().deriveFont(Font.BOLD, 22F));
-        return label;
     }
 
     private static void applyButtonState(AbstractButton button) {

@@ -237,7 +237,7 @@ public final class UserServerModule implements ServerModule {
         return executeAdministration(
                 request,
                 "操作记录加载成功。",
-                () -> new UserAuditLogResponse(auditLogs.findAll()));
+                () -> new UserAuditLogResponse(authentication.allAuditLogs()));
     }
 
     private Response currentTeacherProfile(Request request) {

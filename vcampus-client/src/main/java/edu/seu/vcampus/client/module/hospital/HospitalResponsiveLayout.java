@@ -6,6 +6,7 @@ import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.JTextArea;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -109,8 +110,10 @@ final class HospitalResponsiveLayout {
 
         @Override
         public void doLayout() {
+            int previous = columns;
             updateColumns(availableWidth());
             super.doLayout();
+            if (previous != columns) { SwingUtilities.invokeLater(this::revalidate); }
         }
 
         @Override
@@ -139,7 +142,6 @@ final class HospitalResponsiveLayout {
             }
             columns = desired;
             ((GridLayout) getLayout()).setColumns(columns);
-            revalidate();
         }
     }
 
@@ -365,6 +367,7 @@ final class HospitalResponsiveLayout {
     }
 
     private static final class WrappingTextArea extends JTextArea {
+        private JTextArea measurement;
 
         private WrappingTextArea(String text) {
             super(text);
@@ -379,8 +382,19 @@ final class HospitalResponsiveLayout {
             if (availableWidth <= 0) {
                 return super.getPreferredSize();
             }
-            setSize(availableWidth, Short.MAX_VALUE);
-            Dimension preferred = super.getPreferredSize();
+            // Never resize a live child while BoxLayout is calculating its request arrays.
+            // Measure an unattached text component so wrapping remains accurate without
+            // invalidating the actual component hierarchy.
+            if (measurement == null) { measurement = new JTextArea(); }
+            if (measurement.getDocument() != getDocument()) { measurement.setDocument(getDocument()); }
+            measurement.setFont(getFont());
+            measurement.setLineWrap(getLineWrap());
+            measurement.setWrapStyleWord(getWrapStyleWord());
+            measurement.setTabSize(getTabSize());
+            measurement.setMargin(getMargin());
+            measurement.setBorder(getBorder());
+            measurement.setSize(availableWidth, Short.MAX_VALUE);
+            Dimension preferred = measurement.getPreferredSize();
             return new Dimension(availableWidth, preferred.height);
         }
     }

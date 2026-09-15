@@ -120,7 +120,7 @@ final class PeCoursePanel
                 "体育课");
 
         JLabel subtitle =
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "按照体育项目查看符合条件的教学班");
 
         titleArea.add(

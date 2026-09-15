@@ -101,6 +101,7 @@ final class CourseTeacherView
         JLabel title =
             CourseTheme.title(
                 "教师教学管理");
+        title.putClientProperty("module.pageTitle", true);
 
         title.setAlignmentX(
             Component.LEFT_ALIGNMENT);
@@ -288,10 +289,6 @@ final class CourseTeacherView
                 .orElse(
                     teacher.getDisplayName());
 
-        return displayName
-            + " · "
-            + teacher.getDepartment()
-            + " · "
-            + teacher.getTitle();
+        return displayName;
     }
 }

@@ -26,12 +26,6 @@ final class HospitalStaffHomePanel extends JPanel {
                 createHeader(titleText, subtitleText, switchMode)), BorderLayout.NORTH);
         add(HospitalResponsiveLayout.verticalScroll(
                 createFeatureGrid(features)), BorderLayout.CENTER);
-        boolean allAvailable = features.stream().allMatch(feature -> feature.action() != null);
-        JLabel notice = new JLabel(allAvailable
-                ? "所有管理操作均通过服务器业务接口完成；管理员不直接修改数据库或临床病历。"
-                : "可用功能已标明；其余业务将在后续提交中逐项接入。");
-        notice.setForeground(HospitalTheme.MUTED);
-        add(notice, BorderLayout.SOUTH);
     }
 
     private JPanel createHeader(String titleText, String subtitleText, Runnable switchMode) {
@@ -41,13 +35,12 @@ final class HospitalStaffHomePanel extends JPanel {
         copy.setOpaque(false);
         copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
         JLabel title = new JLabel(titleText);
+        title.putClientProperty("module.pageTitle", true);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 26F));
         title.setForeground(HospitalTheme.TEXT);
         JLabel subtitle = new JLabel(subtitleText);
         subtitle.setForeground(HospitalTheme.MUTED);
         copy.add(title);
-        copy.add(Box.createVerticalStrut(5));
-        copy.add(subtitle);
 
         JButton switchButton = HospitalTheme.quietButton("切换使用模式");
         switchButton.addActionListener(event -> switchMode.run());
@@ -84,7 +77,6 @@ final class HospitalStaffHomePanel extends JPanel {
             HospitalTheme.applyDisabledStyle(state);
         }
         card.add(title, BorderLayout.NORTH);
-        card.add(detail, BorderLayout.CENTER);
         card.add(state, BorderLayout.SOUTH);
         return card;
     }

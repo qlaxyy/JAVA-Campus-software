@@ -650,7 +650,410 @@ classDiagram
 
 ## 7. 选课子系统设计说明（待负责人材料汇总）
 
-负责人：杨凯涵。后续按 4.3 节结构补充选课批次、课程查询、选课退课、冲突与容量规则、接口、数据库、图表和测试。
+## 7. 选课子系统设计说明（已实现，已知限制见 7.10）
+
+### 7.1 模块背景
+
+负责人：杨凯涵。选课子系统负责处理选课批次、课程目录、教学班、学生选课与退课、课表、成绩、教师教学管理以及教务管理。
+
+系统将“课程”和“教学班”分开建模：课程保存课程代码、课程名称、学分和课程类型等基本信息；教学班表示课程在本学期的具体开设情况，保存班号、任课教师、上课时间、地点、容量和开放状态。同一门课程可以开设多个教学班，但同一学生不能同时选择同一课程的多个教学班。
+
+课程分为方案内课程、方案外替代课程、体育课程和通选课程。学生选课时，服务器统一检查批次状态、历史修读资格、重复选课、替代关系、容量、体育课性别名额和上课时间冲突。
+
+正式启动路径使用 Microsoft Access `vCampus.accdb` 保存课程目录、教学班、批次、选课记录、成绩和任课关系；默认构造器及部分测试路径仍可使用内存 Repository。
+
+当前数据字典见[选课系统数据字典](../../database/schema/course.md)。
+
+### 7.2 用例设计
+
+选课模块包含三类使用者：
+
+| 使用者   | 判定方式                                                 | 主要能力                             |
+| ----- | ---------------------------------------------------- | -------------------------------- |
+| 学生    | 已登录且客户端未识别为课程管理员或教师的普通账号                             | 查看批次、查询课程、选课、退课、查看课表和本人课程成绩      |
+| 普通教师  | 公共教师目录中存在有效教师档案                                      | 查看本人负责的教学班、学生名单，录入成绩并设置成绩比例      |
+| 选课管理员 | `Role.USER + AdminScope.COURSE`，或 `Role.SUPER_ADMIN` | 管理学生选课、课程、教学班、任课教师、批次、成绩、统计和操作日志 |
+
+客户端先判断账号是否具有选课管理权限，再查询公共教师档案，最后进入学生端。服务器不会信任客户端自报的身份，而是从请求 token 对应的 `SessionInfo` 获取当前账号，并对每个 Action 重新鉴权。
+
+#### 7.2.1 学生用例
+
+1. **查看选课批次**：查看当前学期启用的预选课、重修选课和退改补批次，以及批次开放状态、开始时间、结束时间和选退课权限。
+2. **进入选课批次**：从选课中心进入指定批次。预选课和退改补批次显示方案内课程、方案外课程、体育课和通选课；重修批次不显示体育课和通选课。
+3. **查询方案内课程**：查看培养方案范围内的课程、教学班、任课教师、上课时间、容量和剩余名额。
+4. **查询方案外课程**：查看可以替代培养方案课程的方案外课程。已选择某门方案课程或其替代课程后，不得再选择满足同一培养要求的其他课程。
+5. **查询体育课程**：按体育项目筛选课程，并根据学生性别、教学班性别限制、总容量及男女名额判断是否可选。
+6. **查询通选课程**：按通选课类别筛选课程。学生可以选择多门不同通选课，但不能选择同一课程的多个教学班。
+7. **全校课程查询**：按课程代码、课程名称、教师姓名、开课院系和余量状态组合查询，并分页显示教学班结果。
+8. **选择课程**：提交批次 ID 和教学班 ID，服务器完成全部资格与冲突校验后保存选课记录。
+9. **查看已选课程**：查看课程名称、班号、任课教师、时间、地点、学分和课程类型。
+10. **查看课表**：将全部有效选课记录按星期和节次展示为课表。
+11. **退课**：在批次开放且允许退课时退选课程。退课不删除原记录，而是将状态改为 `DROPPED` 并记录退课时间。
+12. **查看成绩**：查看本人各课程的平时成绩、期末成绩、计算比例、总成绩、录入时间和是否及格。
+
+学生相关请求不携带可用于冒充他人的学生身份。服务器使用 `SessionInfo.username` 作为当前学生学号。
+
+#### 7.2.2 普通教师用例
+
+1. **查看我的教学班**：按批次查询当前教师负责的课程及教学班。
+2. **查看学生名单**：教师只能查看自己负责教学班中的有效选课学生。
+3. **查看教学班成绩**：查看负责教学班中各学生的平时成绩、期末成绩和总成绩。
+4. **录入或修改成绩**：教师只能修改自己负责教学班中的学生成绩，平时成绩和期末成绩均必须在 0—100 之间。
+5. **查看成绩比例**：查询教学班的平时成绩和期末成绩比例；未设置时默认使用 40% 和 60%。
+6. **修改成绩比例**：两个比例都必须在 0—100 之间，且总和必须等于 100。修改后总成绩按新比例动态计算。
+
+总成绩计算公式为：
+
+$$
+总成绩=平时成绩\times\frac{平时成绩比例}{100}
++期末成绩\times\frac{期末成绩比例}{100}
+$$
+
+计算结果保留两位小数，总成绩不低于 60 分时判定为及格。
+
+#### 7.2.3 选课管理员用例
+
+1. **学生选课管理**：输入学生学号，查看该学生当前已选课程，并执行强制选课或强制退课。
+2. **强制选课**：不检查批次开放时间、课程容量、时间冲突、体育课性别限制和历史修读资格，但课程和教学班必须存在，并且仍禁止同一课程重复选择。强制选课记录的 `selectedBatchId` 为 `0`。
+3. **强制退课**：不受学生退课时间和批次状态限制，但选课记录必须属于指定学生且仍处于已选状态。
+4. **教学班管理**：查看全部教学班，修改教学班容量和开放状态；容量不得小于当前已选人数。
+5. **新增教学班**：为已有课程创建教学班，同时录入班号、地点、校区、授课语言、容量和首条上课时间。
+6. **任课教师管理**：从公共有效教师目录中选择教师，为教学班建立或移除任课关系；同一教师不能重复分配到同一教学班。
+7. **课程管理**：修改已有课程的课程代码、名称、学分和课程类型；课程代码不得与其他课程重复。
+8. **批次管理**：修改批次名称、学期、类型、开始时间、结束时间、状态以及是否允许选课和退课。
+9. **成绩管理**：选课管理员可以查询指定学生成绩；只有 `SUPER_ADMIN` 可以从管理员页面直接修改成绩。
+10. **数据统计**：按批次统计课程数、教学班数、已选人数、总容量、剩余容量、已满教学班数、关闭教学班数和选课率。
+11. **操作日志**：查看强制选课、强制退课、新增教学班、修改教学班、修改课程、修改批次、修改成绩和修改成绩比例等操作记录。
+
+### 7.3 界面设计
+
+#### 7.3.1 页面组成
+
+| 使用端  | 页面或类                         | 主要职责                             |
+| ---- | ---------------------------- | -------------------------------- |
+| 统一入口 | `CourseClientModule`         | 根据会话权限和公共教师档案选择管理员端、教师端或学生端      |
+| 学生端  | `CourseSelectionView`        | 使用 `CardLayout` 在选课中心和具体批次页面之间切换 |
+| 学生端  | `CourseCenterPanel`          | 加载选课批次，显示批次类型、时间、状态和进入按钮         |
+| 学生端  | `CourseBatchPanel`           | 组织具体批次中的所有选课功能页签                 |
+| 学生端  | `PlanCoursePanel`            | 查询和选择方案内课程                       |
+| 学生端  | `SubstituteCoursePanel`      | 查询和选择方案外替代课程                     |
+| 学生端  | `PeCoursePanel`              | 按体育项目查询和选择体育课程                   |
+| 学生端  | `GeneralCoursePanel`         | 按类别查询和选择通选课程                     |
+| 学生端  | `TimetablePanel`             | 将当前已选课程显示为周课表                    |
+| 学生端  | `SelectedCoursePanel`        | 查看已选课程并执行退课                      |
+| 学生端  | `CourseSearchPanel`          | 全校课程组合查询与分页显示                    |
+| 学生端  | `CourseStudentGradePanel`    | 查看当前学生本人课程成绩                     |
+| 教师端  | `CourseTeacherView`          | 提供“我的教学班”“学生名单”“成绩管理”三个页签        |
+| 教师端  | `CourseTeacherOfferingPanel` | 查询当前教师负责的教学班                     |
+| 教师端  | `CourseTeacherStudentPanel`  | 查询指定教学班学生名单                      |
+| 教师端  | `CourseTeacherGradePanel`    | 查询、录入成绩并维护成绩比例                   |
+| 管理端  | `CourseAdminView`            | 提供选课管理模块的八个管理页签                  |
+| 管理端  | `CourseAdminStudentPanel`    | 查询学生已选课程并执行强制选退课                 |
+| 管理端  | `CourseAdminAuditPanel`      | 查询教务操作日志                         |
+| 管理端  | `CourseAdminOfferingPanel`   | 新增教学班，修改容量和开放状态                  |
+| 管理端  | `CourseAdminTeacherPanel`    | 分配和移除教学班任课教师                     |
+| 管理端  | `CourseAdminCoursePanel`     | 修改课程基本信息                         |
+| 管理端  | `CourseAdminBatchPanel`      | 修改选课批次                           |
+| 管理端  | `CourseAdminGradePanel`      | 查询学生成绩；超级管理员可以修改成绩               |
+| 管理端  | `CourseAdminStatisticsPanel` | 查看指定批次的选课统计                      |
+
+#### 7.3.2 页面状态与交互约定
+
+* 学生端每次进入批次时，根据当前批次重新创建 `CourseBatchPanel`。
+* 重修批次隐藏体育课和通选课页签，预选课和退改补批次显示全部课程类别。
+* 选课或退课成功后，已选课程列表和课表重新加载。
+* 切换页签时，当前页重新读取服务器数据，避免长时间显示旧状态。
+* 表格中的可选状态和按钮禁用状态只用于改善交互，服务器仍会重新执行全部业务校验。
+* 教师身份通过公共教师接口异步查询，网络请求不阻塞 Swing 事件分派线程。
+* 管理员身份判断优先于教师身份，避免同时具有教师资格的管理员误进入教师端。
+* 只有超级管理员的成绩编辑控件处于启用状态，普通选课管理员只能查看成绩。
+* 页面样式统一由 `CourseTheme` 提供背景色、表格、标题、按钮和状态提示样式。
+
+### 7.4 学生选课判定流程
+
+```mermaid
+flowchart TD
+    A[提交批次和教学班] --> B{批次存在且开放}
+    B -- 否 --> B1[拒绝选课]
+    B -- 是 --> C{允许选课}
+    C -- 否 --> B1
+    C -- 是 --> D{教学班属于可选范围}
+    D -- 否 --> B1
+    D -- 是 --> E{课程类别资格通过}
+    E -- 否 --> B1
+    E -- 是 --> F{教学班开放}
+    F -- 否 --> B1
+    F -- 是 --> G{历史修读资格通过}
+    G -- 否 --> B1
+    G -- 是 --> H{无同课程或替代课程重复}
+    H -- 否 --> B1
+    H -- 是 --> I{总容量和性别名额充足}
+    I -- 否 --> B1
+    I -- 是 --> J{无时间冲突}
+    J -- 否 --> B1
+    J -- 是 --> K[保存 SELECTED 选课记录]
+    K --> L[返回选课成功]
+```
+
+时间冲突由 `CourseScheduleConflictChecker` 判断。只有以下条件同时成立时才构成冲突：
+
+1. 上课星期相同；
+2. 开始节次和结束节次存在交集；
+3. 教学周范围存在交集；
+4. 在交集周内，两条课程安排均实际开课。
+
+教学周支持 `EVERY`、`ODD` 和 `EVEN`，因此同一星期、同一节次的单周课程和双周课程不判定为冲突。
+
+### 7.5 学生选课时序图
+
+```mermaid
+sequenceDiagram
+    actor Student as 学生
+    participant Panel as 课程页面
+    participant Context as ClientContext
+    participant Module as CourseServerModule
+    participant Service as CourseSelectionService
+
+    Student->>Panel: 选择教学班并点击选课
+    Panel->>Context: send(SELECT_COURSE, request)
+    Context->>Module: 携带 token 发送请求
+    Module->>Module: 查询 SessionInfo
+    Module->>Service: selectCourse(当前学生, 批次, 教学班)
+    Service->>Service: 校验批次、资格、重复、容量和冲突
+    alt 校验失败
+        Service-->>Module: failure(失败原因)
+        Module-->>Context: COMMON_INVALID_REQUEST
+        Context-->>Panel: 显示失败原因
+    else 校验通过
+        Service->>Service: 保存 SELECTED 记录
+        Service-->>Module: success
+        Module-->>Context: 成功响应
+        Context-->>Panel: 刷新课程、已选列表和课表
+    end
+```
+
+### 7.6 类分析
+
+```mermaid
+classDiagram
+    direction TB
+
+    class CourseClientModule
+    class CourseServerModule
+    class CourseBatchService
+    class CourseSelectionService
+    class CourseEnrollmentService
+    class CourseOfferingAdministrationService
+    class CourseTeacherService
+    class CourseGradeService
+    class CourseScheduleConflictChecker
+    class CourseEnrollmentRepository {
+        <<interface>>
+    }
+    class CoursePlanRepository {
+        <<interface>>
+    }
+    class CourseTeacherAssignmentRepository {
+        <<interface>>
+    }
+    class CourseGradeRepository {
+        <<interface>>
+    }
+
+    CourseClientModule --> CourseServerModule : Action请求
+    CourseServerModule --> CourseBatchService
+    CourseServerModule --> CourseSelectionService
+    CourseServerModule --> CourseEnrollmentService
+    CourseServerModule --> CourseOfferingAdministrationService
+    CourseServerModule --> CourseTeacherService
+    CourseServerModule --> CourseGradeService
+    CourseSelectionService --> CourseScheduleConflictChecker
+    CourseSelectionService --> CourseEnrollmentRepository
+    CourseSelectionService --> CoursePlanRepository
+    CourseEnrollmentService --> CourseEnrollmentRepository
+    CourseTeacherService --> CourseTeacherAssignmentRepository
+    CourseTeacherService --> CourseEnrollmentRepository
+    CourseGradeService --> CourseGradeRepository
+```
+
+主要职责如下：
+
+| 类或接口                                  | 主要职责                                                  |
+| ------------------------------------- | ----------------------------------------------------- |
+| `CourseServerModule`                  | 注册 Action，校验 token、权限和 DTO 类型，调用 Service 并包装 Response |
+| `CourseBatchService`                  | 查询和修改选课批次，计算或应用批次状态                                   |
+| `CoursePlanService`                   | 查询方案内课程，计算已选状态、余量和时间冲突                                |
+| `CourseSubstitutionService`           | 查询方案外替代课程，处理历史修读和替代关系                                 |
+| `PeCourseService`                     | 查询体育课，处理学生性别、性别限制及男女容量                                |
+| `GeneralCourseService`                | 查询通选课并按通选类别筛选                                         |
+| `CourseSearchService`                 | 对全校教学班执行组合查询和分页                                       |
+| `CourseSelectionService`              | 执行学生选课和管理员强制选课规则                                      |
+| `CourseEnrollmentService`             | 查询有效选课记录，执行学生退课和管理员强制退课                               |
+| `CourseOfferingAdministrationService` | 查询、创建和修改课程及教学班设置                                      |
+| `CourseTeacherService`                | 处理任课关系、教师教学班和学生范围鉴权                                   |
+| `CourseGradeService`                  | 查询和保存学生成绩，计算总成绩                                       |
+| `CourseGradePolicyService`            | 查询和修改平时成绩与期末成绩比例                                      |
+| `CourseAdminStatisticsService`        | 汇总批次课程、容量和选课率                                         |
+| `CourseAdminAuditService`             | 保存并查询教务操作记录                                           |
+| `CourseScheduleConflictChecker`       | 根据星期、节次、周次和单双周检测冲突                                    |
+| 各 Repository 接口                       | 隔离业务逻辑与 Access、内存存储实现                                 |
+
+### 7.7 Action、DTO 与错误码
+
+#### 7.7.1 学生 Action
+
+| Action                           | Request.data                                         | 成功 Response.data           | 权限           |
+| -------------------------------- | ---------------------------------------------------- | -------------------------- | ------------ |
+| `COURSE.LIST_BATCHES`            | `null`                                               | `List<SelectionBatchInfo>` | 已登录          |
+| `COURSE.LIST_PLAN_COURSES`       | `BatchRequest(batchId)`                              | `List<CourseInfo>`         | 已登录          |
+| `COURSE.LIST_SUBSTITUTE_COURSES` | `BatchRequest(batchId)`                              | `List<CourseInfo>`         | 已登录          |
+| `COURSE.LIST_PE_COURSES`         | `PeCourseListRequest(batchId, sportProject)`         | `List<CourseInfo>`         | 已登录          |
+| `COURSE.LIST_GENERAL_COURSES`    | `GeneralCourseListRequest(batchId, generalCategory)` | `List<CourseInfo>`         | 已登录          |
+| `COURSE.SEARCH_OFFERINGS`        | `CourseSearchRequest`                                | `CourseSearchResult`       | 已登录          |
+| `COURSE.SELECT_COURSE`           | `SelectCourseRequest(batchId, offeringId)`           | `null`                     | 已登录          |
+| `COURSE.LIST_ENROLLMENTS`        | `BatchRequest(batchId)`                              | `List<EnrollmentInfo>`     | 已登录且只能查询本人   |
+| `COURSE.DROP_COURSE`             | `DropCourseRequest(batchId, enrollmentId)`           | `null`                     | 已登录且选课记录属于本人 |
+| `COURSE.STUDENT_LIST_GRADES`     | `null`                                               | `List<CourseGradeInfo>`    | 已登录且只能查询本人   |
+
+`CourseSearchRequest` 支持课程代码、课程名称、教师姓名、开课院系、余量状态、页码和每页数量。查询结果以教学班为一行，而不是以课程为一行。
+
+#### 7.7.2 教师 Action
+
+| Action                               | Request.data                                      | 成功 Response.data           | 权限               |
+| ------------------------------------ | ------------------------------------------------- | -------------------------- | ---------------- |
+| `COURSE.TEACHER_LIST_OFFERINGS`      | `BatchRequest(batchId)`                           | `List<CourseInfo>`         | 有效教师             |
+| `COURSE.TEACHER_LIST_STUDENTS`       | `TeacherListStudentsRequest(batchId, offeringId)` | `List<TeacherStudentInfo>` | 有效教师且负责该教学班      |
+| `COURSE.TEACHER_LIST_GRADES`         | `TeacherListStudentsRequest(batchId, offeringId)` | `List<CourseGradeInfo>`    | 有效教师且负责该教学班      |
+| `COURSE.TEACHER_UPDATE_GRADE`        | `AdminUpdateGradeRequest`                         | `CourseGradeInfo`          | 有效教师且选课记录属于本人教学班 |
+| `COURSE.TEACHER_GET_GRADE_POLICY`    | `TeacherListStudentsRequest`                      | `CourseGradePolicyInfo`    | 有效教师且负责该教学班      |
+| `COURSE.TEACHER_UPDATE_GRADE_POLICY` | `TeacherUpdateGradePolicyRequest`                 | `CourseGradePolicyInfo`    | 有效教师且负责该教学班      |
+
+#### 7.7.3 管理 Action
+
+下列 Action 除特别说明外，均要求 `SessionInfo.canAdminister(ModuleNames.COURSE)`：
+
+| Action                                  | Request.data                                                   | 成功 Response.data             |
+| --------------------------------------- | -------------------------------------------------------------- | ---------------------------- |
+| `COURSE.ADMIN_LIST_STUDENT_ENROLLMENTS` | `AdminListStudentEnrollmentsRequest(studentId)`                | `List<EnrollmentInfo>`       |
+| `COURSE.ADMIN_FORCE_SELECT_COURSE`      | `AdminForceSelectCourseRequest(studentId, offeringId, reason)` | `null`                       |
+| `COURSE.ADMIN_FORCE_DROP_COURSE`        | `AdminForceDropCourseRequest(studentId, enrollmentId, reason)` | `null`                       |
+| `COURSE.ADMIN_LIST_OFFERINGS`           | `null` 或兼容旧客户端的 `BatchRequest`                                 | `List<CourseInfo>`           |
+| `COURSE.ADMIN_CREATE_OFFERING`          | `AdminCreateOfferingRequest`                                   | 新教学班 ID                      |
+| `COURSE.ADMIN_UPDATE_OFFERING`          | `AdminUpdateOfferingRequest`                                   | `null`                       |
+| `COURSE.ADMIN_UPDATE_COURSE`            | `AdminUpdateCourseRequest`                                     | `CourseInfo`                 |
+| `COURSE.ADMIN_UPDATE_BATCH`             | `AdminUpdateBatchRequest`                                      | `SelectionBatchInfo`         |
+| `COURSE.ADMIN_LIST_ACTIVE_TEACHERS`     | `null`                                                         | `List<TeacherProfileView>`   |
+| `COURSE.ADMIN_LIST_OFFERING_TEACHERS`   | `OfferingTeacherRequest(offeringId)`                           | `List<String>`，内容为教师 userId  |
+| `COURSE.ADMIN_ASSIGN_TEACHER`           | `AdminTeacherAssignmentRequest`                                | `null`                       |
+| `COURSE.ADMIN_REMOVE_TEACHER`           | `AdminTeacherAssignmentRequest`                                | `null`                       |
+| `COURSE.ADMIN_LIST_GRADES`              | `AdminListGradesRequest(studentId)`                            | `List<CourseGradeInfo>`      |
+| `COURSE.ADMIN_UPDATE_GRADE`             | `AdminUpdateGradeRequest`                                      | `CourseGradeInfo`            |
+| `COURSE.ADMIN_GET_STATISTICS`           | `BatchRequest(batchId)`                                        | `CourseAdminStatisticsInfo`  |
+| `COURSE.ADMIN_LIST_AUDIT_LOGS`          | `null`                                                         | `List<CourseAdminAuditInfo>` |
+
+`ADMIN_UPDATE_GRADE` 额外要求全局角色为 `SUPER_ADMIN`。普通选课管理员只能查询成绩，不能通过该 Action 修改成绩。
+
+#### 7.7.4 错误码
+
+当前选课模块使用三类公共错误码：
+
+| 错误码                      | 使用场景                      |
+| ------------------------ | ------------------------- |
+| `AUTH_REQUIRED`          | token 缺失、无效或会话已过期         |
+| `AUTH_FORBIDDEN`         | 当前账号没有选课管理权限、教师资格或指定教学班权限 |
+| `COMMON_INVALID_REQUEST` | DTO 类型错误、参数错误或选课业务校验失败    |
+
+当前尚未定义以 `COURSE_` 开头的细分业务错误码。容量已满、时间冲突、重复选课、批次关闭等情况通过 `COMMON_INVALID_REQUEST` 的响应消息区分。
+
+### 7.8 数据表与并发规则
+
+#### 7.8.1 主要数据表
+
+| 表名                          | 主要用途                 | 重要约束                               |
+| --------------------------- | -------------------- | ---------------------------------- |
+| `tblCourse`                 | 课程代码、名称、学分、类型、院系和课程组 | `courseId`、`courseCode` 唯一         |
+| `tblCourseOffering`         | 教学班、地点、校区、语言、容量和状态   | `offeringId` 唯一                    |
+| `tblCourseSchedule`         | 星期、节次、教学周和单双周安排      | 通过 `offeringId` 关联教学班              |
+| `tblOfferingTeacher`        | 教学班与公共教师账号的任课关系      | `(offeringId, teacherUserId)` 业务唯一 |
+| `tblSelectionBatch`         | 原始选课批次               | `batchId` 唯一                       |
+| `tblEnrollment`             | 学生选课及退课记录            | `(userId, offeringId)` 唯一          |
+| `tblCourseHistory`          | 学生历史修读课程             | `(userId, courseId)` 唯一            |
+| `tblGrade`                  | 平时成绩、期末成绩和录入时间       | `enrollmentId` 唯一                  |
+| `tblGradePolicy`            | 教学班成绩计算比例            | `offeringId` 唯一                    |
+| `tblCourseSubstitution`     | 方案外课程与被替代课程关系        | 替代课程 ID 唯一                         |
+| `tblPeCourse`               | 体育课程及体育项目            | `courseId` 唯一                      |
+| `tblPeOfferingRule`         | 体育教学班性别和男女容量规则       | `offeringId` 唯一                    |
+| `tblGeneralCourse`          | 通选课程类别               | `courseId` 唯一                      |
+| `tblCourseSettings`         | 管理员修改后的课程基本信息        | `courseId` 唯一                      |
+| `tblCourseOfferingSettings` | 管理员修改后的容量和开放状态       | `offeringId` 唯一                    |
+| `tblCourseBatchSettings`    | 管理员修改后的批次设置          | `batchId` 唯一                       |
+| `tblCourseAdminAudit`       | 教务操作日志               | 按 `operatedAt` 建立索引                |
+
+`tblEnrollment` 使用 `SELECTED` 和 `DROPPED` 两种状态。退课后再次选择同一教学班时，Repository 重新启用原有记录，而不是插入违反唯一约束的新记录。
+
+`tblGrade` 每条有效选课记录最多对应一条成绩。平时成绩和期末成绩写入数据库，总成绩根据 `tblGradePolicy` 中的比例动态计算，不重复保存。
+
+任课关系使用公共教师档案的稳定 `teacherUserId`。`teacherName` 只作为兼容旧数据的显示快照，当前姓名优先从公共教师目录读取。
+
+#### 7.8.2 并发规则
+
+1. `CourseSelectionService.selectCourse()` 使用 `synchronized` 串行化单个服务器实例中的学生选课，防止同一实例内的容量检查和保存发生交错。
+2. `CourseEnrollmentService.dropCourse()` 和强制退课操作使用 `synchronized`，避免同一记录被重复退课。
+3. 成绩、成绩比例、批次、课程和教学班修改操作分别在对应 Service 或 Repository 中串行化。
+4. `tblEnrollment(userId, offeringId)` 和 `tblGrade.enrollmentId` 的唯一索引作为持久化层的最后约束。
+5. 新增教学班时，教学班和首条上课时间使用同一个数据库事务写入，任一步失败则整体回滚。
+6. 当前同步锁只对单个 Java 服务器实例有效，不支持多个服务器进程同时操作同一 Access 数据库。
+
+### 7.9 测试与验收
+
+当前专门针对选课模块的自动化测试为 `AccessCourseOfferingCreationRepositoryTest`，覆盖：
+
+* 为已有课程新增教学班及首条上课时间；
+* 新教学班可以通过课程 Repository 重新读取；
+* 新教学班 ID 正确生成；
+* 同一课程下重复班号被拒绝。
+
+选课、退课、冲突、容量、体育课性别限制、教师权限、成绩和管理员操作目前主要依赖业务代码校验与人工联调，仍需补充独立自动化测试。
+
+验收条件：
+
+* [ ] 学生可以查看当前启用的预选、重修和退改补批次。
+* [ ] 重修批次不显示体育课和通选课。
+* [ ] 普通批次拒绝再次选择已经正式修读过的普通课程。
+* [ ] 重修批次只允许选择以前修读过的普通课程；不要求历史成绩低于 60 分。
+* [ ] 同一学生不能同时选择同一课程的两个教学班。
+* [ ] 方案课程或其替代课程已满足同一培养要求时，拒绝重复选择。
+* [ ] 教学班已关闭或人数已满时，普通学生无法选课。
+* [ ] 体育课按学生性别、教学班限制和男女容量判断资格。
+* [ ] 时间冲突检测同时考虑星期、节次、周次及单双周。
+* [ ] 学生只能在批次开放且允许退课时退课。
+* [ ] 管理员可以不受批次时间限制执行强制选课和强制退课。
+* [ ] 强制选课仍禁止同一课程重复选择。
+* [ ] 普通教师只能查看和管理自己负责的教学班。
+* [ ] 平时成绩和期末成绩均限制在 0—100 之间。
+* [ ] 成绩比例总和必须等于 100，未设置时使用 40% 和 60%。
+* [ ] 学生只能通过 token 查看本人成绩。
+* [ ] 只有超级管理员可以通过管理员成绩页面修改成绩。
+* [ ] 修改课程、教学班、批次、成绩和强制选退课后生成操作日志。
+* [ ] 服务器重启后课程、选课、成绩和任课关系仍能从 Access 恢复。
+* [ ] `mvn clean verify` 全部通过。
+
+### 7.10 仍未完成的内容和已知限制
+
+* 当前不能新增或删除课程，只能修改已有课程；新增功能仅覆盖“为已有课程新增教学班”。
+* 当前不能删除教学班，只能通过开放状态关闭教学班。
+* 课程和教学班目前是全局数据，Repository 中保留的 `batchId` 参数未真正用于划分课程范围；不同批次暂时共享同一课程目录。
+* 方案内课程暂未按具体培养方案、专业和年级区分，Access 实现直接把 `courseGroup = REGULAR` 的课程作为方案内课程。
+* 管理员修改课程、教学班和批次时采用额外 Settings 表覆盖原始数据，尚未统一回写基础表。
+* 原始 `tblCourseOffering.selectedCount` 与根据 `tblEnrollment` 动态统计的人数同时存在，存在两套人数来源；演示数据重建和运行时统计需要保持一致，后续应统一为根据有效选课记录实时计算。
+* 当前没有课程专用业务错误码，所有业务失败均使用 `COMMON_INVALID_REQUEST`，客户端只能根据消息区分具体原因。
+* 教师分配和移除任课关系目前没有写入 `tblCourseAdminAudit`。
+* 选课和退课依赖单实例 `synchronized`，没有数据库行锁或乐观锁，不支持多个服务器实例并发抢占最后名额。
+* 学生身份目前使用登录账号 `username` 作为学号，尚未统一改为公共用户 `userId` 与学籍主键的稳定关联。
+* `database/schema/course.md` 中的部分设计字段和当前 Access DAO 实际表结构尚未完全一致，需要在最终提交前统一。
+* 自动化测试覆盖不足，尚缺学生选课、退课、跨类别时间冲突、体育课男女容量、管理员越权、教师越权、成绩计算、并发选课和服务器重启持久化测试。
+* 当前不提供候补队列、抽签选课、志愿优先级、选课结果通知、成绩申诉和课程评价功能。
+
 
 ## 8. 图书馆子系统设计说明（已实现，已知限制见 8.10）
 
@@ -682,6 +1085,9 @@ classDiagram
 #### 8.2.1 读者用例
 
 1. **检索馆藏**：按关键词（≤50 字符）与可选分类查询，结果为按馆藏地汇总的馆藏数与可借数；停用书目不可见。
+   关键词**同时匹配书目元数据与实体单册**：书名、作者、ISBN、分类名、出版社、语种、出版年来自书目行，
+   索书号与馆藏条码来自单册行——读者拿到一本书的索书号或条码就能直接查到它在哪。
+   结果分页返回，每页 `pageSize` 条（默认 20，上限 100），响应同时给出 `totalCount` 与总页数。
 2. **线上预约**：选定书目与取书馆藏地提交预约；有可借单册时立即保留 24 小时，否则进入队列。
 3. **查看与取消预约**：查看状态、排队位次、分配条码与取书截止时间；排队中或待取可取消。
 4. **条码借书**：在模拟终端扫描条码，先由服务器预检，界面只启用合法操作；本人预约的保留册可在此时取走。
@@ -693,18 +1099,21 @@ classDiagram
 
 1. **书目维护**：查询全部书目（含停用）、新增与编辑元数据、切换"开放借阅 / 停止借阅"。
 2. **分类维护**：新增可复用分类，名称忽略大小写去重；书目只保存稳定分类 ID。
-3. **单册维护**：登记唯一馆藏条码、维护馆藏地与索书号、确认归架、软注销、恢复误注销单册。
-4. **借阅查询**：按"当前借阅 / 借阅历史 / 逾期未还"三个范围查询全馆记录。
+3. **单册维护**：登记唯一馆藏条码、从**馆藏地字典**中选择馆藏地、维护索书号、确认归架、软注销、恢复误注销单册。
+4. **馆藏地字典**：查看全馆馆藏地及其在架册数，新增馆藏地；登记或迁移单册只能落到字典里已有的名字上。
+5. **借阅查询**：按"当前借阅 / 借阅历史 / 逾期未还"三个范围查询全馆记录。
+6. **预约查询**：只读查看全馆排队与待取情况。
+7. **统计**：全馆快照与 CSV 导出。
 
 ### 8.3 界面设计
 
 | 页面 | 类 | 职责 |
 |---|---|---|
 | 模式选择 | `LibraryModePanel` | 三张入口卡片：线上图书馆、图书管理员工作台（仅管理员可见）、模拟自助终端 |
-| 馆藏查询 | `LibraryPanel` | 关键词与分类检索、结果表、按馆藏地展示的馆藏详情、预约提交 |
+| 馆藏查询 | `LibraryPanel` | 关键词与分类检索、结果表与翻页控件、按馆藏地展示的馆藏详情、预约提交 |
 | 我的图书馆 | `MyLibraryPanel` | 当前借阅 / 历史借阅 / 我的预约三个页签，含续借与取消预约 |
 | 模拟自助终端 | `SelfServicePanel` | 条码输入、服务器预检、按预检结果启用借书或归还 |
-| 图书管理员工作台 | `LibraryAdminPanel` | 书目维护 / 实体单册 / 借阅查询三个页签 |
+| 图书管理员工作台 | `LibraryAdminPanel` | 书目维护 / 实体单册 / 借阅查询 / 预约查询 / 统计五个页签；馆藏地以下拉选择并可当场新增 |
 
 页面状态约定：
 
@@ -890,17 +1299,19 @@ classDiagram
 
 ### 8.7 Action、DTO 与错误码
 
-读者与通用 Action（10 个）：
+读者与通用 Action（11 个）：
 
 | Action | Request.data | 成功 Response.data | 权限 |
 |---|---|---|---|
-| `LIBRARY.SEARCH_BOOKS` | `BookSearchRequest(keyword, categoryId)` | `BookSearchResult` | 已登录 |
+| `LIBRARY.SEARCH_BOOKS` | `BookSearchRequest(keyword, categoryId, page, pageSize)` | `BookSearchResult` | 已登录 |
 | `LIBRARY.LIST_CATEGORIES` | `null` | `List<BookCategoryDTO>` | 已登录 |
 | `LIBRARY.CREATE_RESERVATION` | `CreateReservationRequest(bookId, pickupLocation)` | `ReservationDTO` | 已登录 |
 | `LIBRARY.GET_MY_RESERVATIONS` | `null` | `List<ReservationDTO>` | 已登录 |
 | `LIBRARY.CANCEL_RESERVATION` | `ReservationIdRequest(reservationId)` | `ReservationDTO` | 已登录且为预约本人 |
 | `LIBRARY.GET_BORROW_RECORDS` | `null` | `List<BorrowRecordDTO>` | 已登录 |
 | `LIBRARY.RENEW_BORROW` | `BorrowRecordIdRequest(recordId)` | `BorrowRecordDTO` | 已登录且为借阅本人 |
+| `LIBRARY.PAY_FEE` | `BorrowRecordIdRequest(recordId)` | `BorrowRecordDTO` | 已登录且为借阅本人；通过校园卡扣款 |
+| `LIBRARY.REPORT_LOST` | `BorrowRecordIdRequest(recordId)` | `BorrowRecordDTO` | 已登录且为借阅本人；注销单册并产生赔偿 |
 | `LIBRARY.INSPECT_COPY` | `CopyInspectionRequest(barcode)` | `CopyInspectionDTO` | 已登录 |
 | `LIBRARY.BORROW_COPY` | `CopyBorrowRequest(barcode)` | `null` | 已登录 |
 | `LIBRARY.RETURN_COPY` | `CopyReturnRequest(barcode)` | `null` | 已登录 |
@@ -917,7 +1328,11 @@ classDiagram
 | `LIBRARY.LIST_BOOK_COPIES` | `ListBookCopiesRequest(bookId)` | `List<BookCopyDTO>` |
 | `LIBRARY.UPDATE_BOOK_COPY` | `UpdateBookCopyRequest(copyId, location, callNumber)` | `BookCopyDTO` |
 | `LIBRARY.SHELVE_BOOK_COPY` / `WITHDRAW_BOOK_COPY` / `RESTORE_BOOK_COPY` | `BookCopyIdRequest(copyId)` | `BookCopyDTO` |
-| `LIBRARY.ADMIN_QUERY_BORROWS` | `AdminBorrowQueryRequest(scope)` | `List<AdminBorrowRecordDTO>` |
+| `LIBRARY.ADMIN_QUERY_BORROWS` | `AdminBorrowQueryRequest(scope, userId)` | `List<AdminBorrowRecordDTO>` |
+| `LIBRARY.ADMIN_QUERY_RESERVATIONS` | `AdminReservationQueryRequest(scope)` | `List<AdminReservationDTO>` |
+| `LIBRARY.ADMIN_STATISTICS` | `null` | `LibraryStatisticsDTO` |
+| `LIBRARY.ADMIN_LIST_LOCATIONS` | `null` | `List<LibraryLocationDTO>`（含各馆藏地的在架册数） |
+| `LIBRARY.ADMIN_ADD_LOCATION` | `AddLocationRequest(locationName)` | `LibraryLocationDTO` |
 
 借还类请求 DTO **不含 `userId`**：当前用户一律由 `Request.token -> SessionInfo.userId` 确认，
 防止越权代操作。
@@ -927,8 +1342,10 @@ classDiagram
 | 分类 | 错误码 |
 |---|---|
 | 书目与单册 | `LIBRARY_BOOK_NOT_FOUND`、`LIBRARY_COPY_NOT_FOUND`、`LIBRARY_CATEGORY_NOT_FOUND`、`LIBRARY_DUPLICATE_ISBN`、`LIBRARY_DUPLICATE_BARCODE`、`LIBRARY_DUPLICATE_CATEGORY`、`LIBRARY_INVALID_BOOK_STATUS`、`LIBRARY_INVALID_COPY_STATUS`、`LIBRARY_COPY_NOT_AVAILABLE`、`LIBRARY_COPY_RESERVED_FOR_OTHER` |
+| 馆藏地 | `LIBRARY_LOCATION_NOT_FOUND`（登记或迁移单册时馆藏地不在字典里）、`LIBRARY_DUPLICATE_LOCATION`（新增馆藏地重名，忽略大小写与首尾空格） |
 | 借还与续借 | `LIBRARY_BORROW_RECORD_NOT_FOUND`、`LIBRARY_BORROW_LIMIT_REACHED`、`LIBRARY_ALREADY_BORROWED`、`LIBRARY_OVERDUE_BORROW_EXISTS`、`LIBRARY_RENEWAL_NOT_ALLOWED`、`LIBRARY_RENEWAL_LIMIT_REACHED`、`LIBRARY_RENEWAL_BLOCKED_BY_RESERVATION` |
 | 预约 | `LIBRARY_RESERVATION_NOT_FOUND`、`LIBRARY_RESERVATION_LIMIT_REACHED`、`LIBRARY_DUPLICATE_RESERVATION`、`LIBRARY_RESERVATION_COOLDOWN`、`LIBRARY_RESERVATION_NOT_CANCELLABLE`、`LIBRARY_INVALID_PICKUP_LOCATION` |
+| 费用 | `LIBRARY_FEE_NOT_PAYABLE`（无费用或已结清）、`LIBRARY_OUTSTANDING_FEE`（有未缴费用，阻止借阅与预约）、`LIBRARY_LOST_NOT_REPORTABLE`（该借阅不能申报丢失）、`CARD_INSUFFICIENT_BALANCE`（校园卡余额不足，由卡模块透传） |
 | 认证 | `AUTH_REQUIRED`（无 token 或会话失效）、`AUTH_FORBIDDEN`（非图书馆管理员调用管理 Action） |
 
 参数非法（超长文本、非法 ISBN、非法出版年、未知查询范围）返回 `COMMON_INVALID_ARGUMENT`；
@@ -936,22 +1353,38 @@ classDiagram
 
 ### 8.8 数据表与并发规则
 
-五张表：`tblBook`、`tblBookCopy`、`tblBookCategory`、`tblBorrowRecord`、`tblReservation`。
+六张表：`tblBook`、`tblBookCopy`、`tblBookCategory`、`tblBookLocation`、`tblBorrowRecord`、`tblReservation`。
 字段、主外键、唯一索引与不变量的完整定义见[图书馆数据字典](../../database/schema/library.md)，此处只列设计要点：
 
 - `tblBook` 是书目元数据，**不保存 `totalCount` / `availableCount`**；两个值由未注销
   `tblBookCopy` 按馆藏地实时汇总，`INACTIVE` 书目保留馆藏数但业务可借数固定为 0。
 - `tblBorrowRecord` 只保存 `copyId` 而不保存 `bookId`；`renewalCount` 记录成功续借次数（上限 1）。
 - 逾期**不落库、不占第三种状态**，由 `BORROWED && now > dueTime` 动态计算。
+- **费用金额同样不落库**，只保存 `feeSettledAt`（结清时间，`NULL` 表示未缴）。费用有两类且互斥：
+  逾期滞纳金 = `min(逾期天数 × 0.5 元, 50 元)`，恰好到期归还的当天不计费；
+  丢书赔偿 = `书价 + 5 元手续费`，当 `lostReportedAt` 非空时只算赔偿、不再叠加滞纳金。
+  两类金额都只由 `dueTime`、`returnTime`、`lostReportedAt` 与 `tblBook.priceFen` 推导，
+  这些输入一旦写入就不再变化，因此金额稳定且不会漂移。
+- `tblBook.priceFen` 为必填（0.01–9999.99 元）：赔偿以书价为基数，未定价的书无法计算赔偿。
+- 申报丢失在**同一事务**内完成三件事：单册 `-> WITHDRAWN`、记录 `-> RETURNED` 并写入
+  `lostReportedAt`、赔偿随之产生。复用 `WITHDRAWN` 而不新增状态，状态机与馆藏汇总都不必改动；
+  书若找回，管理员用既有的「恢复单册」即可。
+- 未缴费用会阻止新的借阅与预约（`LIBRARY_OUTSTANDING_FEE`），结清后立即恢复。扣款通过校园卡
+  `debit` 完成，其 `商户号 + reference` 幂等；若本地写入失败则 `credit` 补偿退款。
+- `tblBookLocation` 把馆藏地从自由文本变成一份**以名称为主键**的字典。单册仍然只存房间名，
+  所以既有数据不需要迁移；登记与迁移单册时服务层会先查字典，名字不在其中就报
+  `LIBRARY_LOCATION_NOT_FOUND`。代价与分类相同：**只能新增、不能改名**——改名会让所有引用
+  旧名字的单册失联。升级既有数据库时会把 `tblBookCopy` 里已经出现过的房间名自动收进字典，
+  这样老库里的单册不会被新的校验挡住。
 - `tblReservation` 的排队顺序由 `createdAt` 加 `reservationId` 决定，保证相同创建时间下顺序稳定。
-- 唯一索引：`tblBook.isbn`、`tblBookCopy.barcode`；跨模块 `userId` 不建外键。
+- 唯一索引：`tblBook.isbn`、`tblBookCopy.barcode`、`tblBookLocation.locationName`；跨模块 `userId` 不建外键。
 
 并发规则分两层：
 
 1. **同一服务器实例内**：`LibraryService.circulationLock` 串行化全部读写，管理操作与流通操作共用同一临界区，
    避免交错破坏状态。预约到期的清理没有后台定时器，而是在检索、预约、借还和管理状态操作前于事务内原子执行。
 2. **持久化层**：`AccessLibraryStore` 在事务开始时把同一个 JDBC Connection 绑定到当前线程，
-   五个 Access Repository 在一次业务中复用该连接，任一步失败整体回滚。InMemory 版本通过
+   六个 Access Repository 在一次业务中复用该连接，任一步失败整体回滚。InMemory 版本通过
    第二步失败时补偿第一步维持测试状态一致。
 
 尚未覆盖的是**跨进程或跨服务器实例**的并发：系统没有 `SELECT ... FOR UPDATE` 与乐观锁版本号，
@@ -959,21 +1392,26 @@ classDiagram
 
 ### 8.9 测试与验收
 
-自动化测试共 **97 个用例**（服务端 10 个测试类、客户端 9 个测试类），详见
+自动化测试共 **146 个用例**（服务端 13 个测试类、客户端 11 个测试类），详见
 [交付说明](../modules/library-borrow-return.md)：
 
 | 测试类 | 覆盖内容 |
 |---|---|
 | `LibraryServiceTest` | 关键词 trim、分类过滤、馆藏地汇总语义、停用书目对读者的可见性 |
+| `LibraryCatalogSearchTest` | 索书号与条码命中单册所属书目、大小写不敏感、出版社/出版年可检索、逐页取完等于全量且不重不漏、末页余数与总数、越界页码与极大页码返回空页、非法页码与页大小被拒、分类过滤先于分页、管理员检索同样覆盖索书号且保留停用书目 |
+| `LibraryLocationTest` | 字典按稳定顺序列出馆藏地与在架册数、未入库的馆藏地不能登记或迁移单册、新增后即可使用、重名（忽略大小写与首尾空格）被拒、迁移时两个馆藏地计数同时更新、已注销单册不再计数但馆藏地保留、非管理员不能读或写字典 |
 | `LibraryValidationTest` | 字段长度上限（恰好等于上限通过 / 超一字符拒绝）、ISBN 的 10 位与 13 位写法与分隔符归一化、长度检查先于格式检查、出版年 1000–9999 边界 |
 | `LibraryBoundaryTest` | 逾期与预约过期的时刻边界、第五本借阅与第三条预约的恰好边界、借已注销单册、续借已归还记录、有活跃借阅时归架与恢复被拒、未知标识的未找到分支 |
 | `LibraryCirculationPhaseTwoTest` | 条码借还、30 天借期、五本上限、同书目重复、逾期停借、终端预检、他人归还拒绝、并发借同一册、事务回滚 |
 | `LibraryReservationServiceTest` | 立即保留、FIFO 排队与稳定 tie-break、24 小时过期、7 天冷却、取消顺延、续借三条规则、并发抢最后一册 |
 | `LibraryAdminServiceTest` | 分类新增与去重、ISBN 规范化、单册生命周期、状态专用操作、全馆借阅查询与越权拒绝 |
-| `LibraryServerModuleTest` | 22 个 Action 契约反射冻结、鉴权、DTO 类型校验、会话身份优先于载荷 |
-| `AccessLibraryRepositoryTest` | 真实 `.accdb` 建表与索引、唯一约束、借还/预约事务回滚、演示种子不变量 |
+| `LibraryServerModuleTest` | 23 个 Action 契约反射冻结、鉴权、DTO 类型校验、会话身份优先于载荷 |
+| `LibraryFeeServiceTest` | 滞纳金费率与封顶、未归还不计费、缴费幂等、余额不足、扣款后本地写入失败补偿退款、未缴费用阻止借书与预约；丢书赔偿=书价+手续费、单册转已注销、两类费用互斥、重复申报被拒 |
+| `AccessLibraryRepositoryTest` | 真实 `.accdb` 建表与索引、唯一约束、借还/预约事务回滚、演示种子不变量、**缺 `tblBookLocation` 的旧库升级时收纳单册已在用的房间名且不重新播种** |
 | `LibraryPersistenceIntegrationTest` | 真实 Socket 下跨多次服务器重启的状态保留、演示数据不重复播种 |
+| `LibraryFeeGatewayIntegrationTest` | 真实 Socket + 真实卡网关：归还逾期书产生滞纳金、未结清不能借书、缴费扣款、结清后恢复借阅、重复缴费不重复扣款、结清状态与余额跨重启保留 |
 | `LibraryWorkflowUiTest` / `LibraryAdminUiTest` / `LibraryReservationUiTest` / `LibrarySearchIntegrationTest` / `LibraryAdminIntegrationTest` | 模式切换、预约与取消、续借、终端预检、管理员可见性与状态按钮禁用、跨 Socket 全链路 |
+| `LibraryCatalogPagingUiTest` | 真实 Socket 下补到 23 本书目后翻页：首页 20 条、末页 3 条、页码与按钮可用性随服务器回显、换关键词回到第一页 |
 | `LibraryResponsiveLayoutTest` / `LibraryUiThemeTest` | 900×560 与 1280×760 两档布局不越界、按钮禁用态对比度 |
 
 验收条件：
@@ -987,7 +1425,19 @@ classDiagram
 - [ ] 到期时刻本身不算逾期；预约截止时刻本身算过期。
 - [ ] 归还后单册为 `WAITING_SHELVING`，可借数不立即恢复；管理员确认归架后恢复。
 - [ ] 续借从原到期日顺延 30 天，逾期、已续借过一次或同书目有有效预约时拒绝。
+- [ ] 逾期归还产生滞纳金（每天 0.5 元，封顶 50 元），未归还的逾期记录不产生费用。
+- [ ] 缴费从校园卡扣款且重复提交不重复扣款；余额不足返回 `CARD_INSUFFICIENT_BALANCE`。
+- [ ] 存在未缴费用时不能借书与预约，结清后恢复。
+- [ ] 读者申报丢失后，单册转为 `WITHDRAWN`，记录同时关闭并标记 `lostReportedAt`。
+- [ ] 丢书赔偿为书价加 5 元手续费；既逾期又丢失时只算赔偿，不叠加滞纳金。
+- [ ] 重复申报同一借阅、或申报已归还的借阅，返回 `LIBRARY_LOST_NOT_REPORTABLE`。
+- [ ] 书目定价超出 0.01–9999.99 元时拒绝保存。
 - [ ] 非图书馆管理员调用任一管理 Action 返回 `AUTH_FORBIDDEN`；无 token 返回 `AUTH_REQUIRED`。
+- [ ] 关键词能命中索书号与馆藏条码：用 "C002/" 或 "seu-b004-002" 检索，返回《红楼梦》而不返回其他书目。
+- [ ] 登记或迁移单册时，馆藏地只能是字典里已有的名字；用未登记的馆藏地提交返回 `LIBRARY_LOCATION_NOT_FOUND`。
+- [ ] 新增馆藏地后立即可用于登记单册；重名（忽略大小写）返回 `LIBRARY_DUPLICATE_LOCATION`。
+- [ ] 逐页取完检索结果与一次性全量取回完全相同：顺序一致、不重复、不遗漏。
+- [ ] 页码越界（含 `Integer.MAX_VALUE`）返回空列表而不是异常；`pageSize` 超过 100 返回 `COMMON_INVALID_ARGUMENT`。
 - [ ] 同一单册的并发借阅只有一次成功（`LibraryCirculationPhaseTwoTest`）。
 - [ ] 服务器重启后借阅、预约与单册状态保持不变，已有数据库不重新播种演示数据。
 - [ ] `mvn clean verify` 全部通过。
@@ -996,8 +1446,12 @@ classDiagram
 
 **文档声明排除、本轮不实现**（出处见各模块文档的"范围"说明）：
 
-- 逾期罚款、欠款与遗失赔偿：无金额字段、无计费规则、无缴费 Action。
-  上游已为图书馆预留校园卡缴费钩子 `LibraryServerModule.settleFee(...)`，但图书馆侧尚未接入。
+- 欠款台账与减免：费用挂在借阅记录上，没有跨记录的汇总视图、历史欠费查询，也不能减免或分期。
+  读者需逐条结清。
+- **费率没有生效期**：这是"金额不落库"的直接代价——欠款额是查询时按当前费率算出来的，
+  所以调整 `FINE_PER_DAY_FEN` / `LOST_HANDLING_FEE_FEN` 会连带改变**尚未结清的存量记录**的欠款额。
+  换来的是金额永远可推导、不会与明细打架。真实系统需要给费率加生效期，或把金额在产生时定死。
+- 丢书由读者**自行申报**，没有馆员复核环节；真实图书馆通常需要工作人员确认后才注销单册。
 - 消息通知：预约到书、到期提醒与逾期催还均无推送，用户只能主动刷新查看。
 - 委托借阅、书评、书架收藏、荐购与热门排行。
 - 采购批次、馆藏盘点与馆际互借。
@@ -1008,19 +1462,26 @@ classDiagram
 
 **尚未实现但未在文档中声明排除**（后续 PR 处理）：
 
-- 分页与排序：检索、借阅查询与单册列表均一次性全量返回，无 `pageSize` 一类参数。
-- 管理员看不到预约队列：工作台只有书目、单册、借阅三个页签，无法查看或干预预约。
-- 管理员不能按读者筛选借阅记录：`AdminBorrowQueryRequest` 只有 `scope` 字段。
-- 无统计报表与导出，只有"共 N 条"的文字计数。
-- 检索字段偏窄：关键词只匹配书名、作者、ISBN 与分类名，不含索书号、出版社、出版年与语种。
-- 无独立馆藏地字典，取书地点由现存单册的 `location` 反推。
+- 分页只做在**检索**路径上；借阅查询与单册列表仍一次性全量返回，也没有排序参数。
+  这是有意的取舍：检索结果随馆藏增长，而"某读者的借阅"受 5 本在借上限约束、
+  "某书目的单册"受复本数约束，两者结果集天然有界。
+- 分页是**跳页式**的，不是游标：两次翻页之间若有其他读者借还，同一本书可能出现在相邻两页，
+  也可能被跳过。演示场景下可接受，真做海量检索应换成基于稳定排序键的游标分页。
+- 管理员对预约是**只读**的：可以查看全馆排队与待取情况，但不能重排、强制取消或人工指定保留册；
+  预约的结束方式只有读者取消、到期未取与取书借出三种。
+- 按读者检索借阅需要管理员手工输入稳定读者编号（如 `U-STUDENT-001`），
+  界面不提供按姓名或学号搜索，也不做用户列表下拉。
+- 统计的导出只有 CSV，没有图表；统计口径固定在服务端，不能自定义时间范围。
+- 馆藏地字典**只能新增，不能改名或删除**：单册与预约都以房间名引用馆藏地，改名会让它们失联。
+  与分类的取舍一致。读者的"取书地点"下拉仍然只列**该书目有单册的馆藏地**——预约必须落在
+  真实存在单册的地方，字典解决的是"有哪些房间"，不是"这本书在哪些房间"。
 - 逾期只有动态判定与拦截，没有催还动作与状态位。
 
 **工程限制**：
 
 - **不支持跨进程/跨实例并发**：仅依赖单实例的 `circulationLock` 与数据库唯一索引，无悲观锁或乐观锁。
-- **`LibraryService` 未按课程"每个文件不超过 200 行"拆分**：当前 1050 行，承载检索、流通、预约、
-  馆藏维护等职责。经评估，全面达标需拆为约 10 个类，与仓库其余模块现状（`HospitalService` 2209 行、
+- **`LibraryService` 未按课程"每个文件不超过 200 行"拆分**：当前 1515 行，承载检索、流通、预约、
+  费用与馆藏维护等职责。经评估，全面达标需拆为约 10 个类，与仓库其余模块现状（`HospitalService` 2209 行、
   course 模块存在 693 与 889 行的服务类）差异过大，本轮暂不拆分。
 - **无障碍支持空白**：界面无 `setMnemonic` / `setLabelFor` 与可访问名称，除回车外无快捷键。
 - **业务常量在两处维护**：借期、上限、保留时长等服务端常量在客户端提示文案中硬编码了一份，存在漂移风险。
@@ -1073,7 +1534,7 @@ classDiagram
 
 > 上表以用户模块为例说明 Action 的命名与请求/响应约定，**不是跨模块的全量清单**。
 > Action 名统一为 `<模块>.<动作>`，由 `ActionNames.of(ModuleNames.XXX, "VERB")` 生成。
-> 各业务模块的完整 Action 表在其子系统章节中给出，例如图书馆的 22 个 Action（10 个读者与通用、
+> 各业务模块的完整 Action 表在其子系统章节中给出，例如图书馆的 23 个 Action（11 个读者与通用、
 > 12 个管理）见 8.7 节。
 
 ### 11.2 Request
@@ -1324,7 +1785,7 @@ flowchart LR
 | `LibraryPersistenceIntegrationTest` | 真实 Socket 下演示借阅与预约跨重启保留、已有库不重复补种，以及借书、归还、管理员上架。 |
 | `UserAdministrationIntegrationTest`、`AccessUserAuditRepositoryTest` | 超级管理员账号维护、越权拦截、成功/失败审计记录及 Access 重启后记录保留。 |
 
-图书馆模块的服务端 10 个测试类与客户端 9 个测试类共 97 个用例，完整清单见 8.9 节。
+图书馆模块的服务端 11 个测试类与客户端 10 个测试类共 125 个用例，完整清单见 8.9 节。
 其余模块的测试同样由 `.github/workflows/ci.yml` 在每次 PR 上执行。
 
 ### 16.2 登录模块验收条件

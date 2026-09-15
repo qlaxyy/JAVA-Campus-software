@@ -145,6 +145,7 @@ final class HospitalHomePanel extends JPanel {
         copy.setLayout(new BoxLayout(copy, BoxLayout.Y_AXIS));
 
         JLabel title = new JLabel("校医院");
+        title.putClientProperty("module.pageTitle", true);
         title.setFont(title.getFont().deriveFont(Font.BOLD, 26F));
         title.setForeground(HospitalTheme.TEXT);
         JLabel subtitle = new JLabel("校园医疗服务 · 从预约、候诊到诊疗记录");
@@ -152,7 +153,6 @@ final class HospitalHomePanel extends JPanel {
 
         copy.add(title);
         copy.add(Box.createVerticalStrut(5));
-        copy.add(subtitle);
 
         JButton switchButton = HospitalTheme.quietButton("切换使用模式");
         switchButton.addActionListener(event -> switchMode.run());
@@ -362,7 +362,6 @@ final class HospitalHomePanel extends JPanel {
         javax.swing.JTextArea detail = HospitalResponsiveLayout.wrappingText(
                 description, HospitalTheme.uiFont(Font.PLAIN, 13F), HospitalTheme.MUTED);
         card.add(heading, BorderLayout.NORTH);
-        card.add(detail, BorderLayout.CENTER);
         return card;
     }
 

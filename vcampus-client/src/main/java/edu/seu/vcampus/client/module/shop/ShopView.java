@@ -241,11 +241,9 @@ public final class ShopView extends JPanel {
         cardChip.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(ShopPalette.LINE),
                 BorderFactory.createEmptyBorder(4, 10, 4, 10)));
-        right.add(greeting);
         right.add(cardChip);
         right.add(recharge);
         right.add(switchFromShop);
-        right.add(modeChip);
         header.add(right, BorderLayout.EAST);
         return header;
     }
@@ -253,7 +251,7 @@ public final class ShopView extends JPanel {
     private JPanel createManageHeader() {
         JPanel header = new JPanel(new BorderLayout(16, 0));
         header.setOpaque(false);
-        header.add(brandLabel("校园商店 · 管理"), BorderLayout.WEST);
+        header.add(brandLabel("商店管理"), BorderLayout.WEST);
         JButton switchMode = ShopPalette.quietButton("切换入口");
         switchMode.addActionListener(event -> openModeSelector());
         JLabel chip = new JLabel("管理");
@@ -264,13 +262,13 @@ public final class ShopView extends JPanel {
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         right.setOpaque(false);
         right.add(switchMode);
-        right.add(chip);
         header.add(right, BorderLayout.EAST);
         return header;
     }
 
     private static JLabel brandLabel(String text) {
         JLabel brand = new JLabel(text);
+        brand.putClientProperty("module.pageTitle", true);
         brand.setFont(new Font("SansSerif", Font.BOLD, 20));
         brand.setForeground(ShopPalette.TEXT);
         return brand;
@@ -278,6 +276,7 @@ public final class ShopView extends JPanel {
 
     private void updateShoppingHeader() {
         boolean admin = canManageShop();
+        switchFromShop.putClientProperty("navigation.available", admin);
         modeChip.setText(admin ? "购物" : "顾客");
         modeChip.setBackground(admin ? ShopPalette.PRIMARY_LIGHT : ShopPalette.PRIMARY_LIGHT);
         modeChip.setForeground(ShopPalette.PRIMARY_DARK);

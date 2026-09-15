@@ -135,7 +135,7 @@ final class CourseTeacherOfferingPanel
                 5));
 
         topPanel.add(
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "查看本人负责的课程、上课安排和选课人数"));
 
         topPanel.add(

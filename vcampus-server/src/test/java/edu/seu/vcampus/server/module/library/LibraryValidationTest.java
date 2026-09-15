@@ -3,6 +3,7 @@ package edu.seu.vcampus.server.module.library;
 import edu.seu.vcampus.common.library.AddBookCategoryRequest;
 import edu.seu.vcampus.common.library.AddBookCopyRequest;
 import edu.seu.vcampus.common.library.AddBookRequest;
+import edu.seu.vcampus.common.library.AddLocationRequest;
 import edu.seu.vcampus.common.library.UpdateBookCopyRequest;
 import edu.seu.vcampus.common.library.SetBookStatusRequest;
 import edu.seu.vcampus.common.protocol.ErrorCodes;
@@ -36,6 +37,8 @@ class LibraryValidationTest {
             Clock.fixed(Instant.parse("2026-09-06T08:00:00Z"), ZoneOffset.UTC);
     private static final SessionInfo ADMIN = new SessionInfo("admin", "A-1", "libraryadmin", "管理员",
             Role.USER, Set.of(AdminScope.LIBRARY));
+
+    private static final int PRICE_FEN = 5_000;
 
     private final AtomicInteger isbnSequence = new AtomicInteger();
     private final InMemoryBookRepository books = new InMemoryBookRepository();
@@ -98,19 +101,31 @@ class LibraryValidationTest {
     }
 
     @Test
-    void copyBarcodeLocationAndCallNumberEnforceTheirLimits() {
+    void copyBarcodeAndCallNumberEnforceTheirLimits() {
+        String location = InMemoryBookCopyRepository.JIULONGHU;
         assertEquals(50, service.addBookCopy(ADMIN,
-                new AddBookCopyRequest("B001", "B".repeat(50), "九龙湖", "索书号")).getBarcode().length());
+                new AddBookCopyRequest("B001", "B".repeat(50), location, "索书号"))
+                .getBarcode().length());
         assertThrows(IllegalArgumentException.class, () -> service.addBookCopy(ADMIN,
-                new AddBookCopyRequest("B001", "B".repeat(51), "九龙湖", "索书号")));
+                new AddBookCopyRequest("B001", "B".repeat(51), location, "索书号")));
 
         assertEquals(100, service.addBookCopy(ADMIN,
-                new AddBookCopyRequest("B001", "BC-LIMIT", "馆".repeat(100), "索".repeat(100)))
-                .getLocation().length());
+                new AddBookCopyRequest("B001", "BC-LIMIT", location, "索".repeat(100)))
+                .getCallNumber().length());
         assertThrows(IllegalArgumentException.class, () -> service.addBookCopy(ADMIN,
-                new AddBookCopyRequest("B001", "BC-LONG-LOC", "馆".repeat(101), "索书号")));
-        assertThrows(IllegalArgumentException.class, () -> service.addBookCopy(ADMIN,
-                new AddBookCopyRequest("B001", "BC-LONG-CALL", "九龙湖", "索".repeat(101))));
+                new AddBookCopyRequest("B001", "BC-LONG-CALL", location, "索".repeat(101))));
+    }
+
+    @Test
+    void locationNameLimitIsEnforcedWhenTheDictionaryEntryIsCreated() {
+        // 馆藏地长度上限属于字典条目本身：单册只能引用字典里已有的名字，
+        // 所以"恰好 100 字"这条边界只能在新增馆藏地时验证。
+        assertEquals(100, service.addLocation(ADMIN,
+                new AddLocationRequest("馆".repeat(100))).getLocationName().length());
+        assertThrows(IllegalArgumentException.class,
+                () -> service.addLocation(ADMIN, new AddLocationRequest("馆".repeat(101))));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.addLocation(ADMIN, new AddLocationRequest("   ")));
     }
 
     @Test
@@ -121,7 +136,8 @@ class LibraryValidationTest {
         assertThrows(IllegalArgumentException.class,
                 () -> service.setBookStatus(ADMIN, new SetBookStatusRequest("B".repeat(21), "ACTIVE")));
 
-        // 单册编号上限 50
+        // 单册编号上限 50。这里的馆藏地故意取字典里没有的名字，用来固定"先查单册、后查馆藏地"
+        // 的顺序：未找到的单册必须报 LIBRARY_COPY_NOT_FOUND，而不是先被馆藏地字典拦下。
         failure(ErrorCodes.LIBRARY_COPY_NOT_FOUND, () -> service.updateBookCopy(ADMIN,
                 new UpdateBookCopyRequest("C".repeat(50), "九龙湖", "索书号")));
         assertThrows(IllegalArgumentException.class, () -> service.updateBookCopy(ADMIN,
@@ -129,9 +145,11 @@ class LibraryValidationTest {
 
         // 分类编号上限 20
         failure(ErrorCodes.LIBRARY_CATEGORY_NOT_FOUND, () -> service.addBook(ADMIN,
-                new AddBookRequest(nextIsbn(), "书名", "作者", "C".repeat(20), "出版社", 2026, "中文")));
+                new AddBookRequest(nextIsbn(), "书名", "作者", "C".repeat(20), "出版社",
+                        2026, "中文", PRICE_FEN)));
         assertThrows(IllegalArgumentException.class, () -> service.addBook(ADMIN,
-                new AddBookRequest(nextIsbn(), "书名", "作者", "C".repeat(21), "出版社", 2026, "中文")));
+                new AddBookRequest(nextIsbn(), "书名", "作者", "C".repeat(21), "出版社",
+                        2026, "中文", PRICE_FEN)));
     }
 
     @Test
@@ -186,15 +204,32 @@ class LibraryValidationTest {
     }
 
     /** 自动分配 ISBN 的合法请求，用于长度与范围校验；这些测试不关心 ISBN 本身。 */
+    @Test
+    void bookPriceMustBeWithinRange() {
+        assertEquals(1, service.addBook(ADMIN, bookWithPrice(1)).getPriceFen());
+        assertEquals(999_999, service.addBook(ADMIN, bookWithPrice(999_999)).getPriceFen());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.addBook(ADMIN, bookWithPrice(0)));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.addBook(ADMIN, bookWithPrice(1_000_000)));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.addBook(ADMIN, bookWithPrice(-1)));
+    }
+
+    private AddBookRequest bookWithPrice(int priceFen) {
+        return new AddBookRequest(nextIsbn(), "书名", "作者", "C001", "出版社", 2026, "中文", priceFen);
+    }
+
     private AddBookRequest book(String title, String author, String publisher,
             Integer publicationYear, String language) {
         return new AddBookRequest(nextIsbn(), title, author, "C001", publisher,
-                publicationYear, language);
+                publicationYear, language, PRICE_FEN);
     }
 
     /** 显式指定 ISBN 的请求，用于 ISBN 格式测试。 */
     private AddBookRequest bookWithIsbn(String isbn) {
-        return new AddBookRequest(isbn, "书名", "作者", "C001", "出版社", 2026, "中文");
+        return new AddBookRequest(isbn, "书名", "作者", "C001", "出版社", 2026, "中文", PRICE_FEN);
     }
 
     /** 自动 ISBN 使用独立的号段，避免与 ISBN 测试中显式写出的值相撞。 */

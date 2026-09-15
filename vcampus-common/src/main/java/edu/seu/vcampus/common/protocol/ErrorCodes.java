@@ -126,6 +126,16 @@ public final class ErrorCodes {
             "LIBRARY_RENEWAL_BLOCKED_BY_RESERVATION";
     public static final String LIBRARY_DUPLICATE_CATEGORY =
             "LIBRARY_DUPLICATE_CATEGORY";
+    public static final String LIBRARY_FEE_NOT_PAYABLE =
+            "LIBRARY_FEE_NOT_PAYABLE";
+    public static final String LIBRARY_OUTSTANDING_FEE =
+            "LIBRARY_OUTSTANDING_FEE";
+    public static final String LIBRARY_LOST_NOT_REPORTABLE =
+            "LIBRARY_LOST_NOT_REPORTABLE";
+    public static final String LIBRARY_LOCATION_NOT_FOUND =
+            "LIBRARY_LOCATION_NOT_FOUND";
+    public static final String LIBRARY_DUPLICATE_LOCATION =
+            "LIBRARY_DUPLICATE_LOCATION";
 
     private ErrorCodes() {
     }

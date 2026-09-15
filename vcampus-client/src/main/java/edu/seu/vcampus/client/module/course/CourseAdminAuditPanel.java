@@ -141,7 +141,7 @@ final class CourseAdminAuditPanel
                 5));
 
         titleText.add(
-            CourseTheme.subtitle(
+            CourseTheme.pageSubtitle(
                 "查看教务老师执行的强制选课和强制退课记录"));
 
         titleRow.add(

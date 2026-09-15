@@ -4,15 +4,22 @@ import edu.seu.vcampus.client.application.ClientContext;
 import edu.seu.vcampus.common.library.AddBookCopyRequest;
 import edu.seu.vcampus.common.library.AddBookCategoryRequest;
 import edu.seu.vcampus.common.library.AddBookRequest;
+import edu.seu.vcampus.common.library.AddLocationRequest;
 import edu.seu.vcampus.common.library.AdminBorrowQueryRequest;
 import edu.seu.vcampus.common.library.AdminBorrowRecordDTO;
+import edu.seu.vcampus.common.library.AdminReservationDTO;
+import edu.seu.vcampus.common.library.AdminReservationQueryRequest;
 import edu.seu.vcampus.common.library.BookCategoryDTO;
 import edu.seu.vcampus.common.library.BookCopyDTO;
 import edu.seu.vcampus.common.library.BookCopyIdRequest;
 import edu.seu.vcampus.common.library.BookDTO;
 import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BookSearchResult;
+import edu.seu.vcampus.common.library.CategoryStatisticDTO;
 import edu.seu.vcampus.common.library.LibraryActions;
+import edu.seu.vcampus.common.library.LibraryLocationDTO;
+import edu.seu.vcampus.common.library.LibraryStatisticsDTO;
+import edu.seu.vcampus.common.library.PopularBookDTO;
 import edu.seu.vcampus.common.library.ListBookCopiesRequest;
 import edu.seu.vcampus.common.library.SetBookStatusRequest;
 import edu.seu.vcampus.common.library.UpdateBookCopyRequest;
@@ -24,6 +31,8 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -47,7 +56,10 @@ public final class LibraryAdminPanel extends JPanel {
     private final JTabbedPane areas = new JTabbedPane();
     private final JTextField keyword = new JTextField(20);
     private final JButton refreshBooks = new JButton("查询 / 刷新");
-    private final JButton newBook = primaryAction("＋ 新建书目");
+    private final JButton previousBookPage = new JButton("上一页");
+    private final JButton nextBookPage = new JButton("下一页");
+    private final JLabel bookPageLabel = new JLabel();
+    private final JButton newBook = new JButton("＋ 新建书目");
     private final JButton addCategory = new JButton("＋ 新增分类");
     private final JButton saveBook = new JButton("保存书目信息");
     private final JButton activateBook = new JButton("开放借阅");
@@ -58,6 +70,7 @@ public final class LibraryAdminPanel extends JPanel {
     private final JComboBox<BookCategoryDTO> category = new JComboBox<>();
     private final JTextField publisher = new JTextField(18);
     private final JTextField year = new JTextField(8);
+    private final JTextField price = new JTextField(8);
     private final JTextField language = new JTextField(12);
     private final JLabel selectedBook = new JLabel("请选择书目，或点击“新建书目”");
     private final DefaultTableModel bookModel = readOnlyModel(new String[]{
@@ -71,33 +84,57 @@ public final class LibraryAdminPanel extends JPanel {
     });
     private final JTable copyTable = new JTable(copyModel);
     private final JTextField barcode = new JTextField(18);
-    private final JTextField location = new JTextField(18);
+    private final JComboBox<LibraryLocationDTO> location = new JComboBox<>();
+    private final JButton addLocation = new JButton("＋ 新增馆藏地");
     private final JTextField callNumber = new JTextField(18);
-    private final JButton newCopy = primaryAction("＋ 登记新单册");
+    private final JButton newCopy = new JButton("＋ 登记新单册");
     private final JButton addCopy = new JButton("确认登记");
     private final JButton updateCopy = new JButton("保存位置与索书号");
-    private final JButton shelfCopy = new JButton("确认归架");
+    private final JButton shelfCopy = new JButton("确认上架");
     private final JButton restoreCopy = new JButton("恢复单册");
     private final JButton withdrawCopy = new JButton("注销单册");
     private final JButton refreshCopies = new JButton("刷新单册");
 
     private final JComboBox<String> borrowScope = new JComboBox<>(new String[]{"当前借阅", "借阅历史", "逾期未还"});
+    private final JTextField borrowUser = new JTextField(18);
     private final JButton refreshBorrows = new JButton("刷新借阅记录");
     private final DefaultTableModel borrowModel = readOnlyModel(new String[]{
             "用户编号", "书名", "馆藏条码", "借出时间", "应还时间", "续借", "归还时间", "状态"
     });
     private final JTable borrowTable = new JTable(borrowModel);
 
-    private final JLabel outcome = new JLabel("管理员操作均由服务器再次校验权限");
+    private final JComboBox<String> reservationScope =
+            new JComboBox<>(new String[]{"排队中", "待取书", "全部"});
+    private final JButton refreshReservations = new JButton("刷新预约记录");
+    private final DefaultTableModel reservationModel = readOnlyModel(new String[]{
+            "用户编号", "书名", "取书馆藏地", "预约状态", "排队位次", "馆藏条码", "取书截止时间"
+    });
+    private final JTable reservationTable = new JTable(reservationModel);
+
+    private final JButton refreshStatistics = new JButton("刷新统计");
+    private final JButton exportStatistics = new JButton("导出 CSV");
+    private final JTextArea statisticsSummary = new JTextArea(4, 40);
+    private final DefaultTableModel categoryModel =
+            readOnlyModel(new String[]{"分类", "书目数", "馆藏数"});
+    private final DefaultTableModel popularModel =
+            readOnlyModel(new String[]{"书目编号", "书名", "借阅次数"});
+    private final JTable categoryTable = new JTable(categoryModel);
+    private final JTable popularTable = new JTable(popularModel);
+    private LibraryStatisticsDTO statistics;
+
     private final JLabel status = new JLabel("正在等待加载数据");
     private List<BookDTO> books = List.of();
     private List<BookCopyDTO> copies = List.of();
+    private int bookPage = 1;
+    private int bookTotalPages = 1;
+    private int bookTotalCount;
     private String selectedBookId;
     private String selectedCopyId;
     private boolean addingBook;
     private boolean addingCopy;
     private boolean working;
     private boolean uncertainWrite;
+    private boolean pendingTabSync;
 
     /** @param context authenticated client context */
     public LibraryAdminPanel(ClientContext context) {
@@ -111,17 +148,15 @@ public final class LibraryAdminPanel extends JPanel {
         areas.addTab("书目维护", createCatalogArea());
         areas.addTab("实体单册", createCopyArea());
         areas.addTab("借阅查询", createBorrowArea());
+        areas.addTab("预约查询", createReservationQueueArea());
+        areas.addTab("统计", createStatisticsArea());
         add(areas, BorderLayout.CENTER);
 
-        outcome.setName("library.admin.outcome");
+        // 底部只有一条状态行：它由当前页签的加载结果或最近一次操作改写，
+        // 切换页签时先清空，因此不会残留其它页签的操作结果。
         status.setName("library.admin.status");
-        JPanel footer = new JPanel(new GridLayout(1, 2, 8, 0));
-        footer.setOpaque(false);
-        LibraryUiTheme.styleStatusLabel(outcome);
         LibraryUiTheme.styleStatusLabel(status);
-        footer.add(outcome);
-        footer.add(status);
-        add(footer, BorderLayout.SOUTH);
+        add(status, BorderLayout.SOUTH);
 
         applyVisualTheme();
         wireEvents();
@@ -136,6 +171,7 @@ public final class LibraryAdminPanel extends JPanel {
         category.setName("library.admin.category");
         publisher.setName("library.admin.publisher");
         year.setName("library.admin.year");
+        price.setName("library.admin.price");
         language.setName("library.admin.language");
         LibraryCategories.render(category);
 
@@ -144,7 +180,7 @@ public final class LibraryAdminPanel extends JPanel {
         JPanel search = new JPanel(new BorderLayout(8, 0));
         LibraryUiTheme.styleCard(search);
         search.setBorder(LibraryUiTheme.cardBorder(10, 12));
-        search.add(new JLabel("书名 / 作者 / ISBN"), BorderLayout.WEST);
+        search.add(new JLabel("书名 / 作者 / ISBN / 索书号 / 条码"), BorderLayout.WEST);
         search.add(keyword, BorderLayout.CENTER);
         JPanel searchActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         searchActions.setOpaque(false);
@@ -161,7 +197,7 @@ public final class LibraryAdminPanel extends JPanel {
         editor.setMinimumSize(new Dimension(300, 0));
         editor.setBorder(BorderFactory.createTitledBorder(
                 LibraryUiTheme.cardBorder(10, 10),
-                "书目元数据（馆藏数量由实体单册统计）"));
+                "书目元数据"));
         GridBagConstraints c = formConstraints();
         row(editor, c, 0, "当前书目", selectedBook);
         row(editor, c, 1, "ISBN", isbn);
@@ -174,28 +210,41 @@ public final class LibraryAdminPanel extends JPanel {
         row(editor, c, 4, "分类", categoryEditor);
         row(editor, c, 5, "出版社", publisher);
         row(editor, c, 6, "出版年", year);
-        row(editor, c, 7, "语种", language);
-        JPanel metadataActions = new JPanel(new GridLayout(0, 1, 0, 6));
-        metadataActions.setOpaque(false);
-        metadataActions.add(saveBook);
-        metadataActions.add(activateBook);
-        metadataActions.add(deactivateBook);
-        c.gridx = 0;
-        c.gridy = 8;
-        c.gridwidth = 2;
-        editor.add(metadataActions, c);
+        row(editor, c, 7, "定价（元）", price);
+        row(editor, c, 8, "语种", language);
+
+        JPanel catalogArea = new JPanel(new BorderLayout(0, 6));
+        catalogArea.setOpaque(false);
+        catalogArea.add(LibraryUiTheme.tableScrollPane(bookTable), BorderLayout.CENTER);
+        catalogArea.add(buildBookPager(), BorderLayout.SOUTH);
 
         JPanel workspace = new JPanel(new BorderLayout(10, 0));
         workspace.setOpaque(false);
-        workspace.add(LibraryUiTheme.tableScrollPane(bookTable), BorderLayout.CENTER);
+        workspace.add(catalogArea, BorderLayout.CENTER);
         LibraryUiTheme.setColumnWidths(bookTable,
                 95, 125, 190, 110, 80, 130, 60, 60, 80, 55, 55);
         JScrollPane editorScroll = new JScrollPane(editor);
         editorScroll.setBorder(null);
         editorScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         editorScroll.getViewport().setBackground(LibraryUiTheme.SURFACE);
-        editorScroll.setPreferredSize(new Dimension(350, 0));
-        workspace.add(editorScroll, BorderLayout.EAST);
+
+        // 元数据字段较多，编辑器本身可滚动；操作按钮固定在右栏底部，任何窗口高度下都可见。
+        JPanel metadataActions = new JPanel(new GridLayout(0, 1, 0, 6));
+        metadataActions.setOpaque(false);
+        metadataActions.add(saveBook);
+        metadataActions.add(activateBook);
+        metadataActions.add(deactivateBook);
+        JPanel actionsCard = new JPanel(new BorderLayout());
+        LibraryUiTheme.styleCard(actionsCard);
+        actionsCard.setBorder(LibraryUiTheme.cardBorder(10, 10));
+        actionsCard.add(metadataActions, BorderLayout.CENTER);
+
+        JPanel editorColumn = new JPanel(new BorderLayout(0, 10));
+        editorColumn.setOpaque(false);
+        editorColumn.setPreferredSize(new Dimension(350, 0));
+        editorColumn.add(editorScroll, BorderLayout.CENTER);
+        editorColumn.add(actionsCard, BorderLayout.SOUTH);
+        workspace.add(editorColumn, BorderLayout.EAST);
         panel.add(workspace, BorderLayout.CENTER);
         return panel;
     }
@@ -228,7 +277,11 @@ public final class LibraryAdminPanel extends JPanel {
                 LibraryUiTheme.cardBorder(10, 10), "单册资料与状态"));
         GridBagConstraints c = formConstraints();
         row(editor, c, 0, "馆藏条码", barcode);
-        row(editor, c, 1, "馆藏地", location);
+        JPanel locationEditor = new JPanel(new BorderLayout(5, 0));
+        locationEditor.setOpaque(false);
+        locationEditor.add(location, BorderLayout.CENTER);
+        locationEditor.add(addLocation, BorderLayout.EAST);
+        row(editor, c, 1, "馆藏地", locationEditor);
         row(editor, c, 2, "索书号", callNumber);
         JPanel actions = new JPanel(new GridLayout(0, 1, 0, 6));
         actions.setOpaque(false);
@@ -266,6 +319,10 @@ public final class LibraryAdminPanel extends JPanel {
         header.setBorder(LibraryUiTheme.cardBorder(10, 12));
         header.add(new JLabel("查询范围"));
         header.add(borrowScope);
+        borrowUser.setName("library.admin.borrowUser");
+        borrowUser.setToolTipText("按读者编号筛选，留空表示查看全部读者");
+        header.add(new JLabel("读者编号"));
+        header.add(borrowUser);
         header.add(refreshBorrows);
         panel.add(header, BorderLayout.NORTH);
         panel.add(LibraryUiTheme.tableScrollPane(borrowTable), BorderLayout.CENTER);
@@ -274,18 +331,249 @@ public final class LibraryAdminPanel extends JPanel {
         return panel;
     }
 
+    /** 预约队列只读视图：管理员可见全馆排队与待取情况，但不能重排或强制取消。 */
+    private JPanel createReservationQueueArea() {
+        reservationScope.setName("library.admin.reservationScope");
+        configureTable(reservationTable, "library.admin.reservations");
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        LibraryUiTheme.installPage(panel);
+        JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        LibraryUiTheme.styleCard(header);
+        header.setBorder(LibraryUiTheme.cardBorder(10, 12));
+        header.add(new JLabel("查询范围"));
+        header.add(reservationScope);
+        header.add(refreshReservations);
+        panel.add(header, BorderLayout.NORTH);
+        panel.add(LibraryUiTheme.tableScrollPane(reservationTable), BorderLayout.CENTER);
+        LibraryUiTheme.setColumnWidths(reservationTable,
+                125, 190, 210, 95, 75, 125, 145);
+        return panel;
+    }
+
+    /** 全馆统计：数字来自服务器查询时派生，客户端只负责呈现与导出。 */
+    private JPanel createStatisticsArea() {
+        configureTable(categoryTable, "library.admin.statisticsCategories");
+        configureTable(popularTable, "library.admin.statisticsPopular");
+        statisticsSummary.setName("library.admin.statisticsSummary");
+        statisticsSummary.setEditable(false);
+        statisticsSummary.setFont(new java.awt.Font(
+                java.awt.Font.MONOSPACED, java.awt.Font.PLAIN, 13));
+        statisticsSummary.setBackground(LibraryUiTheme.SURFACE);
+        statisticsSummary.setForeground(LibraryUiTheme.TEXT);
+        statisticsSummary.setText("打开本页后加载统计");
+
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        LibraryUiTheme.installPage(panel);
+        JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        LibraryUiTheme.styleCard(header);
+        header.setBorder(LibraryUiTheme.cardBorder(10, 12));
+        header.add(refreshStatistics);
+        header.add(exportStatistics);
+        panel.add(header, BorderLayout.NORTH);
+
+        JPanel body = new JPanel(new BorderLayout(10, 10));
+        body.setOpaque(false);
+        body.add(statisticsSummary, BorderLayout.NORTH);
+        JPanel tables = new JPanel(new java.awt.GridLayout(1, 2, 10, 0));
+        tables.setOpaque(false);
+        tables.add(labelled("分类分布", categoryTable));
+        tables.add(labelled("借阅排行", popularTable));
+        body.add(tables, BorderLayout.CENTER);
+        panel.add(body, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private static JPanel labelled(String title, JTable table) {
+        JPanel wrapper = new JPanel(new BorderLayout(0, 4));
+        wrapper.setOpaque(false);
+        wrapper.add(new JLabel(title), BorderLayout.NORTH);
+        wrapper.add(LibraryUiTheme.tableScrollPane(table), BorderLayout.CENTER);
+        return wrapper;
+    }
+
+    private void loadStatistics() {
+        if (working) { return; }
+        setWorking(true);
+        status.setText("正在加载统计……");
+        new SwingWorker<Response, Void>() {
+            protected Response doInBackground() throws Exception {
+                return context.send(LibraryActions.ADMIN_STATISTICS, null);
+            }
+            protected void done() {
+                try {
+                    LibraryStatisticsDTO loaded =
+                            requireData(get(), LibraryStatisticsDTO.class);
+                    statistics = loaded;
+                    statisticsSummary.setText(summaryText(loaded));
+                    categoryModel.setRowCount(0);
+                    for (CategoryStatisticDTO row : loaded.getCategories()) {
+                        categoryModel.addRow(new Object[]{row.getCategoryName(),
+                                row.getBookCount(), row.getCopyCount()});
+                    }
+                    popularModel.setRowCount(0);
+                    for (PopularBookDTO row : loaded.getPopularBooks()) {
+                        popularModel.addRow(new Object[]{row.getBookId(), row.getTitle(),
+                                row.getBorrowCount()});
+                    }
+                    status.setText("统计已更新");
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    status.setText("统计加载已中断");
+                } catch (ExecutionException | IllegalArgumentException exception) {
+                    status.setText("统计加载失败，请稍后重试");
+                } finally {
+                    setWorking(false);
+                }
+            }
+        }.execute();
+    }
+
+    private static String summaryText(LibraryStatisticsDTO value) {
+        return "书目 " + value.getBookCount() + " 种，馆藏 " + value.getCopyCount()
+                + " 册（可借 " + value.getAvailableCount()
+                + "，已注销 " + value.getWithdrawnCount() + "）\n"
+                + "当前在借 " + value.getActiveBorrowCount()
+                + " 本，其中逾期 " + value.getOverdueCount()
+                + " 本；历史借阅 " + value.getHistoryBorrowCount() + " 条\n"
+                + "预约：排队中 " + value.getWaitingReservationCount()
+                + " 条，待取书 " + value.getReadyReservationCount() + " 条\n"
+                + "费用：未结清 " + value.getUnpaidFeeCount() + " 笔 / "
+                + yuan(value.getUnpaidFeeFen()) + " 元；已结清 "
+                + yuan(value.getSettledFeeFen()) + " 元";
+    }
+
+    private void exportStatisticsCsv() {
+        if (statistics == null) {
+            status.setText("请先刷新统计再导出");
+            return;
+        }
+        JFileChooser chooser = new JFileChooser();
+        chooser.setSelectedFile(new java.io.File("library-statistics.csv"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        try {
+            Files.writeString(chooser.getSelectedFile().toPath(),
+                    statisticsCsv(statistics), StandardCharsets.UTF_8);
+            status.setText("已导出：" + chooser.getSelectedFile().getAbsolutePath());
+        } catch (java.io.IOException exception) {
+            status.setText("导出失败：" + exception.getMessage());
+        }
+    }
+
+    /** 导出内容与界面同源：概览、分类分布、借阅排行三段，字段按 CSV 规则转义。 */
+    static String statisticsCsv(LibraryStatisticsDTO value) {
+        StringBuilder csv = new StringBuilder();
+        csv.append("概览,数值\n");
+        csv.append("书目数,").append(value.getBookCount()).append('\n');
+        csv.append("馆藏数,").append(value.getCopyCount()).append('\n');
+        csv.append("可借数,").append(value.getAvailableCount()).append('\n');
+        csv.append("已注销,").append(value.getWithdrawnCount()).append('\n');
+        csv.append("当前在借,").append(value.getActiveBorrowCount()).append('\n');
+        csv.append("逾期未还,").append(value.getOverdueCount()).append('\n');
+        csv.append("历史借阅,").append(value.getHistoryBorrowCount()).append('\n');
+        csv.append("排队中预约,").append(value.getWaitingReservationCount()).append('\n');
+        csv.append("待取书预约,").append(value.getReadyReservationCount()).append('\n');
+        csv.append("未结清笔数,").append(value.getUnpaidFeeCount()).append('\n');
+        csv.append("未结清金额(元),").append(yuan(value.getUnpaidFeeFen())).append('\n');
+        csv.append("已结清金额(元),").append(yuan(value.getSettledFeeFen())).append('\n');
+
+        csv.append("\n分类,书目数,馆藏数\n");
+        for (CategoryStatisticDTO row : value.getCategories()) {
+            csv.append(csvField(row.getCategoryName())).append(',')
+                    .append(row.getBookCount()).append(',')
+                    .append(row.getCopyCount()).append('\n');
+        }
+
+        csv.append("\n书目编号,书名,借阅次数\n");
+        for (PopularBookDTO row : value.getPopularBooks()) {
+            csv.append(csvField(row.getBookId())).append(',')
+                    .append(csvField(row.getTitle())).append(',')
+                    .append(row.getBorrowCount()).append('\n');
+        }
+        return csv.toString();
+    }
+
+    /** 含逗号、引号或换行的字段用双引号包裹并把内部引号翻倍。 */
+    static String csvField(String value) {
+        if (value == null) {
+            return "";
+        }
+        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            return '"' + value.replace("\"", "\"\"") + '"';
+        }
+        return value;
+    }
+
+    private void loadReservations() {
+        if (working) { return; }
+        String scope = switch (reservationScope.getSelectedIndex()) {
+            case 0 -> AdminReservationQueryRequest.WAITING;
+            case 1 -> AdminReservationQueryRequest.READY;
+            default -> AdminReservationQueryRequest.ALL;
+        };
+        setWorking(true);
+        status.setText("正在加载预约队列……");
+        new SwingWorker<Response, Void>() {
+            protected Response doInBackground() throws Exception {
+                return context.send(LibraryActions.ADMIN_QUERY_RESERVATIONS,
+                        new AdminReservationQueryRequest(scope));
+            }
+            protected void done() {
+                try {
+                    List<AdminReservationDTO> records =
+                            requireList(get(), AdminReservationDTO.class);
+                    reservationModel.setRowCount(0);
+                    for (AdminReservationDTO record : records) {
+                        reservationModel.addRow(new Object[]{record.getUserId(),
+                                record.getBookTitle(), record.getPickupLocation(),
+                                displayReservationStatus(record.getStatus()),
+                                record.getQueuePosition() == null
+                                        ? "—" : "第 " + record.getQueuePosition() + " 位",
+                                record.getAssignedBarcode() == null || record.getAssignedBarcode().isBlank()
+                                        ? "—" : record.getAssignedBarcode(),
+                                format(record.getExpiresAt())});
+                    }
+                    status.setText("共 " + records.size() + " 条"
+                            + reservationScope.getSelectedItem() + "预约");
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    status.setText("预约查询已中断");
+                } catch (ExecutionException | IllegalArgumentException exception) {
+                    status.setText("预约查询失败，请稍后重试");
+                } finally {
+                    setWorking(false);
+                }
+            }
+        }.execute();
+    }
+
+    private static String displayReservationStatus(String status) {
+        return switch (status) {
+            case "WAITING" -> "排队中";
+            case "READY_FOR_PICKUP" -> "待取书";
+            case "FULFILLED" -> "已借阅";
+            case "CANCELED" -> "已取消";
+            case "EXPIRED" -> "已过期";
+            default -> status;
+        };
+    }
+
     private void applyVisualTheme() {
         for (JTextField field : List.of(
                 keyword, isbn, title, author, publisher, year,
-                language, barcode, location, callNumber)) {
+                language, barcode, callNumber)) {
             LibraryUiTheme.styleTextField(field);
         }
         LibraryUiTheme.styleComboBox(category);
         LibraryUiTheme.styleComboBox(borrowScope);
+        LibraryUiTheme.styleComboBox(location);
+        LibraryUiTheme.styleComboBox(reservationScope);
 
         for (JButton button : List.of(
                 refreshBooks, newBook, addCategory, activateBook, newCopy,
-                updateCopy, restoreCopy, refreshCopies, refreshBorrows)) {
+                updateCopy, restoreCopy, refreshCopies, refreshBorrows,
+                previousBookPage, nextBookPage, addLocation)) {
             LibraryUiTheme.styleSecondaryButton(button);
         }
         for (JButton button : List.of(saveBook, addCopy, shelfCopy)) {
@@ -299,10 +587,13 @@ public final class LibraryAdminPanel extends JPanel {
     }
 
     private void wireEvents() {
-        refreshBooks.addActionListener(event -> refresh());
-        keyword.addActionListener(event -> refresh());
+        refreshBooks.addActionListener(event -> refreshFromFirstPage());
+        keyword.addActionListener(event -> refreshFromFirstPage());
+        previousBookPage.addActionListener(event -> changeBookPage(-1));
+        nextBookPage.addActionListener(event -> changeBookPage(1));
         newBook.addActionListener(event -> beginNewBook());
         addCategory.addActionListener(event -> addCategory());
+        addLocation.addActionListener(event -> addLocation());
         saveBook.addActionListener(event -> saveBook());
         activateBook.addActionListener(event -> changeBookStatus(ACTIVE));
         deactivateBook.addActionListener(event -> changeBookStatus(INACTIVE));
@@ -323,28 +614,73 @@ public final class LibraryAdminPanel extends JPanel {
         borrowScope.addActionListener(event -> {
             if (!working && areas.getSelectedIndex() == 2) { loadBorrows(); }
         });
-        areas.addChangeListener(event -> {
-            if (working) { return; }
-            if (areas.getSelectedIndex() == 1 && selectedBookId != null) {
-                loadCopies();
-            } else if (areas.getSelectedIndex() == 2) {
-                loadBorrows();
-            }
+        refreshReservations.addActionListener(event -> loadReservations());
+        reservationScope.addActionListener(event -> {
+            if (!working && areas.getSelectedIndex() == 3) { loadReservations(); }
         });
+        areas.addChangeListener(event -> {
+            // 切页签先清空状态行，避免上一个页签的加载或操作结果留在这里。
+            status.setText(" ");
+            if (working) {
+                // 正在处理请求时切换页签不能直接丢弃，否则目标页签永远是空的。
+                pendingTabSync = true;
+                return;
+            }
+            syncSelectedTab();
+        });
+        refreshStatistics.addActionListener(event -> loadStatistics());
+        exportStatistics.addActionListener(event -> exportStatisticsCsv());
     }
 
-    /** Reloads authoritative categories and all catalog snapshots. */
+    /** Puts the workbench tabs back on “书目维护” when the module is entered again. */
+    void resetTabs() {
+        areas.setSelectedIndex(0);
+    }
+
+    /** Loads the data the currently selected tab shows. */
+    private void syncSelectedTab() {
+        if (areas.getSelectedIndex() == 1 && selectedBookId != null) {
+            loadCopies();
+        } else if (areas.getSelectedIndex() == 2) {
+            loadBorrows();
+        } else if (areas.getSelectedIndex() == 3) {
+            loadReservations();
+        } else if (areas.getSelectedIndex() == 4) {
+            loadStatistics();
+        }
+    }
+
+    /** Reloads authoritative categories and the catalog page currently on screen. */
     void refresh() {
+        loadCatalog(bookPage);
+    }
+
+    /** Reloads from the first page; used whenever the keyword changes the result set. */
+    private void refreshFromFirstPage() {
+        loadCatalog(1);
+    }
+
+    private void changeBookPage(int delta) {
+        loadCatalog(bookPage + delta);
+    }
+
+    private void loadCatalog(int page) {
         if (working) { return; }
         String query = keyword.getText().strip();
+        int requestedPage = Math.max(page, 1);
         setWorking(true);
         status.setText("正在加载书目与分类……");
         new SwingWorker<CatalogLoad, Void>() {
             protected CatalogLoad doInBackground() throws Exception {
                 List<BookCategoryDTO> categories = LibraryCategories.read(
                         context.send(LibraryActions.LIST_CATEGORIES, null));
-                return new CatalogLoad(categories, context.send(LibraryActions.ADMIN_SEARCH_BOOKS,
-                        new BookSearchRequest(query, null)));
+                List<LibraryLocationDTO> locations = requireList(
+                        context.send(LibraryActions.ADMIN_LIST_LOCATIONS, null),
+                        LibraryLocationDTO.class);
+                return new CatalogLoad(categories, locations,
+                        context.send(LibraryActions.ADMIN_SEARCH_BOOKS,
+                                new BookSearchRequest(query, null, requestedPage,
+                                        BookSearchRequest.DEFAULT_PAGE_SIZE)));
             }
             protected void done() {
                 try {
@@ -352,11 +688,20 @@ public final class LibraryAdminPanel extends JPanel {
                     BookSearchResult result = requireData(loaded.books(), BookSearchResult.class);
                     category.removeAllItems();
                     loaded.categories().forEach(category::addItem);
+                    String chosen = selectedLocation();
+                    location.removeAllItems();
+                    loaded.locations().forEach(location::addItem);
+                    selectLocation(chosen);
                     books = result.getBooks();
+                    // The server echoes the page it answered, so the pager cannot drift from the
+                    // rows on screen even when the results shrank since the last request.
+                    bookPage = result.getPage();
+                    bookTotalPages = result.getTotalPages();
+                    bookTotalCount = result.getTotalCount();
                     fillBookTable();
                     clearBookForm();
                     uncertainWrite = false;
-                    status.setText("共 " + books.size() + " 条书目；馆藏与可借数量来自实体单册实时汇总");
+                    status.setText("共 " + bookTotalCount + " 条书目，本页 " + books.size() + " 条");
                 } catch (InterruptedException exception) {
                     Thread.currentThread().interrupt();
                     status.setText("刷新已中断，可重新查询");
@@ -365,6 +710,31 @@ public final class LibraryAdminPanel extends JPanel {
                 } finally { setWorking(false); }
             }
         }.execute();
+    }
+
+    private JPanel buildBookPager() {
+        previousBookPage.setName("library.admin.previousPage");
+        nextBookPage.setName("library.admin.nextPage");
+        bookPageLabel.setName("library.admin.page");
+        bookPageLabel.setForeground(LibraryUiTheme.MUTED);
+        bookPageLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        JPanel buttons = new JPanel(new GridLayout(1, 2, 6, 0));
+        buttons.setOpaque(false);
+        buttons.add(previousBookPage);
+        buttons.add(nextBookPage);
+        JPanel pager = new JPanel(new BorderLayout(8, 0));
+        pager.setName("library.admin.bookPager");
+        pager.setOpaque(false);
+        pager.add(bookPageLabel, BorderLayout.CENTER);
+        pager.add(buttons, BorderLayout.EAST);
+        return pager;
+    }
+
+    private void updateBookPager() {
+        bookPageLabel.setText("第 " + bookPage + " / " + bookTotalPages + " 页");
+        boolean ready = !working && !uncertainWrite;
+        previousBookPage.setEnabled(ready && bookPage > 1);
+        nextBookPage.setEnabled(ready && bookPage < bookTotalPages);
     }
 
     private void fillBookTable() {
@@ -383,7 +753,7 @@ public final class LibraryAdminPanel extends JPanel {
         addingBook = true;
         category.setSelectedIndex(0);
         selectedBook.setText("新书目（保存后再登记实体单册）");
-        outcome.setText("请填写书目元数据；新增书目初始馆藏为 0");
+        status.setText("请填写书目元数据；新增书目初始馆藏为 0");
         updateControls();
         isbn.requestFocusInWindow();
     }
@@ -395,14 +765,14 @@ public final class LibraryAdminPanel extends JPanel {
                 JOptionPane.PLAIN_MESSAGE);
         if (name == null) return;
         if (name.isBlank()) {
-            outcome.setText("分类名称不能为空");
+            status.setText("分类名称不能为空");
             return;
         }
         submit(LibraryActions.ADD_BOOK_CATEGORY, new AddBookCategoryRequest(name),
                 "新增分类", BookCategoryDTO.class, added -> {
                     category.addItem(added);
                     category.setSelectedItem(added);
-                    outcome.setText("分类“" + added.getCategoryName() + "”已新增，可用于新书目");
+                    status.setText("分类“" + added.getCategoryName() + "”已新增，可用于新书目");
                 });
     }
 
@@ -418,11 +788,12 @@ public final class LibraryAdminPanel extends JPanel {
         author.setText(book.getAuthor());
         publisher.setText(book.getPublisher());
         year.setText(book.getPublicationYear() == null ? "" : book.getPublicationYear().toString());
+        price.setText(yuan(book.getPriceFen()));
         language.setText(book.getLanguage());
         selectCategory(book.getCategoryId());
         copyBook.setText("当前书目：《" + book.getTitle() + "》（" + book.getBookId() + "）· "
                 + displayBookStatus(book.getStatus()));
-        outcome.setText("已选择《" + book.getTitle() + "》；可切换到“实体单册”维护馆藏");
+        status.setText("已选择《" + book.getTitle() + "》");
         clearCopyForm();
         updateControls();
     }
@@ -432,15 +803,18 @@ public final class LibraryAdminPanel extends JPanel {
         BookCategoryDTO choice = (BookCategoryDTO) category.getSelectedItem();
         Integer publicationYear = readYear();
         if (publicationYear == Integer.MIN_VALUE) { return; }
+        int priceFen = readPriceFen();
+        if (priceFen == Integer.MIN_VALUE) { return; }
         if (choice == null || isbn.getText().isBlank() || title.getText().isBlank() || author.getText().isBlank()) {
-            outcome.setText("请填写 ISBN、书名、作者并选择分类");
+            status.setText("请填写 ISBN、书名、作者并选择分类");
             return;
         }
         Serializable request = addingBook
                 ? new AddBookRequest(isbn.getText(), title.getText(), author.getText(), choice.getCategoryId(),
-                        publisher.getText(), publicationYear, language.getText())
+                        publisher.getText(), publicationYear, language.getText(), priceFen)
                 : new UpdateBookRequest(selectedBookId, isbn.getText(), title.getText(), author.getText(),
-                        choice.getCategoryId(), publisher.getText(), publicationYear, language.getText());
+                        choice.getCategoryId(), publisher.getText(), publicationYear, language.getText(),
+                        priceFen);
         submitBook(addingBook ? LibraryActions.ADD_BOOK : LibraryActions.UPDATE_BOOK,
                 request, addingBook ? "新增书目" : "修改书目");
     }
@@ -455,7 +829,7 @@ public final class LibraryAdminPanel extends JPanel {
 
     private void submitBook(String action, Serializable request, String operation) {
         submit(action, request, operation, BookDTO.class, book -> {
-            outcome.setText(operation + "成功：《" + book.getTitle() + "》；馆藏 "
+            status.setText(operation + "成功：《" + book.getTitle() + "》；馆藏 "
                     + book.getTotalCount() + " 本，可借 " + book.getAvailableCount() + " 本");
             keyword.setText(book.getIsbn());
             SwingUtilities.invokeLater(this::refresh);
@@ -501,7 +875,7 @@ public final class LibraryAdminPanel extends JPanel {
         copyTable.clearSelection();
         clearCopyForm();
         addingCopy = true;
-        outcome.setText("请输入全馆唯一的馆藏条码、馆藏地和索书号");
+        status.setText("请输入全馆唯一的馆藏条码、馆藏地和索书号");
         updateControls();
         barcode.requestFocusInWindow();
     }
@@ -513,32 +887,81 @@ public final class LibraryAdminPanel extends JPanel {
         selectedCopyId = copy.getCopyId();
         addingCopy = false;
         barcode.setText(copy.getBarcode());
-        location.setText(copy.getLocation());
+        selectLocation(copy.getLocation());
         callNumber.setText(copy.getCallNumber());
-        outcome.setText("已选择单册 " + copy.getBarcode() + " · " + displayCopyStatus(copy.getStatus()));
+        status.setText("已选择单册 " + copy.getBarcode() + " · " + displayCopyStatus(copy.getStatus()));
         updateControls();
     }
 
     private void addCopy() {
         if (working || !addingCopy || selectedBookId == null) { return; }
-        if (barcode.getText().isBlank() || location.getText().isBlank() || callNumber.getText().isBlank()) {
-            outcome.setText("请填写馆藏条码、馆藏地和索书号");
+        if (barcode.getText().isBlank() || selectedLocation() == null
+                || callNumber.getText().isBlank()) {
+            status.setText("请填写馆藏条码、馆藏地和索书号");
             return;
         }
         submitCopy(LibraryActions.ADD_BOOK_COPY,
-                new AddBookCopyRequest(selectedBookId, barcode.getText(), location.getText(), callNumber.getText()),
+                new AddBookCopyRequest(selectedBookId, barcode.getText(),
+                        selectedLocation(), callNumber.getText()),
                 "登记单册");
     }
 
     private void updateCopy() {
         if (working || addingCopy || selectedCopyId == null) { return; }
-        if (location.getText().isBlank() || callNumber.getText().isBlank()) {
-            outcome.setText("馆藏地和索书号不能为空");
+        if (selectedLocation() == null || callNumber.getText().isBlank()) {
+            status.setText("馆藏地和索书号不能为空");
             return;
         }
         submitCopy(LibraryActions.UPDATE_BOOK_COPY,
-                new UpdateBookCopyRequest(selectedCopyId, location.getText(), callNumber.getText()),
+                new UpdateBookCopyRequest(selectedCopyId, selectedLocation(), callNumber.getText()),
                 "修改单册资料");
+    }
+
+    /** @return the chosen location name, or {@code null} when the dictionary is empty */
+    private String selectedLocation() {
+        LibraryLocationDTO selected = (LibraryLocationDTO) location.getSelectedItem();
+        return selected == null ? null : selected.getLocationName();
+    }
+
+    /**
+     * Selects one location by name, adding it to the list when the dictionary does not know it.
+     *
+     * <p>A copy can outlive its dictionary entry if the database was edited by hand. Showing the
+     * stored name keeps the editor honest; silently falling back to the first entry would let an
+     * "update" move the copy to a room nobody chose.
+     */
+    private void selectLocation(String locationName) {
+        if (locationName == null || locationName.isBlank()) {
+            location.setSelectedIndex(-1);
+            return;
+        }
+        for (int index = 0; index < location.getItemCount(); index++) {
+            if (location.getItemAt(index).getLocationName().equals(locationName)) {
+                location.setSelectedIndex(index);
+                return;
+            }
+        }
+        LibraryLocationDTO unknown = new LibraryLocationDTO(locationName, 0);
+        location.addItem(unknown);
+        location.setSelectedItem(unknown);
+    }
+
+    private void addLocation() {
+        if (working || uncertainWrite) return;
+        String name = JOptionPane.showInputDialog(this,
+                "输入新的馆藏地名称（登记单册时只能从这份列表中选择）", "新增馆藏地",
+                JOptionPane.PLAIN_MESSAGE);
+        if (name == null) return;
+        if (name.isBlank()) {
+            status.setText("馆藏地名称不能为空");
+            return;
+        }
+        submit(LibraryActions.ADMIN_ADD_LOCATION, new AddLocationRequest(name),
+                "新增馆藏地", LibraryLocationDTO.class, added -> {
+                    location.addItem(added);
+                    location.setSelectedItem(added);
+                    status.setText("馆藏地“" + added.getLocationName() + "”已新增，可用于登记或迁移单册");
+                });
     }
 
     private void mutateCopy(String action, String operation) {
@@ -563,7 +986,7 @@ public final class LibraryAdminPanel extends JPanel {
 
     private void submitCopy(String action, Serializable request, String operation) {
         submit(action, request, operation, BookCopyDTO.class, copy -> {
-            outcome.setText(operation + "成功：" + copy.getBarcode() + " · " + displayCopyStatus(copy.getStatus()));
+            status.setText(operation + "成功：" + copy.getBarcode() + " · " + displayCopyStatus(copy.getStatus()));
             SwingUtilities.invokeLater(this::loadCopies);
         });
     }
@@ -579,7 +1002,8 @@ public final class LibraryAdminPanel extends JPanel {
         status.setText("正在加载借阅记录……");
         new SwingWorker<Response, Void>() {
             protected Response doInBackground() throws Exception {
-                return context.send(LibraryActions.ADMIN_QUERY_BORROWS, new AdminBorrowQueryRequest(scope));
+                return context.send(LibraryActions.ADMIN_QUERY_BORROWS,
+                        new AdminBorrowQueryRequest(scope, borrowUser.getText().strip()));
             }
             protected void done() {
                 try {
@@ -606,7 +1030,7 @@ public final class LibraryAdminPanel extends JPanel {
             Class<T> type, Consumer<T> success) {
         if (working || uncertainWrite) { return; }
         setWorking(true);
-        outcome.setText("正在" + operation + "……");
+        status.setText("正在" + operation + "……");
         new SwingWorker<Response, Void>() {
             protected Response doInBackground() throws Exception { return context.send(action, request); }
             protected void done() {
@@ -617,7 +1041,7 @@ public final class LibraryAdminPanel extends JPanel {
                         return;
                     }
                     if (!response.isSuccess()) {
-                        outcome.setText(operation + "失败："
+                        status.setText(operation + "失败："
                                 + (ErrorCodes.COMMON_INVALID_ARGUMENT.equals(response.getCode())
                                 ? response.getMessage() : LibraryMessages.failure(response)));
                         return;
@@ -659,7 +1083,7 @@ public final class LibraryAdminPanel extends JPanel {
 
     private void unknownWrite(String operation) {
         uncertainWrite = true;
-        outcome.setText(operation + "结果未确认，请先查询 / 刷新核对，勿重复提交");
+        status.setText(operation + "结果未确认，请先查询 / 刷新核对，勿重复提交");
         updateControls();
     }
 
@@ -671,9 +1095,28 @@ public final class LibraryAdminPanel extends JPanel {
             if (parsed < 1000 || parsed > 9999) { throw new NumberFormatException(); }
             return parsed;
         } catch (NumberFormatException exception) {
-            outcome.setText("出版年须为空或 1000 至 9999 的整数");
+            status.setText("出版年须为空或 1000 至 9999 的整数");
             return Integer.MIN_VALUE;
         }
+    }
+
+    /** 读取定价（元，最多两位小数）并转换为分；非法输入返回 {@code Integer.MIN_VALUE}。 */
+    private int readPriceFen() {
+        String value = price.getText().strip();
+        try {
+            int fen = new java.math.BigDecimal(value).movePointRight(2).intValueExact();
+            if (fen < 1 || fen > 999_999) {
+                throw new ArithmeticException("out of range");
+            }
+            return fen;
+        } catch (NumberFormatException | ArithmeticException exception) {
+            status.setText("定价须为 0.01 至 9999.99 元，最多两位小数");
+            return Integer.MIN_VALUE;
+        }
+    }
+
+    private static String yuan(int fen) {
+        return java.math.BigDecimal.valueOf(fen, 2).toPlainString();
     }
 
     private void clearBookForm() {
@@ -681,7 +1124,7 @@ public final class LibraryAdminPanel extends JPanel {
         addingBook = false;
         selectedBook.setText("请选择书目，或点击“新建书目”");
         isbn.setText(""); title.setText(""); author.setText(""); publisher.setText("");
-        year.setText(""); language.setText(""); category.setSelectedIndex(-1);
+        year.setText(""); price.setText(""); language.setText(""); category.setSelectedIndex(-1);
         copyBook.setText("请先在书目维护中选择一本书");
         copies = List.of();
         copyModel.setRowCount(0);
@@ -691,8 +1134,14 @@ public final class LibraryAdminPanel extends JPanel {
     private void clearCopyForm() {
         selectedCopyId = null;
         addingCopy = false;
-        barcode.setText(""); location.setText(""); callNumber.setText("");
+        barcode.setText("");
+        selectLocation(defaultLocationName());
+        callNumber.setText("");
         copyTable.clearSelection();
+    }
+
+    private String defaultLocationName() {
+        return location.getItemCount() == 0 ? null : location.getItemAt(0).getLocationName();
     }
 
     private void selectCategory(String categoryId) {
@@ -716,6 +1165,10 @@ public final class LibraryAdminPanel extends JPanel {
     private void setWorking(boolean value) {
         working = value;
         updateControls();
+        if (!value && pendingTabSync) {
+            pendingTabSync = false;
+            syncSelectedTab();
+        }
     }
 
     private void updateControls() {
@@ -726,6 +1179,7 @@ public final class LibraryAdminPanel extends JPanel {
         refreshBooks.setEnabled(!working);
         keyword.setEnabled(!working);
         bookTable.setEnabled(!working);
+        updateBookPager();
         newBook.setEnabled(ready && category.getItemCount() > 0);
         addCategory.setEnabled(ready);
         isbn.setEnabled(bookEditable);
@@ -748,6 +1202,7 @@ public final class LibraryAdminPanel extends JPanel {
                 || copy != null && !RESERVED.equals(copy.getStatus())
                 && !WITHDRAWN.equals(copy.getStatus()));
         location.setEnabled(copyEditable);
+        addLocation.setEnabled(ready);
         callNumber.setEnabled(copyEditable);
         addCopy.setEnabled(ready && addingCopy);
         updateCopy.setEnabled(ready && !addingCopy && copy != null
@@ -766,10 +1221,6 @@ public final class LibraryAdminPanel extends JPanel {
             @Override
             public boolean isCellEditable(int row, int column) { return false; }
         };
-    }
-
-    private static JButton primaryAction(String text) {
-        return new JButton(text);
     }
 
     private static void configureTable(JTable table, String name) {
@@ -841,5 +1292,6 @@ public final class LibraryAdminPanel extends JPanel {
         return cause == null || cause.getMessage() == null ? "请检查连接后重试" : cause.getMessage();
     }
 
-    private record CatalogLoad(List<BookCategoryDTO> categories, Response books) { }
+    private record CatalogLoad(List<BookCategoryDTO> categories,
+            List<LibraryLocationDTO> locations, Response books) { }
 }

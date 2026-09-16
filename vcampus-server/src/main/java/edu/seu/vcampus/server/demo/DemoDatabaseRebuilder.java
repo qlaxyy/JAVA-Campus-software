@@ -260,8 +260,12 @@ public final class DemoDatabaseRebuilder {
             requireCount(connection, "SELECT COUNT(*) FROM tblCourseOffering o LEFT JOIN tblOfferingTeacher a "
                     + "ON o.offeringId = a.offeringId WHERE a.offeringId IS NULL", 0, "teaching classes without teachers");
             requireCount(connection, "SELECT COUNT(*) FROM tblEnrollment WHERE enrollmentStatus = 'SELECTED'", 15, "demo enrollments");
-            requireCount(connection, "SELECT COUNT(*) FROM tblBook", 5, "book titles");
-            requireCount(connection, "SELECT COUNT(*) FROM tblBookCopy", 20, "book copies");
+            requireCount(connection, "SELECT COUNT(*) FROM tblBookCategory", 8,
+                    "book categories");
+            requireCount(connection, "SELECT COUNT(*) FROM tblBook", 30, "book titles");
+            requireCount(connection, "SELECT COUNT(*) FROM tblBook WHERE priceFen <= 0", 0,
+                    "books without a positive price");
+            requireCount(connection, "SELECT COUNT(*) FROM tblBookCopy", 100, "book copies");
             requireCount(connection, "SELECT COUNT(*) FROM tblBorrowRecord", 3, "borrow demonstrations");
             requireCount(connection, "SELECT COUNT(*) FROM tblReservation", 1, "reservation demonstrations");
             requireCount(connection, "SELECT COUNT(*) FROM (SELECT username FROM tblUser GROUP BY username HAVING COUNT(*) > 1)", 0, "duplicate card numbers");

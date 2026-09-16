@@ -2,6 +2,7 @@ package edu.seu.vcampus.server.module.library;
 
 import edu.seu.vcampus.common.library.BookDTO;
 import edu.seu.vcampus.common.library.BookCategoryDTO;
+import edu.seu.vcampus.common.library.BookSearchRequest;
 import edu.seu.vcampus.common.library.BorrowRecordIdRequest;
 import edu.seu.vcampus.common.library.CopyBorrowRequest;
 import edu.seu.vcampus.common.library.CopyReturnRequest;
@@ -53,8 +54,8 @@ class AccessLibraryRepositoryTest {
 
         Repositories restarted = repositories(databasePath);
         assertTrue(Files.exists(databasePath));
-        assertEquals(5, restarted.books().searchAll("").size());
-        assertEquals(4, restarted.categories().findAll().size());
+        assertEquals(30, restarted.books().searchAll("").size());
+        assertEquals(9, restarted.categories().findAll().size());
         assertEquals("持久化后的书名",
                 restarted.books().findById("B001").orElseThrow().getTitle());
         BookCopy persisted = restarted.copies()
@@ -230,6 +231,26 @@ class AccessLibraryRepositoryTest {
         assertTrue(overdue.isOverdueAt(LocalDateTime.of(2026, 9, 6, 2, 0)));
         assertEquals(BookCopyStatus.LOANED, repositories.copies()
                 .findById(overdue.copyId()).orElseThrow().status());
+    }
+
+    @Test
+    void demonstrationCatalogIsLargeEnoughToPageAndPricesEveryTitle() {
+        Path databasePath = temporaryDirectory.resolve("catalog-shape.accdb");
+        Repositories repositories = repositories(databasePath);
+        List<BookDTO> books = repositories.books().searchAll("");
+
+        assertEquals(30, books.size(), "书目数量要超过一页，否则分页在演示里看不出效果");
+        assertTrue(books.size() > BookSearchRequest.DEFAULT_PAGE_SIZE,
+                "演示书目必须多于默认页大小，翻页控件才不是摆设");
+        assertTrue(books.stream().allMatch(book -> book.getPriceFen() >= 1),
+                "每本书都要有定价，否则丢书赔偿算不出书价");
+        assertEquals(8, repositories.categories().findAll().size());
+
+        int copies = repositories.copies().findAll().size();
+        assertEquals(100, copies);
+        assertTrue(repositories.copies().findAll().stream()
+                        .noneMatch(copy -> copy.status() == BookCopyStatus.WITHDRAWN),
+                "新建库里的单册全部在架");
     }
 
     @Test
